@@ -1,0 +1,231 @@
+import { APP, RECORD } from './config.js';
+
+const INK = '#1c1915';
+const MUTED = 'rgba(28,25,21,0.16)';
+const SERIF = "'Instrument Serif', Georgia, serif";
+const MONO = "'Plex Mono', ui-monospace, Menlo, monospace";
+
+const VIDEO_TYPES = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+// With sound, only take mp4 when the audio is AAC. Chrome's plain video/mp4
+// would put Opus in it, which a lot of players and upload forms reject.
+const AV_TYPES = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2'];
+const WEBM_AV = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus'];
+
+export function pickMimeType(withAudio) {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const ok = (t) => {
+    try {
+      return MediaRecorder.isTypeSupported(t);
+    } catch {
+      return false;
+    }
+  };
+  if (withAudio) {
+    const av = AV_TYPES.find(ok);
+    if (av) return { type: av, audio: true };
+  }
+  const mp4 = VIDEO_TYPES.slice(0, 3).find(ok);
+  if (mp4) return { type: mp4, audio: false };
+  if (withAudio) {
+    const wav = WEBM_AV.find(ok);
+    if (wav) return { type: wav, audio: true };
+  }
+  const webm = VIDEO_TYPES.slice(3).find(ok);
+  return webm ? { type: webm, audio: false } : null;
+}
+
+export function outputSize(aspect) {
+  const a = RECORD.aspects[aspect] || 9 / 16;
+  const long = RECORD.longSide;
+  let w;
+  let h;
+  if (a < 1) {
+    h = long;
+    w = long * a;
+  } else if (a > 1) {
+    w = long;
+    h = long / a;
+  } else {
+    w = h = 1080;
+  }
+  return { w: Math.round(w / 2) * 2, h: Math.round(h / 2) * 2 };
+}
+
+// The largest centered crop of the canvas with the given aspect, CSS pixels.
+export function cropRect(canvasW, canvasH, aspect) {
+  const a = RECORD.aspects[aspect] || 9 / 16;
+  let w = canvasW;
+  let h = w / a;
+  if (h > canvasH) {
+    h = canvasH;
+    w = h * a;
+  }
+  return { x: (canvasW - w) / 2, y: (canvasH - h) / 2, w, h };
+}
+
+// Draws one frame of the clip: the WebGL crop, the word, the stress counter
+// and the watermark. Also used for screenshots.
+export function composite(ctx, W, H, glCanvas, crop, info) {
+  const sx = glCanvas.width / glCanvas.clientWidth;
+  ctx.drawImage(glCanvas, crop.x * sx, crop.y * sx, crop.w * sx, crop.h * sx, 0, 0, W, H);
+
+  const m = Math.min(W, H);
+  const pad = m * 0.055;
+  ctx.fillStyle = INK;
+  ctx.textBaseline = 'alphabetic';
+
+  // Top left: what is being squished.
+  ctx.textAlign = 'left';
+  mono(ctx, 'NOW SQUISHING', pad, pad + m * 0.022, m * 0.022);
+  ctx.font = `italic ${m * 0.075}px ${SERIF}`;
+  ctx.fillText(`“${info.word}”`, pad, pad + m * 0.022 + m * 0.085);
+
+  // Bottom left: the counter.
+  const barY = H - pad;
+  const valueBase = barY - m * 0.035;
+  const big = m * 0.16;
+  ctx.font = `${big}px ${SERIF}`;
+  const num = String(info.percent);
+  ctx.fillText(num, pad, valueBase);
+  const nw = ctx.measureText(num).width;
+  ctx.font = `${big * 0.5}px ${SERIF}`;
+  ctx.fillText('%', pad + nw + big * 0.04, valueBase - big * 0.36);
+  if (info.done) {
+    ctx.font = `italic ${m * 0.042}px ${SERIF}`;
+    ctx.fillText('Fully decompressed.', pad, valueBase - big * 0.86);
+  } else {
+    mono(ctx, 'STRESS RELEASED', pad, valueBase - big * 0.86, m * 0.022);
+  }
+
+  // Bottom right: watermark.
+  ctx.textAlign = 'right';
+  ctx.font = `${m * 0.05}px ${SERIF}`;
+  ctx.fillText(APP.watermark, W - pad, valueBase - m * 0.03);
+  mono(ctx, APP.url.toUpperCase(), W - pad, valueBase, m * 0.019);
+
+  // Hairline progress bar.
+  ctx.fillStyle = MUTED;
+  const lw = Math.max(1, m / 720);
+  ctx.fillRect(pad, barY, W - pad * 2, lw);
+  ctx.fillStyle = INK;
+  ctx.fillRect(pad, barY - lw, (W - pad * 2) * info.fraction, lw * 3);
+}
+
+function mono(ctx, text, x, y, size) {
+  ctx.font = `500 ${size}px ${MONO}`;
+  if ('letterSpacing' in ctx) {
+    ctx.letterSpacing = `${size * 0.08}px`;
+    ctx.fillText(text, x, y);
+    ctx.letterSpacing = '0px';
+  } else {
+    ctx.fillText(text, x, y);
+  }
+}
+
+export class Recorder {
+  constructor(glCanvas) {
+    this.gl = glCanvas;
+    this.canvas = document.createElement('canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.state = 'idle';
+    this.pendingShot = null;
+  }
+
+  get busy() {
+    return this.state !== 'idle';
+  }
+
+  // Resolves with { blob, type, ext } when the clip is done.
+  start(aspect, audioStream, crop) {
+    const { w, h } = outputSize(aspect);
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.crop = crop;
+    const pick = pickMimeType(!!audioStream);
+    if (!pick || !this.canvas.captureStream) return Promise.reject(new Error('Recording is not supported in this browser.'));
+    const stream = this.canvas.captureStream(RECORD.fps);
+    if (pick.audio && audioStream) for (const t of audioStream.getAudioTracks()) stream.addTrack(t);
+    const rec = new MediaRecorder(stream, { mimeType: pick.type, videoBitsPerSecond: RECORD.bitrate });
+    const chunks = [];
+    this.state = 'recording';
+    this.startedAt = performance.now();
+    return new Promise((resolve, reject) => {
+      rec.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+      rec.onerror = (e) => {
+        this.state = 'idle';
+        reject(e.error || new Error('Recording failed.'));
+      };
+      rec.onstop = () => {
+        this.state = 'idle';
+        for (const t of stream.getVideoTracks()) t.stop();
+        const type = pick.type.split(';')[0];
+        const blob = new Blob(chunks, { type });
+        if (!blob.size) reject(new Error('Recording came out empty. Try again.'));
+        else resolve({ blob, type, ext: type === 'video/mp4' ? 'mp4' : 'webm' });
+      };
+      rec.start(250);
+      this.rec = rec;
+      this.timer = setTimeout(() => this.stop(), RECORD.seconds * 1000);
+    });
+  }
+
+  stop() {
+    clearTimeout(this.timer);
+    if (this.rec && this.rec.state !== 'inactive') this.rec.stop();
+  }
+
+  progress() {
+    return this.state === 'recording' ? Math.min(1, (performance.now() - this.startedAt) / (RECORD.seconds * 1000)) : 0;
+  }
+
+  // Next rendered frame becomes a PNG.
+  screenshot(aspect, crop) {
+    return new Promise((resolve) => {
+      this.pendingShot = { aspect, crop, resolve };
+    });
+  }
+
+  // Call right after rendering, while the WebGL buffer is still valid.
+  capture(info) {
+    if (this.state === 'recording') composite(this.ctx, this.canvas.width, this.canvas.height, this.gl, this.crop, info);
+    if (this.pendingShot) {
+      const { aspect, crop, resolve } = this.pendingShot;
+      this.pendingShot = null;
+      const { w, h } = outputSize(aspect);
+      const c = document.createElement('canvas');
+      const scale = 1.5;
+      c.width = Math.round(w * scale);
+      c.height = Math.round(h * scale);
+      composite(c.getContext('2d'), c.width, c.height, this.gl, crop, info);
+      c.toBlob((blob) => resolve({ blob, type: 'image/png', ext: 'png' }), 'image/png');
+    }
+  }
+}
+
+export async function shareOrDownload(file, preferShare) {
+  if (preferShare && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Squish' });
+      return 'shared';
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'cancelled';
+    }
+  }
+  download(file);
+  return 'downloaded';
+}
+
+export function canShareFile(file) {
+  return !!(navigator.canShare && navigator.canShare({ files: [file] }));
+}
+
+export function download(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
