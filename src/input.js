@@ -22,7 +22,6 @@ export class Input {
     this._p = new Vector3();
     this._bary = new Vector3();
     this._hit = new Vector3();
-    this._disp = new Float32Array(3);
 
     canvas.addEventListener('pointerdown', (e) => this.down(e));
     canvas.addEventListener('pointermove', (e) => this.move(e));
@@ -47,7 +46,8 @@ export class Input {
   down(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    this.app.onGesture();
+    // Mouse down counts as a user activation for audio; touch waits for up.
+    this.app.onGesture(e.pointerType === 'mouse');
     try {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -102,6 +102,7 @@ export class Input {
     const s = this.pointers.get(e.pointerId);
     if (!s) return;
     this.pointers.delete(e.pointerId);
+    if (!cancelled) this.app.sound.unlock();
     const body = this.app.body;
     const held = performance.now() - s.t0;
     if (s.slot >= 0 && body) body.release(s.slot);

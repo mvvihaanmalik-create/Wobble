@@ -29,6 +29,8 @@ export class Stage {
     r.toneMappingExposure = SCENE.exposure;
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, SCENE.maxPixelRatio);
     r.setPixelRatio(this.pixelRatio);
+    // Refraction is sampled blurred anyway; a smaller buffer saves fill rate.
+    r.transmissionResolutionScale = SCENE.transmissionScale;
 
     this.scene = new Scene();
     this.scene.background = this.backdropTexture();

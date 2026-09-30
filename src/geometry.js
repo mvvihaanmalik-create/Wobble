@@ -24,8 +24,6 @@ export function sanitizeWord(font, text, maxChars) {
 // Builds a dense, watertight jelly mesh for a word. Each glyph is extruded on
 // its own so it can rest on the floor by its lowest point, then everything is
 // subdivided until no edge is longer than the target length.
-export const buildTimings = {};
-
 // Extruded, merged glyphs are reused across rebuilds.
 const glyphCache = new Map();
 
@@ -55,13 +53,6 @@ function extrudeGlyph(font, ch, long) {
 
 export function buildWordMesh(font, word, budget) {
   const G = GEOMETRY;
-  let tMark = performance.now();
-  const lap = (k) => {
-    const now = performance.now();
-    buildTimings[k] = (buildTimings[k] || 0) + now - tMark;
-    tMark = now;
-  };
-  for (const k in buildTimings) delete buildTimings[k];
   const long = word.length >= 8;
   const scale = 1 / font.data.resolution;
   const zShift = -G.depth / 2;
@@ -98,7 +89,6 @@ export function buildWordMesh(font, word, budget) {
     penX += advance;
   }
 
-  lap('glyphs');
   // Concatenate glyphs.
   let nv = 0;
   let ni = 0;
@@ -137,8 +127,6 @@ export function buildWordMesh(font, word, budget) {
   let result = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     result = subdivide(pos, idx, glyphOf, edge);
-    lap('subdivide');
-    buildTimings.attempts = attempt + 1;
     const count = result.pos.length / 3;
     if (Math.abs(count - budget) < budget * 0.18 || (count < budget && edge <= G.minEdge)) break;
     const added = Math.max(1, count - nv);
@@ -155,7 +143,6 @@ export function buildWordMesh(font, word, budget) {
 
   reorder(result);
   settleOntoFloor(result.pos, result.glyphOf, glyphs);
-  lap('reorder');
 
   return {
     positions: result.pos,

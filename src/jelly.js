@@ -621,15 +621,6 @@ export class SoftBody {
     if (this.grabs[slot]) this.grabs[slot].active = false;
   }
 
-  // Current displacement (offset + mode) at a vertex, for grabbing continuity.
-  displacementAt(i, target) {
-    const i3 = i * 3;
-    target[0] = this.u[i3] + this.md[i3];
-    target[1] = this.u[i3 + 1] + this.md[i3 + 1];
-    target[2] = this.u[i3 + 2] + this.md[i3 + 2];
-    return target;
-  }
-
   // Highest rest surface under a footprint, for the weight to land on.
   topUnder(x, hx) {
     const { N, rest } = this;

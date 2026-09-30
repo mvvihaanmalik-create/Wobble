@@ -131,6 +131,7 @@ export const SCENE = {
   parallax: 0.05, // pointer parallax amount, radians
   exposure: 1.05, // tone mapping exposure
   maxPixelRatio: 2, // device pixel ratio cap
+  transmissionScale: 0.75, // resolution of the buffer the jelly refracts
 };
 
 export const STRESS = {

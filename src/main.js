@@ -76,6 +76,11 @@ class App {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.recorder.busy) this.recorder.stop();
     });
+    // Touch pointerdown does not count as a user activation for audio, so
+    // also try on the events that do.
+    for (const type of ['pointerup', 'keydown', 'touchend']) {
+      window.addEventListener(type, () => this.sound.unlock(), { passive: true });
+    }
     this.resume();
   }
 
@@ -199,8 +204,8 @@ class App {
 
   // --- Gestures (called by Input) -----------------------------------------
 
-  onGesture() {
-    this.sound.unlock();
+  onGesture(activation) {
+    if (activation) this.sound.unlock();
     this.stress.touch();
   }
 
@@ -409,7 +414,7 @@ class App {
     if (q.prIndex < PERF.pixelRatioSteps.length - 1) {
       q.prIndex++;
       this.stage.setPixelRatio(PERF.pixelRatioSteps[q.prIndex]);
-      this.stage.renderer.transmissionResolutionScale = q.prIndex >= 2 ? 0.75 : 1;
+      this.stage.renderer.transmissionResolutionScale = q.prIndex >= 2 ? 0.5 : SCENE.transmissionScale;
     } else if (!q.lowered) {
       q.lowered = true;
       this.budget = GEOMETRY.vertexBudgetLow;

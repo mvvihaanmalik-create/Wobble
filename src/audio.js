@@ -53,8 +53,9 @@ export class Sound {
     return this.recordDest.stream;
   }
 
+  // Sounds scheduled while the context is still starting play once it runs.
   ready() {
-    return this.ctx && !this.muted && this.ctx.state === 'running';
+    return this.ctx && !this.muted && this.ctx.state !== 'closed';
   }
 
   noiseBurst(t, dur, f0, f1, q, gain) {
