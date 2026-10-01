@@ -1,8 +1,61 @@
-# Squish.
+# Squishi.
 
-Type a word. It turns into a block of jelly. Drag it, poke it, drop a weight on it. A counter tracks how much stress you have released, and the Record button makes a 6 second clip with that counter in it.
+A very small sushi bar where everything wobbles. Jelly customers order nigiri; you make it across four stations, each with its own camera angle, and get scored on how close you got.
+
+The word toy that started this, **Squish.**, is still here as the Break room at `/break.html`.
 
 Everything runs in the browser: no backend, no accounts, no analytics, no requests to anything but the page's own files.
+
+## How to play
+
+| Station | Angle | What you do |
+| --- | --- | --- |
+| 01 Counter | Eye level, across the bar | A guest hops in and pins an order ticket. Take the order. Poke the guest if you like. |
+| 02 Rice | Over the rice tub | Hold to scoop, let go inside the green band. Then hold to press and let go in the green, three times. Press too hard and the rice squashes flat. |
+| 03 Knife | Low, along the cutting board | Swipe down through the fish block along the dashed guide. Angle and thickness are scored. Salmon and tuna want a 45° cut, egg a straight one. |
+| 04 Build | Three quarters, over the serving board | Tap the rice for wasabi (one tap per dab), drag a slice onto the rice, then add the toppings on the ticket. Serve. |
+
+The guest eats it in three bites and reacts. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
+
+- **Day 1:** salmon only.
+- **Day 2:** tuna, sesame and scallion.
+- **Day 3:** egg, ikura and sweet sauce.
+
+An average of 50 or more unlocks the next day. Progress is kept in the browser.
+
+Keys: `1` to `4` switch stations; hold `Space` to scoop and press. Record makes a 6 second clip of the screen with the bar's name, the day, tips and the last plate's stars. Photo saves a PNG.
+
+### What is generated
+
+Every texture is a shader driven by 3D coordinates baked into each piece (`src/sushi/glsl.js`), so a cut face shows the grain that was inside the block:
+- **Salmon:** fat lines that bend into chevrons across the width.
+- **Tuna:** deep red with sparse sinew and a little iridescence.
+- **Tamago:** folded layers with a browned top.
+- **Rice:** packed grains, plus real grains riding on the surface.
+- **Wood:** grain for the hinoki counter, cutting board (with knife scratches) and serving board.
+- **Noren:** the curtain's seigaiha wave print.
+
+Rice, fish, blocks and customers are all soft bodies on the same simulation as the word toy. Rice forming and fish draping over rice are shape changes the simulation wobbles through.
+
+### Squishi files
+
+```
+index.html            the bar
+src/sushi/config.js    layout, camera angles, days, scoring, every tuning number
+src/sushi/game.js      flow, customers, serving, input, capture, quality
+src/sushi/stations.js  counter, rice, knife and build stations
+src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces
+src/sushi/customers.js jelly customers with faces
+src/sushi/set.js       counter, curtain, lanterns, tub, boards, bowls, knife
+src/sushi/glsl.js      generated food and wood textures
+src/sushi/orders.js    order generation and scoring
+```
+
+---
+
+# Squish. (Break room)
+
+Type a word. It turns into a block of jelly. Drag it, poke it, drop a weight on it. A counter tracks how much stress you have released, and the Record button makes a 6 second clip with that counter in it.
 
 ## Run
 
@@ -20,7 +73,7 @@ npm run build     # static site in dist/
 npm run preview   # serve dist/ locally to check it
 ```
 
-`dist/` is a plain static folder with relative paths, so it works at a domain root or in a subfolder.
+`dist/` is a plain static folder with relative paths, so it works at a domain root or in a subfolder. It holds two pages: `index.html` (the bar) and `break.html` (the word toy). `vercel.json` pins the build settings, so a Vercel import needs no setup.
 
 - **Vercel:** import the repo. Framework preset Vite, build command `npm run build`, output directory `dist`.
 - **Netlify:** build command `npm run build`, publish directory `dist`. Or drag `dist/` onto the Netlify dashboard.

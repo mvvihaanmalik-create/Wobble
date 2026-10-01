@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, ExtrudeGeometry, IcosahedronGeometry, Mesh, Shape, Sphere, Vector3 } from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { subdivide, reorder } from '../geometry.js';
+import { subdivide, reorder } from '../meshutils.js';
 import { SoftBody } from '../jelly.js';
 
 // Unit icosphere with shared vertices: a uniform, pole-free starting point

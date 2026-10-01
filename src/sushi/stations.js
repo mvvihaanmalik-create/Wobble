@@ -277,9 +277,11 @@ export class KnifeStation extends Station {
     this.show(next || this.kind);
   }
 
+  // Blocks go back in the case when you leave, so they never hide the plate.
   exit() {
     this.guide.visible = false;
     this.knife.visible = false;
+    for (const b of Object.values(this.blocks)) b.group.visible = false;
   }
 
   block(kind) {

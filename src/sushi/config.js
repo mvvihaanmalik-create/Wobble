@@ -24,11 +24,11 @@ export const LAYOUT = {
 // Camera angle for each station. fitW is the world width that must stay in
 // view at the target, so portrait phones widen the lens instead of cropping.
 export const VIEWS = {
-  title: { pos: [0, 7.6, 15], target: [0, 3.2, -6], fov: 40, fitW: 18 },
-  counter: { pos: [0, 8.4, 13.5], target: [0, 2.6, -6], fov: 40, fitW: 17 },
-  rice: { pos: [-7.6, 11.5, 7.2], target: [-7.6, 0.2, 1.3], fov: 36, fitW: 11 },
-  knife: { pos: [-0.2, 2.9, 10.5], target: [-0.2, 0.85, 1.3], fov: 30, fitW: 10.5 },
-  build: { pos: [8.7, 7.6, 10.2], target: [8.7, 0.3, 2.9], fov: 36, fitW: 11 },
+  title: { pos: [0, 7.6, 15], target: [0, 3.2, -6], fov: 40, fitW: 18, portrait: { pos: [0, 4.2, 12], target: [0, -2.6, -6.5], fov: 40, fitW: 9.5 } },
+  counter: { pos: [0, 8.4, 13.5], target: [0, 2.6, -6], fov: 40, fitW: 17, portrait: { pos: [0, 7.4, 12], target: [0, 1.2, -5], fov: 40, fitW: 10 } },
+  rice: { pos: [-7.6, 11.5, 7.2], target: [-7.6, 0.2, 1.3], fov: 36, fitW: 11, portrait: { pos: [-8, 13.5, 9.2], target: [-8, 0.2, 3.1], fov: 36, fitW: 9.5 } },
+  knife: { pos: [-0.2, 2.9, 10.5], target: [-0.2, 0.85, 1.3], fov: 30, fitW: 10.5, portrait: { pos: [2.2, 3.4, 9.5], target: [2.2, 0.4, 1.3], fov: 30, fitW: 6 } },
+  build: { pos: [8.7, 7.6, 10.2], target: [8.7, 0.3, 2.9], fov: 36, fitW: 11, portrait: { pos: [9.4, 11, 10.2], target: [9.4, 0.3, 3.6], fov: 36, fitW: 8.6 } },
 };
 export const CAMERA = {
   moveSeconds: 0.75, // station to station camera move

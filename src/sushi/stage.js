@@ -81,7 +81,13 @@ export class Stage {
     this._w = new Vector3();
   }
 
+  // Narrow portrait screens get their own framing where a view defines one.
+  viewFor(view) {
+    return this.width && this.width / this.height < 0.8 && view.portrait ? view.portrait : view;
+  }
+
   applyView(view) {
+    view = this.viewFor(view);
     const r = this.rig;
     r.pos.fromArray(view.pos);
     r.target.fromArray(view.target);
@@ -91,7 +97,8 @@ export class Stage {
 
   // Glide to a station's angle. Returns a promise for when it lands.
   goTo(viewName, snap = false) {
-    const to = VIEWS[viewName];
+    this.viewName = viewName;
+    const to = this.viewFor(VIEWS[viewName]);
     const r = this.rig;
     if (snap || this.reducedMotion.matches) {
       this.applyView(to);
@@ -109,9 +116,11 @@ export class Stage {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     this.renderer.setSize(w, h, false);
+    const wasPortrait = this.width && this.width / this.height < 0.8;
     this.width = w;
     this.height = h;
     this.camera.aspect = w / h;
+    if (this.viewName && wasPortrait !== w / h < 0.8) this.goTo(this.viewName, true);
   }
 
   setPixelRatio(pr) {

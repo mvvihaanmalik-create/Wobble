@@ -141,6 +141,7 @@ body {
 }
 .brand .mono {
   color: var(--on-night-muted);
+  white-space: nowrap;
 }
 .stats {
   display: flex;
@@ -711,7 +712,8 @@ body {
   .stats {
     gap: 8px;
   }
-  .stat:first-child {
+  .stat:first-child,
+  #shotBtn {
     display: none;
   }
   .ticket {
