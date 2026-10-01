@@ -71,6 +71,7 @@ export class Game {
       onStart: (day) => this.startDay(day),
       onTool: (t) => this.stations.build.setTool(t),
       onWall: () => this.openWall(),
+      onPause: () => this.openPause(),
     });
     this.ui.setMuted(this.sound.muted);
 
@@ -88,13 +89,14 @@ export class Game {
     this.showTitle();
     this.last = performance.now();
     this.running = false;
-    document.addEventListener('visibilitychange', () => (document.hidden ? this.pause() : this.resume()));
+    document.addEventListener('visibilitychange', () => (document.hidden ? this.pause() : this.mode !== 'paused' && this.resume()));
     this.resume();
   }
 
   // --- Flow ------------------------------------------------------------------
 
   showTitle() {
+    this.session = (this.session || 0) + 1;
     this.mode = 'title';
     this.clearWork();
     this.removeCustomers();
@@ -116,6 +118,7 @@ export class Game {
   }
 
   startDay(dayIndex) {
+    this.session = (this.session || 0) + 1;
     this.sound.unlock();
     this.day = dayIndex;
     this.orders = makeOrders(dayIndex);
@@ -146,7 +149,8 @@ export class Game {
     // The next guest's picture waits until this one has settled in, so the
     // two builds never land in the same frame.
     const upcoming = this.orders[this.orderIndex + 1];
-    if (upcoming) setTimeout(() => this.photograph(upcoming), 2500);
+    const session = this.session;
+    if (upcoming) setTimeout(() => this.session === session && this.photograph(upcoming), 2500);
     order.arrived = performance.now();
     this.order = order;
     this.goStation('counter');
@@ -286,6 +290,22 @@ export class Game {
     return DAYS[this.day ?? 0].toppings;
   }
 
+  pieceProgress(p) {
+    if (!p) return { rice: false, fish: false, wasabi: 0, tops: {} };
+    return { rice: true, fish: !!p.slice, wasabi: p.wasabi.length, tops: p.slice ? p.slice.toppings.counts : {} };
+  }
+
+  // Every piece matches its ticket line: fish on, wasabi count and toppings.
+  plateMatches() {
+    if (!this.plateComplete()) return false;
+    return this.order.pieces.every((want, i) => {
+      const p = this.pieces[i];
+      const tops = p.slice.toppings.counts;
+      if (p.wasabi.length !== (want.wasabi || 0)) return false;
+      return Object.entries(want.toppings).every(([k, v]) => (k === 'ikura' ? tops.ikura === v : !!tops[k]));
+    });
+  }
+
   plateComplete() {
     return !!this.order && this.pieces.length >= this.order.pieces.length && this.pieces.every((p) => p.slice);
   }
@@ -321,8 +341,7 @@ export class Game {
       dx: p.placement ? p.placement.dx : 0,
       toppings: p.slice.toppings.counts,
     }));
-    const waited = (performance.now() - this.order.arrived) / 1000;
-    const score = scorePlate(this.order, built, waited);
+    const score = scorePlate(this.order, built, this.order.waited || 0);
     const tip = tipFor(score.total, this.day);
     const photo = this.booth.platePhoto(480, 300, this.pieces.length);
     photo.then((img) => (this.served = [...(this.served || []), { img, score: score.total, tip, guest: this.order.look.name, species: this.order.look.species, day: this.day }]));
@@ -434,6 +453,7 @@ export class Game {
         plates: this.todaysPlates(),
         name: savedName(),
         onWall: () => this.openWall(),
+      onPause: () => this.openPause(),
         onPost: async (name) => {
           const res = await postRun({ name, day: this.day, tips: this.tips, avg, plates: this.todaysPlates() });
           this.openWall(res);
@@ -533,6 +553,10 @@ export class Game {
     for (const type of ['pointerup', 'keydown', 'touchend']) window.addEventListener(type, () => this.sound.unlock(), { passive: true });
     // Keyboard: 1-4 switch stations, space holds.
     window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !e.repeat) {
+        if (this.mode === 'paused') return this.closePause();
+        if (this.mode === 'play') return this.openPause();
+      }
       if (this.mode !== 'play' || e.repeat || e.target.tagName === 'INPUT') return;
       const i = ['1', '2', '3', '4'].indexOf(e.key);
       if (i >= 0) this.goStation(STATIONS[i]);
@@ -713,6 +737,48 @@ export class Game {
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }
 
+  // Pause: stop the clock and the loop. Not while a plate is on its way,
+  // since serving is a sequence of timed moves.
+  openPause() {
+    if (this.mode !== 'play' || this.serving || !document.getElementById('cardScreen').hidden) return;
+    // Let go of anything in hand: finish a hold, drop a slice, drop the knife.
+    const { rice, knife, build } = this.stations;
+    if (rice.state === 'scooping' || rice.state === 'pressing') rice.up();
+    if (knife.stroke) {
+      knife.stroke = null;
+      knife.knife.visible = false;
+      this.fx.trail.end();
+    }
+    if (build.drag) build.dropBack();
+    build.sauce = null;
+    this.activePointer = null;
+    this.ui.holdRing(null);
+    this.mode = 'paused';
+    this.pause();
+    this.stage.render(0);
+    this.ui.pauseCard(
+      this.day,
+      () => this.closePause(),
+      () => {
+        this.ui.hideCard();
+        this.startDay(this.day);
+        this.resume();
+      },
+      () => {
+        this.ui.hideCard();
+        this.showTitle();
+        this.resume();
+      },
+    );
+  }
+
+  closePause() {
+    if (this.mode !== 'paused') return;
+    this.ui.hideCard();
+    this.mode = 'play';
+    this.resume();
+  }
+
   // The picture on the ticket: the plate as it should come out.
   photograph(order) {
     if (order.photoing) return;
@@ -760,10 +826,17 @@ export class Game {
     if (dragging) dragging.slice.update(dt);
     if (this.customer) {
       if (this.order && this.order.taken !== undefined && !this.serving) {
-        const waited = (performance.now() - this.order.arrived) / 1000;
+        // Patience runs on game time, so a hidden tab or a pause costs nothing.
+        if (this.mode === 'play' && this.customer.seated) this.order.waited = (this.order.waited || 0) + dt;
+        const waited = this.order.waited || 0;
         this.customer.impatience = Math.min(1, Math.max(0, waited / this.order.patience - 0.35) / 0.65);
         this.ui.patience(1 - waited / this.order.patience);
         if (this.customer.impatience > 0.7 && this.customer.expression === 'smile') this.customer.setExpression('flat');
+        if (this.customer.impatience > 0.6 && !this.order.warned) {
+          this.order.warned = true;
+          this.ui.toast(`${this.order.look.name} is getting hungry. Speed up.`, 2600);
+          this.sousSays({ jp: '急いで！', en: 'Hurry!' }, 'open', 900);
+        }
       } else this.customer.impatience = 0;
       if (this.customer.idle && Math.random() < dt * 0.25) this.customer.poke(0.4);
       this.customer.update(dt);
@@ -773,11 +846,12 @@ export class Game {
     this.sous.update(dt);
 
     if (this.mode === 'play') {
-      this.ui.ticket(this.order && this.order.taken ? this.order : this.order && this.customer && this.customer.seated ? this.order : null, this.orderIndex + 1, this.order ? this.order.pieces.map((_, i) => i < this.pieces.filter((p) => p.slice).length) : []);
+      const showTicket = this.order && (this.order.taken || (this.customer && this.customer.seated));
+      this.ui.ticket(showTicket ? this.order : null, this.orderIndex + 1, showTicket ? this.order.pieces.map((_, i) => this.pieceProgress(this.pieces[i])) : []);
       const status = {};
       for (const s of STATIONS) status[s] = this.stations[s].status ? this.stations[s].status() : null;
       if (this.order && this.customer && this.customer.seated && !this.order.taken) status.counter = 'todo';
-      if (this.plateComplete()) status.counter = 'ready';
+      if (this.plateMatches()) status.counter = 'ready';
       this.ui.setStation(this.station, status);
     }
 

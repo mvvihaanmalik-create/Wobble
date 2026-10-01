@@ -38,7 +38,9 @@ At the end of a shift, the summary shows today's plate photos. Type a name and p
 
 An average of 50 or more unlocks the next day. Progress is kept in the browser.
 
-Keys: `1` to `4` switch stations; hold `Space` to scoop and press. Record makes a 6 second clip of the screen with the bar's name, the day, tips and the last plate's stars. Photo saves a PNG.
+Keys: `1` to `4` switch stations; hold `Space` to scoop and press; `Esc` pauses (resume, restart the day or quit to the title). The pause button in the top bar does the same on phones.
+
+The ticket ticks off each request as you go: wasabi and ikura show a count (`Wasabi 2/3`, `Ikura 4/5`), toppings turn green when added, and a 済 stamp lands when a piece matches. In the build station the tools switch to the next thing the ticket needs on their own, and a "!" marks the ones still missing. Guests lose patience on game time, so pausing or switching tabs costs nothing. Record makes a 6 second clip of the screen with the bar's name, the day, tips and the last plate's stars. Photo saves a PNG.
 
 ### Look
 

@@ -125,7 +125,12 @@ export class RiceStation extends Station {
       if (this.state === 'pressing') {
         ty = top + 0.2 - this.value * 0.45;
         rate = 18;
-      } else ty = top + 0.9 + Math.sin(t * 3) * 0.06;
+      } else {
+        // Wait beside the rice, not over it, so the shape stays in view.
+        tx = LAYOUT.mat.x + 1.5;
+        tz = LAYOUT.mat.z + 1.1;
+        ty = top + 0.5 + Math.sin(t * 3) * 0.06;
+      }
     }
     const k = 1 - Math.exp(-dt * rate);
     p.position.x += (tx - p.position.x) * k;
@@ -206,9 +211,11 @@ export class RiceStation extends Station {
       this.ball.position.set(LAYOUT.tub.x, LAYOUT.tub.height + 0.4, LAYOUT.tub.z);
       g.stage.scene.add(this.ball);
       g.sound.scoop();
+      g.ui.meter('Scoop', 0, RICE.scoopTarget, false, '');
     } else if (this.state === 'ready') {
       this.state = 'pressing';
       this.value = 0;
+      g.ui.meter('Press', 0, RICE.pressGood, false, this.dots());
     }
   }
 
@@ -243,6 +250,7 @@ export class RiceStation extends Station {
       duration: 0.42,
       arc: 1.2,
       done: () => {
+        if (this.rice !== rice) return; // the station was reset mid-flight
         rice.body.kickAll(0, 2.5, 0);
         g.sound.squelch(0.6);
         this.state = 'ready';
@@ -516,14 +524,18 @@ export class KnifeStation extends Station {
         slice.body.impulse(0, slice.thickness, 0, 0, -1, 0, 1.2, 0.5);
         const verdict = score.total > 0.85 ? 'Clean cut' : score.angle < 0.5 ? 'Watch the angle' : score.thickness < 0.5 ? (thickness > BLOCKS[this.kind].thickness ? 'A bit thick' : 'A bit thin') : 'Nice cut';
         g.popupAt(verdict, landing.clone().setY(1.4), score.total > 0.85 ? 'great' : score.total > 0.55 ? 'good' : 'bad');
-        setTimeout(() => g.toTray(slice), 450);
+        const session = g.session;
+        setTimeout(() => g.session === session && g.toTray(slice), 450);
       },
     });
     if (b.remaining < 1.6) {
+      // Swap in a fresh block of the same fish, even if the player has
+      // switched fish in the meantime.
+      const kind = this.kind;
       setTimeout(() => {
         g.stage.scene.remove(b.group);
-        delete this.blocks[this.kind];
-        this.show(this.kind);
+        if (this.blocks[kind] === b) delete this.blocks[kind];
+        if (g.station === 'knife' && this.kind === kind) this.show(kind);
         g.ui.toast('Fresh block');
       }, 900);
     }
@@ -570,31 +582,63 @@ export class BuildStation extends Station {
     return ['wasabi', 'fish', ...TOPPING_TOOLS.filter((t) => this.g.dayToppings().includes(t))];
   }
 
+  // Tools the ticket still needs: flagged with a "!" until done.
   wanted() {
     const g = this.g;
     if (!g.order) return [];
     const w = new Set();
-    for (const p of g.order.pieces) {
-      if (p.wasabi) w.add('wasabi');
-      for (const t of Object.keys(p.toppings)) w.add(t);
-    }
-    if (g.pieces.some((p) => !p.slice)) w.add('fish');
+    g.order.pieces.forEach((want, i) => {
+      const p = g.pieces[i];
+      if (!p) {
+        if (want.wasabi) w.add('wasabi');
+        w.add('fish');
+        for (const k of Object.keys(want.toppings)) w.add(k);
+        return;
+      }
+      if (!p.slice) {
+        if (p.wasabi.length < (want.wasabi || 0)) w.add('wasabi');
+        w.add('fish');
+      }
+      const tops = p.slice ? p.slice.toppings.counts : {};
+      for (const [k, v] of Object.entries(want.toppings)) if (k === 'ikura' ? (tops.ikura || 0) < v : !tops[k]) w.add(k);
+    });
     return [...w];
   }
 
+  // The next thing the ticket still needs, in the order a chef would do it.
   suggestTool() {
     const g = this.g;
-    const bare = g.pieces.filter((p) => !p.slice);
-    if (bare.length && g.order && g.order.pieces.some((p) => p.wasabi) && bare.every((p) => p.wasabi.length === 0)) return 'wasabi';
-    if (bare.length && g.tray.length) return 'fish';
-    const want = this.wanted().filter((t) => TOPPING_TOOLS.includes(t));
-    return want[0] || 'fish';
+    if (!g.order) return 'fish';
+    for (let i = 0; i < g.pieces.length; i++) {
+      const p = g.pieces[i];
+      const want = g.order.pieces[i];
+      if (!want) continue;
+      if (!p.slice) {
+        if (p.wasabi.length < (want.wasabi || 0)) return 'wasabi';
+        continue;
+      }
+    }
+    if (g.pieces.some((p) => !p.slice) && g.tray.length) return 'fish';
+    for (let i = 0; i < g.pieces.length; i++) {
+      const p = g.pieces[i];
+      const want = g.order.pieces[i];
+      if (!want || !p.slice) continue;
+      const tops = p.slice.toppings.counts;
+      for (const [k, v] of Object.entries(want.toppings)) if (k === 'ikura' ? (tops.ikura || 0) < v : !tops[k]) return k;
+    }
+    return this.tool || 'fish';
+  }
+
+  // After a step, move to the next tool if this one has done its job.
+  advance() {
+    const next = this.suggestTool();
+    if (next !== this.tool) this.tool = next;
   }
 
   status() {
     const g = this.g;
     if (!g.order || !g.order.taken) return null;
-    if (g.plateComplete()) return 'ready';
+    if (g.plateMatches()) return 'ready';
     return g.pieces.length && (g.tray.length || g.pieces.some((p) => !p.slice)) ? 'todo' : null;
   }
 
@@ -607,11 +651,12 @@ export class BuildStation extends Station {
     const g = this.g;
     if (g.station !== 'build') return;
     g.ui.tools(true, this.tool, this.available(), this.wanted());
-    const complete = g.plateComplete();
+    const complete = g.plateMatches();
     g.ui.actions([{ label: 'Serve', primary: complete, disabled: !g.pieces.some((p) => p.slice), onClick: () => g.serve() }]);
     if (!g.order || !g.order.taken) return g.ui.hint('Take an order at the counter first.');
     if (!g.pieces.length) return g.ui.hint('No rice yet. Make some at the rice station.');
     if (this.drag) return g.ui.hint('Drop it on the rice.');
+    if (this.placing) return;
     const hints = {
       wasabi: 'Tap the rice to add a dab of wasabi. One per dab.',
       fish: g.tray.length ? 'Drag a slice from the tray onto the rice.' : 'Cut some fish at the knife station.',
@@ -655,11 +700,15 @@ export class BuildStation extends Station {
       if (piece.addWasabi()) {
         g.sound.squelch(0.35);
         piece.rice.body.kickAll(0, 0.6, 0);
+        this.advance();
       }
       return;
     }
     if (this.tool === 'fish') {
-      if (!piece.slice && g.tray.length) this.place(g.tray[0], piece, 0);
+      // Take the slice this piece's ticket line asks for, if there is one.
+      const want = g.order && g.order.pieces[g.pieces.indexOf(piece)];
+      const slice = g.tray.find((x) => want && x.kind === want.fish) || g.tray[0];
+      if (!piece.slice && slice) this.place(slice, piece, 0);
       return;
     }
     if (!piece.slice) return g.ui.toast('Put the fish on first');
@@ -675,14 +724,20 @@ export class BuildStation extends Station {
       if (this.tool === 'ikura') g.sound.plop();
       else g.sound.sprinkle();
       piece.slice.body.impulse(local.x, piece.slice.thickness, local.z, 0, -1, 0, 0.6, 0.3);
+      this.advance();
     }
   }
 
   move(e) {
     const g = this.g;
     if (this.drag) {
-      const p = g.planeHit(e, new Plane(new Vector3(0, 1, 0), -(LAYOUT.geta.h + 1.3)));
-      if (p) this.drag.slice.group.position.lerp(p, 0.6);
+      // Aim at the height of the rice tops, so the drop lands where the
+      // pointer is, then carry the slice a little above that point.
+      const p = g.planeHit(e, new Plane(new Vector3(0, 1, 0), -(LAYOUT.geta.h + 0.55)));
+      if (p) {
+        this.drag.aim = p;
+        this.drag.slice.group.position.lerp(p.clone().setY(p.y + 0.75), 0.6);
+      }
       this.drag.moved = true;
       return;
     }
@@ -701,15 +756,18 @@ export class BuildStation extends Station {
     if (this.sauce) {
       this.sauce = null;
       g.sound.squelch(0.3);
+      this.advance();
       return;
     }
     if (!this.drag) return;
     const d = this.drag;
     this.drag = null;
-    const pos = d.slice.group.position;
+    const pos = d.aim || d.slice.group.position;
     const free = g.pieces.filter((p) => !p.slice);
     if (!d.moved) {
-      if (free.length) this.place(d.slice, free[0], 0, true);
+      // A tap on a slice sends it to the first rice that wants that fish.
+      const fits = free.find((p) => g.order && g.order.pieces[g.pieces.indexOf(p)]?.fish === d.slice.kind) || free[0];
+      if (fits) this.place(d.slice, fits, 0, true);
       else this.dropBack(d.slice);
       return;
     }
@@ -725,7 +783,10 @@ export class BuildStation extends Station {
     }
     if (!best) return this.dropBack(d.slice);
     const local = best.group.worldToLocal(pos.clone());
-    this.place(d.slice, best, Math.max(-0.9, Math.min(0.9, local.x)), true);
+    // Fingers are not precise: near the middle snaps to dead center, and
+    // anything else is pulled most of the way in.
+    const dx = Math.abs(local.x) < 0.2 ? 0 : local.x * 0.6;
+    this.place(d.slice, best, Math.max(-0.9, Math.min(0.9, dx)), true);
   }
 
   startDrag(slice, e) {
@@ -746,6 +807,7 @@ export class BuildStation extends Station {
 
   place(slice, piece, dx, fromHand = false) {
     const g = this.g;
+    this.placing = (this.placing || 0) + 1;
     if (!fromHand) g.tray.splice(g.tray.indexOf(slice), 1);
     const target = piece.fishGroup.localToWorld(new Vector3(dx, 0, 0));
     g.stage.scene.attach(slice.group);
@@ -757,6 +819,7 @@ export class BuildStation extends Station {
       arc: 0.6,
       done: () => {
         piece.setSlice(slice, dx, 0);
+        this.placing--;
         g.sound.squelch(0.6);
         g.buzz(14);
         const at = piece.group.getWorldPosition(new Vector3()).add(new Vector3(0, 1.4, 0));

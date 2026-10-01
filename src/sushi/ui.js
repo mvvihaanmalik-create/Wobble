@@ -55,6 +55,7 @@ export class GameUI {
     $('muteBtn').addEventListener('click', () => this.h.onMute());
     $('recBtn').addEventListener('click', () => this.h.onRecord());
     $('shotBtn').addEventListener('click', () => this.h.onPhoto());
+    $('pauseBtn').addEventListener('click', () => this.h.onPause());
     $('startBtn').addEventListener('click', () => this.h.onStart(this.selectedDay));
     $('wallBtn').addEventListener('click', () => this.h.onWall());
     $('wallClose').addEventListener('click', () => this.hideWall());
@@ -127,6 +128,9 @@ export class GameUI {
   }
 
   setStation(name, status) {
+    // The photo matters at the counter and while building; elsewhere it
+    // would cover the tub and the block.
+    $('ticket').classList.toggle('compact', name === 'rice' || name === 'knife');
     document.querySelectorAll('#stations button').forEach((b) => {
       const s = b.dataset.station;
       b.setAttribute('aria-current', String(s === name));
@@ -147,14 +151,16 @@ export class GameUI {
     if (text) bump(wrap, 'talk');
   }
 
-  ticket(order, number, done) {
+  // progress[i]: how far the i-th piece on the board has come, so each
+  // request on the slip ticks off as it is done.
+  ticket(order, number, progress = []) {
     const t = $('ticket');
     if (!order) {
       t.hidden = true;
       this.ticketKey = null;
       return;
     }
-    const key = `${number}|${done.join(',')}|${order.photo ? 1 : 0}`;
+    const key = `${number}|${JSON.stringify(progress)}|${order.photo ? 1 : 0}`;
     if (key === this.ticketKey) return;
     const fresh = !this.ticketKey || !this.ticketKey.startsWith(`${number}|`);
     this.ticketKey = key;
@@ -166,11 +172,30 @@ export class GameUI {
     if (order.photo && ph.getAttribute('src') !== order.photo) ph.src = order.photo;
     $('ticketLines').innerHTML = order.pieces
       .map((p, i) => {
-        const [main, ...sub] = describePiece(p);
-        return `<div class="piece${done[i] ? ' done' : ''}">
+        const [main] = describePiece(p);
+        const pr = progress[i] || { rice: false, fish: false, wasabi: 0, tops: {} };
+        const chips = [];
+        const chip = (text, state) => chips.push(`<span class="chip${state ? ` ${state}` : ''}">${state === 'ok' ? '✓ ' : ''}${text}</span>`);
+        if (p.wasabi) chip(`Wasabi ${pr.wasabi}/${p.wasabi}`, pr.wasabi === p.wasabi ? 'ok' : pr.wasabi > p.wasabi ? 'over' : '');
+        else if (p.fish !== 'tamago') chip('No wasabi', pr.wasabi ? 'over' : pr.fish ? 'ok' : '');
+        let topsOk = true;
+        for (const [k, v] of Object.entries(p.toppings)) {
+          if (k === 'ikura') {
+            const n = pr.tops.ikura || 0;
+            chip(`Ikura ${n}/${v}`, n === v ? 'ok' : n > v ? 'over' : '');
+            topsOk = topsOk && n === v;
+          } else {
+            chip(TOPPINGS[k].label, pr.tops[k] ? 'ok' : '');
+            topsOk = topsOk && !!pr.tops[k];
+          }
+        }
+        const wasabiOk = pr.wasabi === (p.wasabi || 0);
+        const done = pr.fish && wasabiOk && topsOk;
+        const steps = `<span class="steps" aria-hidden="true"><i class="${pr.rice ? 'on' : ''}"></i><i class="${pr.fish ? 'on' : ''}"></i></span>`;
+        return `<div class="piece${done ? ' done' : ''}">
           <span class="piece-ico ico">${ICONS[FISH_ICON[p.fish]]}</span>
-          <div class="piece-text"><b>${main}</b><span class="chips">${sub.map((x) => `<span class="chip">${x}</span>`).join('')}</span></div>
-          ${done[i] ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
+          <div class="piece-text"><b>${main}${steps}</b><span class="chips">${chips.join('')}</span></div>
+          ${done ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
         </div>`;
       })
       .join('');
@@ -194,7 +219,10 @@ export class GameUI {
   meter(label, value, band, over, dots) {
     const m = $('meter');
     if (label == null) {
+      // Reset, so the next hold never starts from the last reading.
       m.hidden = true;
+      $('meterFill').style.width = '0%';
+      m.classList.remove('in', 'over');
       return;
     }
     m.hidden = false;
@@ -301,6 +329,20 @@ export class GameUI {
     );
   }
 
+  pauseCard(dayIndex, onResume, onRestart, onQuit) {
+    this.card(
+      `<div class="ribbon"><h2>Paused</h2><span lang="ja">休憩</span></div>
+       <p class="panel-lead">${DAYS[dayIndex].title}. The guest will wait.</p>
+       <p class="tip-line">Esc to resume. 1 to 4 switch stations. Hold Space to scoop and press.</p>`,
+      [
+        { label: 'Resume', primary: true, onClick: onResume },
+        { label: 'Restart day', onClick: onRestart },
+        { label: 'Quit to title', onClick: onQuit },
+      ],
+      'pause',
+    );
+  }
+
   scoreCard(name, quote, score, tip, onNext, last) {
     const stars = Math.round(score.total / 20);
     const starHtml = Array.from({ length: 5 }, (_, i) => `<span class="star${i < stars ? ' on' : ''}" style="--d:${0.25 + i * 0.12}s">${star(i < stars)}</span>`).join('');
@@ -333,6 +375,7 @@ export class GameUI {
          <div><b>${stats.best}</b><span>Best plate</span></div>
        </div>
        <div class="hanko">${rank}</div>
+       ${!hasNext && dayIndex + 1 < DAYS.length && stats.avg < 50 ? `<p class="tip-line">Average 50 or more to unlock Day ${dayIndex + 2}.</p>` : ''}
        ${post.plates.length ? `<form class="post" id="postForm" autocomplete="off">
          <label for="postName">Sign the wall</label>
          <div class="post-row"><input id="postName" maxlength="16" placeholder="Your name" spellcheck="false" /><button class="btn btn-solid" type="submit" id="postBtn">Post</button></div>

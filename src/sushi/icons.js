@@ -47,6 +47,7 @@ export const ICONS = {
 
   soundOn: svg(`<path d="M9 19 h7 l9 -8 v26 l-9 -8 h-7Z" fill="#fff8ea" ${o}/><path d="M31 18 q4 6 0 12 M35.5 14 q7 10 0 20" fill="none" ${o}/>`),
   soundOff: svg(`<path d="M9 19 h7 l9 -8 v26 l-9 -8 h-7Z" fill="#fff8ea" ${o}/><path d="M31 19 l9 10 M40 19 l-9 10" fill="none" ${o}/>`),
+  pause: svg(`<rect x="13" y="11" width="8" height="26" rx="3" fill="#fff8ea" ${o}/><rect x="27" y="11" width="8" height="26" rx="3" fill="#fff8ea" ${o}/>`),
   record: svg(`<circle cx="24" cy="24" r="15" fill="#fff8ea" ${o}/><circle cx="24" cy="24" r="8.5" fill="#e2483a" ${o}/>`),
   camera: svg(`<path d="M8 17 h8 l3 -5 h10 l3 5 h8 v20 h-32Z" fill="#fff8ea" ${o}/><circle cx="24" cy="26" r="7" fill="#7fb6e6" ${o}/><circle cx="22" cy="24" r="2" fill="#fff"/>`),
 
