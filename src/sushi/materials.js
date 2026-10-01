@@ -209,23 +209,3 @@ export function riceGrainGeometry(CapsuleGeometry) {
   g.scale(1, 1, 0.82);
   return g;
 }
-
-// Translucent jelly for customers, same family as the word toy.
-export function jellyCustomerMaterial(color, attenuation) {
-  return new MeshPhysicalMaterial({
-    color: new Color(color),
-    transmission: 1,
-    thickness: 0.9, // local units; the body is scaled up
-    ior: 1.33,
-    dispersion: 0.25, // faint rainbow fringes at the edges
-    roughness: 0.035,
-    clearcoat: 1,
-    clearcoatRoughness: 0.03,
-    attenuationColor: new Color(attenuation),
-    attenuationDistance: 4.5,
-    iridescence: 0.12,
-    iridescenceIOR: 1.25,
-    specularIntensity: 1,
-    envMapIntensity: 1.2,
-  });
-}

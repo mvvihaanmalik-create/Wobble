@@ -2,7 +2,7 @@ import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
 import { DAYS, GAME, LAYOUT, PERF, CUSTOMER_LOOKS } from './config.js';
 import { Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
-import { Customer } from './customers.js';
+import { Customer, SousChef } from './critters.js';
 import { makeOrders, rankFor, scorePlate, tipFor } from './orders.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
 import { GameUI } from './ui.js';
@@ -24,6 +24,8 @@ export class Game {
     this.set = new SushiSet(this.stage.scene);
     this.sound = new BarSound();
     this.fx = new Effects(this.stage.scene);
+    this.sous = new SousChef();
+    this.stage.scene.add(this.sous.group);
     this.timeScale = 1;
     this.slowFor = 0;
     this.pointerPos = { x: 0, y: 0 };
@@ -80,6 +82,16 @@ export class Game {
     const look = CUSTOMER_LOOKS[Math.floor(Math.random() * CUSTOMER_LOOKS.length)];
     this.customer = this.seatCustomer(look, true);
     this.order = null;
+    this.placeSous(LAYOUT.sousTitle);
+  }
+
+  placeSous(at, hop) {
+    const g = this.sous.group;
+    g.scale.setScalar(at.scale);
+    g.rotation.y = at.turn;
+    const to = new Vector3(at.x, at.y, at.z);
+    if (hop) this.sous.hopTo(to, 0.6, 1.4);
+    else g.position.copy(to);
   }
 
   startDay(dayIndex) {
@@ -93,6 +105,7 @@ export class Game {
     this.removeCustomers();
     this.clearWork();
     this.mode = 'intro';
+    this.placeSous(LAYOUT.sous, true);
     this.ui.setDay(dayIndex, 0, this.orders.length, 0);
     this.stage.goTo('counter');
     this.ui.dayIntroCard(dayIndex, () => {
@@ -122,6 +135,7 @@ export class Game {
     this.customer = c;
     c.seated = false;
     this.sound.bell();
+    this.sousSays('Irasshaimase!', 'open', 900);
     const seat = new Vector3(LAYOUT.customer.x, LAYOUT.customer.y, LAYOUT.customer.z);
     c.group.scale.setScalar(LAYOUT.customer.scale);
     const hops = c.group.position.distanceTo(seat) > 10 ? [new Vector3(-9, seat.y, seat.z), seat] : [seat];
@@ -309,13 +323,17 @@ export class Game {
     c.body.userMode[2] = 0;
     const mood = score.total / 100;
     this.sound.voice(mood);
-    if (mood >= 0.8) c.celebrate();
-    else if (mood >= 0.5) {
+    if (mood >= 0.8) {
+      c.celebrate();
+      this.sous.celebrate();
+      setTimeout(() => this.sous.setExpression('smile'), 1600);
+    } else if (mood >= 0.5) {
       c.setExpression('smile');
       c.poke(0.8);
     } else {
       c.setExpression('frown');
       c.body.kickAll(0, -0.8, 0);
+      this.sousSays(null, 'frown', 1600);
     }
     this.tips += tip;
     this.scores.push(score.total);
@@ -639,6 +657,19 @@ export class Game {
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }
 
+  // The sous chef reacts: a face for a moment, and maybe a line.
+  sousSays(text, face, ms) {
+    const s = this.sous;
+    s.setExpression(face);
+    s.poke(0.7);
+    clearTimeout(this.sousTimer);
+    this.sousTimer = setTimeout(() => s.setExpression('smile'), ms);
+    if (text && (this.station === 'counter' || this.mode !== 'play')) {
+      const head = s.group.position.clone().add(new Vector3(0, s.body.height * LAYOUT.sous.scale + 0.9, 0));
+      this.popupAt(text, head, 'say');
+    }
+  }
+
   popupAt(text, world, kind = 'good') {
     const p = this.screenOf(world);
     this.ui.popup(text, p.x, p.y, kind);
@@ -672,6 +703,8 @@ export class Game {
       this.customer.update(dt);
     }
     if (this.queue) this.queue.update(dt);
+    if (Math.random() < dt * 0.12) this.sous.poke(0.3);
+    this.sous.update(dt);
 
     if (this.mode === 'play') {
       this.ui.ticket(this.order && this.order.taken ? this.order : this.order && this.customer && this.customer.seated ? this.order : null, this.orderIndex + 1, this.order ? this.order.pieces.map((_, i) => i < this.pieces.filter((p) => p.slice).length) : []);
@@ -704,7 +737,7 @@ function quoteFor(score) {
   const p = score.parts;
   if (score.missing) return 'Where is the rest of my order?';
   if (score.results.some((r) => r.wrongFish)) return 'That is not the fish I asked for. Tasty, though.';
-  if (score.total >= 90) return pick(['Perfect. I am wobbling with joy.', 'Best nigiri on the street.', 'I will tell all my jelly friends.']);
+  if (score.total >= 90) return pick(['Perfect. I am wobbling with joy.', 'Best nigiri on the street.', 'I will tell all my friends.']);
   const worst = Object.entries(p).sort((a, b) => a[1] - b[1])[0][0];
   const lines = {
     rice: ['The rice was a little loose.', 'Rice felt a bit squashed.'],

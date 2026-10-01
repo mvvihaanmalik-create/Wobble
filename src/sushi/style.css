@@ -492,6 +492,27 @@ body {
 .popup.bad {
   color: #ff8f78;
 }
+/* A spoken line: a small paper speech bubble. */
+.popup.say {
+  font: italic 22px/1 var(--serif);
+  color: #2a1d16;
+  background: #fbf6ec;
+  padding: 9px 14px 10px;
+  border-radius: 16px;
+  text-shadow: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.popup.say::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+}
 @keyframes float-up {
   0% {
     opacity: 0;

@@ -14,6 +14,7 @@ import { FISH, KNIFE, LAYOUT, RICE } from './config.js';
 import { BLOCKS, FishBlock, FishSlice, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
 import { cutScore, scoopScore } from './orders.js';
+import { Paw } from './critters.js';
 
 const v3 = () => new Vector3();
 
@@ -94,6 +95,47 @@ export class RiceStation extends Station {
     this.g.stage.goTo('rice');
   }
 
+  // The chef's paw hovers over the work and does the pressing.
+  updatePaw(dt) {
+    const g = this.g;
+    if (!this.paw) {
+      this.paw = new Paw();
+      this.paw.group.scale.setScalar(1.1);
+      this.paw.group.rotation.y = 0.55;
+      this.paw.group.position.set(LAYOUT.mat.x + 1, 3, LAYOUT.mat.z + 2);
+      g.stage.scene.add(this.paw.group);
+    }
+    const p = this.paw.group;
+    const show = g.station === 'rice' && (this.rice || this.ball);
+    p.visible = !!show || p.position.y < 5.5;
+    let tx = LAYOUT.mat.x + 1.6;
+    let ty = 6.5;
+    let tz = LAYOUT.mat.z + 2.4;
+    let rate = 8;
+    if (show && this.ball) {
+      // Cup the scoop from the side so it stays in view.
+      tx = this.ball.position.x + 0.55 * this.ball.scale.x + 0.8;
+      ty = this.ball.position.y - 0.1;
+      tz = this.ball.position.z + 0.1;
+    } else if (show && this.rice && this.state !== 'flying') {
+      const top = this.rice.group.position.y + this.rice.body.height;
+      tx = LAYOUT.mat.x;
+      tz = LAYOUT.mat.z + 0.05;
+      const t = performance.now() / 1000;
+      if (this.state === 'pressing') {
+        ty = top + 0.2 - this.value * 0.45;
+        rate = 18;
+      } else ty = top + 0.9 + Math.sin(t * 3) * 0.06;
+    }
+    const k = 1 - Math.exp(-dt * rate);
+    p.position.x += (tx - p.position.x) * k;
+    p.position.y += (ty - p.position.y) * k;
+    p.position.z += (tz - p.position.z) * k;
+    // Squash the paw a little as it pushes.
+    const sq = this.state === 'pressing' ? this.value * 0.12 : 0;
+    p.scale.set(1.1 * (1 + sq * 0.5), 1.1 * (1 - sq), 1.1 * (1 + sq * 0.5));
+  }
+
   exit() {
     this.g.ui.meter(null);
     this.g.ui.holdRing(null);
@@ -113,6 +155,7 @@ export class RiceStation extends Station {
   update(dt) {
     const g = this.g;
     if (this.rice) this.rice.update(dt);
+    this.updatePaw(dt);
     if (this.ball) {
       const s = 0.25 + this.value * 0.75;
       this.ball.scale.setScalar(s);
