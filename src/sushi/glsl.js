@@ -103,32 +103,45 @@ export const RECIPES = {
   // Salmon: orange flesh with pale fat lines (myosepta) that bend into
   // chevrons across the width, finer lines between, and fibers along them.
   salmon: /* glsl */ `
+  // Salmon: segments of orange muscle split by soft, pale fat seams
+  // (myosepta). Seams bend into shallow chevrons across the width, vary in
+  // width and fade in and out. Muscle between them shows fine striation.
   void food(vec3 p, out vec3 col, out float h, out float r) {
-    float warp = fbm(p * vec3(0.9, 1.4, 1.1)) * 0.32 + 0.05 * sin(p.y * 6.0);
-    float u = (p.x * 0.78 + p.y * 0.62 + abs(p.z - 0.15) * 0.42 + warp) * 2.6;
-    float w = 0.05 + 0.035 * snoise(p * 2.3);
-    float fat = lines(u, w);
-    float fine = lines(u * 2.0 + 0.5, 0.025) * 0.45;
-    float fiber = snoise(vec3(u * 9.0, p.y * 34.0, p.z * 30.0));
-    float tone = fbm(p * 1.7) * 0.5 + 0.5;
-    vec3 flesh = mix(uA, uB, clamp(tone * 0.8 + p.y * 0.12, 0.0, 1.0));
-    flesh *= 0.94 + 0.06 * fiber;
-    col = mix(flesh, uC, clamp(fat * 0.92 + fine, 0.0, 1.0));
-    h = fat * 0.8 + fine * 0.4 + fiber * 0.06;
-    r = mix(1.0, 0.62, fat);
+    float warp = fbm(p * vec3(0.32, 0.5, 0.45)) * 0.32 + 0.025 * sin(p.y * 3.0 + p.z * 1.7);
+    float u = (p.x * 0.8 + p.y * 0.6 + abs(p.z - 0.12) * 0.42 + warp) * 2.7;
+    float cell = floor(u);
+    float d = abs(fract(u + 0.5) - 0.5);
+    float jitter = fract(sin(cell * 91.7) * 4375.85);
+    float width = 0.035 + 0.035 * (0.5 + 0.5 * snoise(vec3(p.x * 0.8, p.y * 1.2, cell))) + jitter * 0.02;
+    float seam = 1.0 - smoothstep(width * 0.3, width, d);
+    seam *= 0.6 + 0.4 * smoothstep(-0.4, 0.4, snoise(p * 0.9 + cell));
+    // Faint secondary seams inside the segments.
+    float thin = lines(u * 2.0 + 0.5 + fbm(p * 1.5) * 0.25, 0.018) * 0.14 * smoothstep(0.0, 0.6, snoise(p * 1.4 + 5.0));
+    float fiber = snoise(vec3(u * 14.0, p.y * 46.0, p.z * 46.0));
+    float tone = fbm(p * 1.3) * 0.5 + 0.5;
+    // Muscle is darker in the middle of a segment, lighter toward the seams.
+    vec3 flesh = mix(uA, uB, clamp(tone * 0.55 + d * 0.9, 0.0, 1.0));
+    flesh *= 0.95 + 0.05 * fiber;
+    col = mix(flesh, uC, clamp(seam * 0.85 + thin, 0.0, 1.0));
+    h = seam * 0.55 + thin * 0.3 + fiber * 0.05;
+    r = mix(1.0, 0.7, seam);
   }`,
-  // Tuna (akami): deep red, darker blood-line tones, sparse pale sinew.
+  // Tuna (akami): deep garnet with faint pale connective lines and darker
+  // patches toward the blood line.
   tuna: /* glsl */ `
   void food(vec3 p, out vec3 col, out float h, out float r) {
-    float tone = fbm(p * 1.4) * 0.5 + 0.5;
-    float u = (p.x * 0.7 + p.y * 0.7 + abs(p.z) * 0.3 + fbm(p * 1.2) * 0.4) * 1.6;
-    float sinew = lines(u, 0.02) * smoothstep(0.1, 0.5, snoise(p * 0.9 + 4.0));
-    float fiber = snoise(vec3(u * 10.0, p.y * 30.0, p.z * 30.0));
+    float tone = fbm(p * 1.1) * 0.5 + 0.5;
+    float u = (p.x * 0.75 + p.y * 0.65 + abs(p.z) * 0.35 + fbm(p * 0.9) * 0.5) * 2.2;
+    float lineMask = smoothstep(0.0, 0.5, snoise(p * 0.8 + 4.0));
+    float sinew = (1.0 - smoothstep(0.008, 0.025, abs(fract(u + 0.5) - 0.5))) * lineMask;
+    float fiber = snoise(vec3(u * 12.0, p.y * 40.0, p.z * 40.0));
+    float blood = smoothstep(0.2, 0.7, snoise(vec3(p.x * 0.4, p.y * 1.2, p.z * 2.0) + 2.0));
     vec3 flesh = mix(uA, uB, tone);
-    flesh *= 0.93 + 0.07 * fiber;
-    col = mix(flesh, uC, sinew * 0.55);
-    h = sinew * 0.5 + fiber * 0.08;
-    r = 0.85;
+    flesh = mix(flesh, uD, blood * 0.35);
+    flesh *= 0.94 + 0.06 * fiber;
+    col = mix(flesh, uC, sinew * 0.12);
+    h = sinew * 0.15 + fiber * 0.08;
+    r = 0.85 - sinew * 0.1;
   }`,
   // Tamago: folded omelette layers, browned top, tiny air pockets.
   tamago: /* glsl */ `
@@ -148,14 +161,16 @@ export const RECIPES = {
   }`,
   // Rice: packed grains. Worley cells read as grains, shadowed between.
   rice: /* glsl */ `
+  // The packed surface under the loose grains: rounded grain tops with
+  // soft shadow between them.
   void food(vec3 p, out vec3 col, out float h, out float r) {
-    vec3 q = p * vec3(9.0, 11.0, 9.0) + snoise(p * 3.0) * 0.3;
+    vec3 q = p * vec3(10.0, 12.0, 10.0) + snoise(p * 3.0) * 0.35;
     vec2 c = worley(q);
-    float edge = clamp((c.y - c.x) * 2.2, 0.0, 1.0);
-    col = mix(uB, uA, smoothstep(0.0, 0.55, edge));
-    col *= 0.97 + 0.03 * snoise(p * 20.0);
+    float edge = clamp((c.y - c.x) * 2.4, 0.0, 1.0);
+    col = mix(uB, uA, smoothstep(0.0, 0.45, edge));
+    col *= 0.98 + 0.02 * snoise(p * 25.0);
     h = edge;
-    r = mix(1.25, 0.85, edge);
+    r = mix(1.2, 0.8, edge);
   }`,
   // Wasabi: grated, fibrous green paste.
   wasabi: /* glsl */ `
@@ -170,17 +185,64 @@ export const RECIPES = {
   }`,
   // Hinoki and other woods: long grain along x with growth lines.
   wood: /* glsl */ `
+  // uParam: x growth rings per unit, y knife scratches, z plank width (0 = none).
   void food(vec3 p, out vec3 col, out float h, out float r) {
-    float g = p.z * uParam.x + fbm(p * vec3(0.12, 1.5, 1.5)) * 1.6 + snoise(p * vec3(0.05, 0.4, 0.4)) * 2.0;
-    float grain = lines(g, 0.12) * 0.7 + lines(g * 3.0, 0.05) * 0.25;
-    float tone = fbm(p * vec3(0.2, 2.0, 2.0)) * 0.5 + 0.5;
-    col = mix(uA, uB, clamp(grain + tone * 0.35, 0.0, 1.0));
-    float knots = smoothstep(0.62, 0.75, snoise(p * vec3(0.3, 1.0, 0.9) + 9.0));
-    col = mix(col, uC, knots * 0.35);
-    float scratch = uParam.y * lines(snoise(p * vec3(1.6, 0.2, 4.0)) * 8.0, 0.02) * step(0.55, snoise(p * 0.7 + 3.0));
-    col = mix(col, uD, scratch * 0.5);
-    h = grain * 0.4 - scratch * 0.6;
-    r = 1.0 + scratch * 0.3;
+    // Rings: warped bands across the board, long along x.
+    vec3 q = p * vec3(0.07, 1.0, 1.0);
+    float warp = fbm(q * 1.3 + 3.1) * 1.3 + snoise(vec3(p.x * 0.04, p.y, p.z * 0.25)) * 1.8;
+    float rc = (p.z + 0.4 * p.y) * uParam.x + warp;
+    float ring = fract(rc);
+    float late = smoothstep(0.0, 0.06, ring) * (1.0 - smoothstep(0.06, 0.5, ring));
+    float fine = lines(rc * 4.0 + fbm(q * 4.0), 0.06) * 0.35;
+    // Pores and flecks run along the grain.
+    float pores = smoothstep(0.5, 0.8, snoise(vec3(p.x * 1.5, p.y * 38.0, p.z * 38.0)));
+    float fleck = smoothstep(0.7, 0.9, snoise(vec3(p.x * 0.6, p.y * 9.0, p.z * 9.0) + 11.0));
+    float tone = fbm(vec3(p.x * 0.09, p.y * 3.0, p.z * 3.0)) * 0.5 + 0.5;
+    col = mix(uA, uB, tone * 0.7);
+    col = mix(col, uC, clamp(late * 0.55 + fine * 0.25, 0.0, 1.0));
+    col *= 1.0 - pores * 0.14;
+    col = mix(col, uA * 1.06, fleck * 0.25);
+    h = late * 0.35 + fine * 0.15 - pores * 0.45;
+    r = mix(1.0, 0.82, late) + pores * 0.25;
+    // Plank seams.
+    if (uParam.z > 0.0) {
+      float seam = lines(p.z / uParam.z, 0.006 / uParam.z);
+      col *= 1.0 - seam * 0.55;
+      h -= seam * 1.2;
+    }
+    // Knife scratches in a few directions, worn in patches.
+    if (uParam.y > 0.0) {
+      float sc = 0.0;
+      for (int k = 0; k < 3; k++) {
+        float a = float(k) * 2.1 + 0.4;
+        vec2 d = vec2(cos(a), sin(a));
+        float u = dot(p.xz, d) * 16.0 + snoise(vec3(p.xz * 0.7, float(k) * 5.0)) * 2.0;
+        float mask = smoothstep(0.3, 0.65, snoise(vec3(p.xz * 0.55, float(k) * 7.0 + 2.0)));
+        sc += lines(u, 0.018) * mask;
+      }
+      sc = clamp(sc, 0.0, 1.0) * uParam.y;
+      col = mix(col, uD, sc * 0.45);
+      h -= sc * 0.5;
+      r += sc * 0.35;
+      // Damp patches where the board has been wiped.
+      float damp = smoothstep(0.35, 0.7, fbm(vec3(p.xz * 0.35, 4.0)));
+      col *= 1.0 - damp * 0.1;
+      r *= 1.0 - damp * 0.45;
+    }
+  }`,
+  // Glazed stoneware: glaze that pools darker, iron speckles, raw clay foot.
+  // uParam.x: height of the foot (unglazed below it).
+  ceramic: /* glsl */ `
+  void food(vec3 p, out vec3 col, out float h, out float r) {
+    float n = fbm(p * 2.6);
+    float speck = smoothstep(0.74, 0.82, snoise(p * 26.0));
+    float pool = clamp(smoothstep(0.5, 0.05, p.y) * 0.55 + (n * 0.5 + 0.5) * 0.35, 0.0, 1.0);
+    col = mix(uA, uB, pool);
+    col = mix(col, uC, speck * 0.85);
+    float foot = 1.0 - smoothstep(uParam.x - 0.015, uParam.x + 0.015, p.y);
+    col = mix(col, uD * (0.9 + 0.2 * snoise(p * 18.0)), foot);
+    h = speck * 0.25 + n * 0.06 + foot * snoise(p * 40.0) * 0.35;
+    r = mix(1.0, 5.0, foot) + speck * 0.4;
   }`,
   // Indigo noren cloth with a seigaiha (overlapping waves) print and weave.
   noren: /* glsl */ `

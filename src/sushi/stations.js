@@ -13,7 +13,7 @@ import {
 import { FISH, KNIFE, LAYOUT, RICE } from './config.js';
 import { BLOCKS, FishBlock, FishSlice, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
-import { cutScore } from './orders.js';
+import { cutScore, scoopScore } from './orders.js';
 
 const v3 = () => new Vector3();
 
@@ -96,6 +96,7 @@ export class RiceStation extends Station {
 
   exit() {
     this.g.ui.meter(null);
+    this.g.ui.holdRing(null);
     if (this.state === 'scooping') this.cancelScoop();
   }
 
@@ -119,12 +120,18 @@ export class RiceStation extends Station {
     }
     if (this.state === 'scooping') {
       this.value = Math.min(1, this.value + RICE.scoopRate * dt);
-      if (g.station === 'rice') g.ui.meter('Scoop', this.value, RICE.scoopTarget, false, '');
+      if (g.station === 'rice') {
+        g.ui.meter('Scoop', this.value, RICE.scoopTarget, false, '');
+        g.ui.holdRing(g.pointerPos.x, g.pointerPos.y, this.value, RICE.scoopTarget, false);
+      }
       if (this.value >= 1) this.finishScoop();
     } else if (this.state === 'pressing') {
       this.value = Math.min(1, this.value + RICE.pressRate * dt);
       this.rice.body.userMode[1] = this.value * 0.3;
-      if (g.station === 'rice') g.ui.meter('Press', this.value, RICE.pressGood, this.value > RICE.pressOver, this.dots());
+      if (g.station === 'rice') {
+        g.ui.meter('Press', this.value, RICE.pressGood, this.value > RICE.pressOver, this.dots());
+        g.ui.holdRing(g.pointerPos.x, g.pointerPos.y, this.value, RICE.pressGood, this.value > RICE.pressOver);
+      }
       if (this.value >= 1) this.finishPress();
     }
     if (g.station !== 'rice') return;
@@ -163,6 +170,7 @@ export class RiceStation extends Station {
   }
 
   up() {
+    this.g.ui.holdRing(null);
     if (this.state === 'scooping') this.finishScoop();
     else if (this.state === 'pressing') this.finishPress();
   }
@@ -195,6 +203,15 @@ export class RiceStation extends Station {
         rice.body.kickAll(0, 2.5, 0);
         g.sound.squelch(0.6);
         this.state = 'ready';
+        const at = new Vector3(LAYOUT.mat.x, 0.6, LAYOUT.mat.z);
+        g.fx.burst('grain', at, 14, { speed: 2.2, up: 3, life: 0.9 });
+        const sc = scoopScore(scoop);
+        const [lo] = RICE.scoopTarget;
+        if (sc > 0.95) {
+          g.popupAt('Perfect scoop', at.clone().setY(1.6), 'great');
+          g.fx.burst('glint', at.clone().setY(1.2), 14, { speed: 2, up: 3, gravity: 6, life: 0.9 });
+        } else g.popupAt(sc > 0.6 ? 'Good scoop' : scoop < lo ? 'A bit small' : 'Too much', at.clone().setY(1.6), sc > 0.6 ? 'good' : 'bad');
+        g.buzz(10);
       },
     });
     g.ui.meter(null);
@@ -215,7 +232,15 @@ export class RiceStation extends Station {
     this.rice.body.userMode[1] = 0;
     this.rice.press(quality, over);
     g.sound.squelch(0.5 + v * 0.6);
-    if (over > 0.5) g.ui.toast('Squashed it a bit');
+    const at = new Vector3(LAYOUT.mat.x, 1.5, LAYOUT.mat.z);
+    if (over > 0.5) g.popupAt('Too hard', at, 'bad');
+    else if (v < a) g.popupAt('Too soft', at, 'bad');
+    else if (quality > 0.85) {
+      g.popupAt('Perfect', at, 'great');
+      g.fx.burst('glint', at.clone().setY(1), 10, { speed: 2, up: 2.5, gravity: 6, life: 0.8 });
+    } else g.popupAt('Good', at, 'good');
+    g.fx.burst('grain', at.clone().setY(0.5), 5, { speed: 1.6, up: 1.8, life: 0.6 });
+    g.buzz(over > 0.5 ? 30 : 14);
     this.state = 'ready';
     if (this.rice.presses.length >= RICE.presses) this.finishPiece();
   }
@@ -357,6 +382,8 @@ export class KnifeStation extends Station {
     if (!p) return;
     this.stroke = { pts: [p], t0: performance.now() };
     this.knife.visible = true;
+    g.fx.trail.start();
+    g.fx.trail.add(this.worldOf(p));
     this.moveKnife(p, p);
   }
 
@@ -367,6 +394,12 @@ export class KnifeStation extends Station {
     const pts = this.stroke.pts;
     pts.push(p);
     this.moveKnife(pts[0], p);
+    this.g.fx.trail.add(this.worldOf(p));
+  }
+
+  worldOf(p) {
+    const b = this.block(this.kind);
+    return new Vector3(this.origin.x + p.x, this.origin.y + p.y, this.origin.z + b.D / 2 + 0.05);
   }
 
   moveKnife(a, p) {
@@ -381,6 +414,7 @@ export class KnifeStation extends Station {
     if (!this.stroke) return;
     const pts = this.stroke.pts;
     this.stroke = null;
+    this.g.fx.trail.end();
     setTimeout(() => (this.knife.visible = false), 160);
     const g = this.g;
     const b = this.block(this.kind);
@@ -417,6 +451,11 @@ export class KnifeStation extends Station {
     b.wobble(1);
     this.placeGuide();
     g.sound.slice(1);
+    g.slowMo(0.25, 0.28);
+    g.stage.addShake(0.06);
+    g.buzz(22);
+    const top = new Vector3(this.origin.x + xc1, this.origin.y + b.H, this.origin.z + b.D / 2);
+    if (score.total > 0.85) g.fx.burst('glint', top, 16, { speed: 2.4, up: 2.5, gravity: 4, life: 0.9 });
     // Start inside the block, tip over onto the board, then go to the tray.
     slice.group.position.copy(this.origin).add(slice.blockPose.position);
     slice.group.quaternion.copy(slice.blockPose.quaternion);
@@ -432,8 +471,8 @@ export class KnifeStation extends Station {
         g.sound.tap();
         slice.body.kickAll(0, 2, 0);
         slice.body.impulse(0, slice.thickness, 0, 0, -1, 0, 1.2, 0.5);
-        const verdict = score.total > 0.85 ? 'Clean cut' : score.angle < 0.5 ? 'Watch the angle' : score.thickness < 0.5 ? (thickness > BLOCKS[this.kind].thickness ? 'A bit thick' : 'A bit thin') : 'Nice';
-        g.ui.toast(verdict, 1200);
+        const verdict = score.total > 0.85 ? 'Clean cut' : score.angle < 0.5 ? 'Watch the angle' : score.thickness < 0.5 ? (thickness > BLOCKS[this.kind].thickness ? 'A bit thick' : 'A bit thin') : 'Nice cut';
+        g.popupAt(verdict, landing.clone().setY(1.4), score.total > 0.85 ? 'great' : score.total > 0.55 ? 'good' : 'bad');
         setTimeout(() => g.toTray(slice), 450);
       },
     });
@@ -676,6 +715,12 @@ export class BuildStation extends Station {
       done: () => {
         piece.setSlice(slice, dx, 0);
         g.sound.squelch(0.6);
+        g.buzz(14);
+        const at = piece.group.getWorldPosition(new Vector3()).add(new Vector3(0, 1.4, 0));
+        if (Math.abs(dx) < 0.15) {
+          g.popupAt('Neat', at, 'great');
+          g.fx.burst('glint', at.clone().setY(1.1), 10, { speed: 1.8, up: 2.2, gravity: 5, life: 0.8 });
+        } else if (Math.abs(dx) > 0.45) g.popupAt('Off center', at, 'bad');
         this.tool = this.suggestTool();
         g.layoutTray();
       },

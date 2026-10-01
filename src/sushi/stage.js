@@ -1,84 +1,185 @@
 import {
-  ACESFilmicToneMapping,
+  BackSide,
+  BoxGeometry,
   CanvasTexture,
   Color,
   DirectionalLight,
   Fog,
+  HalfFloatType,
   HemisphereLight,
+  Mesh,
+  MeshBasicMaterial,
+  NoToneMapping,
   PCFShadowMap,
   PerspectiveCamera,
+  PlaneGeometry,
   PMREMGenerator,
   PointLight,
   Scene,
+  SphereGeometry,
+  SpotLight,
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import {
+  BloomEffect,
+  BrightnessContrastEffect,
+  DepthOfFieldEffect,
+  EffectComposer,
+  EffectPass,
+  HueSaturationEffect,
+  NoiseEffect,
+  RenderPass,
+  SMAAEffect,
+  ToneMappingEffect,
+  ToneMappingMode,
+  VignetteEffect,
+} from 'postprocessing';
+import { N8AOPostPass } from 'n8ao';
 import { CAMERA, VIEWS } from './config.js';
 
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+// Quality tiers. The game starts on the tier that suits the device and steps
+// down on its own if frames run slow.
+export const TIERS = {
+  high: { pixelRatio: 2, ao: true, aoHalf: false, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.75 },
+  medium: { pixelRatio: 1.5, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6 },
+  low: { pixelRatio: 1.25, ao: false, aoHalf: true, dof: false, bloom: true, smaa: true, shadow: 1024, transmission: 0.5 },
+  minimal: { pixelRatio: 1, ao: false, aoHalf: true, dof: false, bloom: false, smaa: false, shadow: 1024, transmission: 0.5 },
+};
+export const TIER_ORDER = ['high', 'medium', 'low', 'minimal'];
+
 export class Stage {
-  constructor(canvas) {
+  constructor(canvas, tier = 'high') {
     this.canvas = canvas;
-    const r = (this.renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
+    // Antialiasing comes from SMAA in the post chain, so no MSAA here.
+    const r = (this.renderer = new WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' }));
     r.outputColorSpace = SRGBColorSpace;
-    r.toneMapping = ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.05;
+    r.toneMapping = NoToneMapping;
     r.shadowMap.enabled = true;
     r.shadowMap.type = PCFShadowMap;
-    r.transmissionResolutionScale = 0.75;
-    this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-    r.setPixelRatio(this.pixelRatio);
 
     const scene = (this.scene = new Scene());
-    scene.background = new Color('#1b120d');
-    scene.fog = new Fog('#1b120d', 30, 60);
+    scene.background = new Color('#0e0806');
+    scene.fog = new Fog('#0e0806', 34, 70);
 
     const pmrem = new PMREMGenerator(r);
-    const room = new RoomEnvironment();
-    scene.environment = pmrem.fromScene(room, 0.04).texture;
-    scene.environmentIntensity = 0.55;
-    room.dispose();
+    const env = restaurantEnvironment();
+    scene.environment = pmrem.fromScene(env, 0.02).texture;
+    scene.environmentIntensity = 0.75;
     pmrem.dispose();
 
-    // Warm key from above the counter: the one shadow caster.
-    const key = (this.key = new DirectionalLight('#ffe6c4', 2.6));
-    key.position.set(-6, 18, 9);
-    key.target.position.set(0, 0, 0);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    const sc = key.shadow.camera;
-    sc.left = -18;
-    sc.right = 18;
-    sc.top = 12;
-    sc.bottom = -12;
-    sc.near = 2;
-    sc.far = 45;
-    key.shadow.bias = -0.0004;
-    key.shadow.normalBias = 0.02;
-    key.shadow.radius = 4;
-    scene.add(key, key.target);
+    this.buildLights();
 
-    // Cool rim from behind the customers, and the lanterns' warm spill.
-    const rim = new DirectionalLight('#cfe0ff', 0.8);
-    rim.position.set(4, 8, -14);
-    scene.add(rim);
-    scene.add(new HemisphereLight('#fff0dc', '#3a2418', 0.45));
-    this.lanternLights = [new PointLight('#ffb35c', 30, 22, 1.6), new PointLight('#ffb35c', 30, 22, 1.6)];
-    this.lanternLights[0].position.set(-9, 7.2, -10);
-    this.lanternLights[1].position.set(9, 7.2, -10);
-    scene.add(...this.lanternLights);
-
-    this.camera = new PerspectiveCamera(40, 1, 0.1, 120);
+    this.camera = new PerspectiveCamera(40, 1, 0.5, 120);
     this.rig = { from: null, to: VIEWS.title, t: 1, pos: new Vector3(), target: new Vector3(), fov: 40, fitW: 18 };
     this.applyView(VIEWS.title);
+    this.focus = new Vector3();
+    this.pointer = { x: 0, y: 0, sx: 0, sy: 0 };
     this.shake = 0;
     this.time = 0;
     this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     this._v = new Vector3();
     this._w = new Vector3();
+
+    this.buildComposer();
+    this.setTier(tier);
+  }
+
+  buildLights() {
+    const scene = this.scene;
+    // Key: a soft warm overhead light, like a pin spot over the counter.
+    const key = (this.key = new DirectionalLight('#ffe2bd', 1.7));
+    key.position.set(-5, 20, 8);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    const sc = key.shadow.camera;
+    Object.assign(sc, { left: -18, right: 18, top: 12, bottom: -12, near: 4, far: 45 });
+    key.shadow.bias = -0.0003;
+    key.shadow.normalBias = 0.025;
+    key.shadow.radius = 5;
+    scene.add(key, key.target);
+
+    // Pin spots that pool light on each station.
+    this.spots = [];
+    for (const [x, z, power] of [[-8.5, 1.4, 55], [0, 1.4, 45], [9.5, 1.8, 65], [0, -7.4, 90]]) {
+      const s = new SpotLight('#ffd9a8', power, 26, 0.42, 0.75, 1.6);
+      s.position.set(x, 13, z + 2);
+      s.target.position.set(x, 0, z);
+      scene.add(s, s.target);
+      this.spots.push(s);
+    }
+    // Cool rim from behind the guests separates them from the wall.
+    const rim = new DirectionalLight('#bcd2ff', 1.1);
+    rim.position.set(6, 9, -18);
+    scene.add(rim);
+    scene.add(new HemisphereLight('#ffe9cc', '#2a1810', 0.25));
+    this.lanternLights = [new PointLight('#ff9f45', 26, 20, 1.7), new PointLight('#ff9f45', 26, 20, 1.7)];
+    this.lanternLights[0].position.set(-9, 7.2, -10.5);
+    this.lanternLights[1].position.set(9, 7.2, -10.5);
+    scene.add(...this.lanternLights);
+  }
+
+  buildComposer() {
+    const r = this.renderer;
+    this.composer = new EffectComposer(r, { frameBufferType: HalfFloatType });
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+    this.ao = new N8AOPostPass(this.scene, this.camera, 1, 1);
+    Object.assign(this.ao.configuration, {
+      aoRadius: 1.4,
+      distanceFalloff: 0.8,
+      intensity: 1.8,
+      gammaCorrection: false,
+      color: new Color('#1a0d06'),
+      aoSamples: 12,
+      denoiseSamples: 6,
+      denoiseRadius: 10,
+    });
+    this.composer.addPass(this.ao);
+
+    // Food-photography focus: sharp on the station, soft beyond it.
+    this.dof = new DepthOfFieldEffect(this.camera, { focusDistance: 10, focusRange: 4, bokehScale: 3.2, resolutionScale: 0.5 });
+    this.dof.target = this.focus;
+    this.dofPass = new EffectPass(this.camera, this.dof);
+    this.composer.addPass(this.dofPass);
+
+    this.bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: 0.82, luminanceSmoothing: 0.3, intensity: 0.85, radius: 0.72 });
+    const tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
+    const sat = new HueSaturationEffect({ saturation: 0.06 });
+    const contrast = new BrightnessContrastEffect({ contrast: 0.06, brightness: 0 });
+    const vignette = new VignetteEffect({ offset: 0.28, darkness: 0.62 });
+    const grain = new NoiseEffect({ premultiply: true });
+    grain.blendMode.opacity.value = 0.1;
+    this.gradePass = new EffectPass(this.camera, this.bloom, tone, sat, contrast, vignette, grain);
+    this.composer.addPass(this.gradePass);
+
+    this.smaaPass = new EffectPass(this.camera, new SMAAEffect());
+    this.composer.addPass(this.smaaPass);
+  }
+
+  setTier(name) {
+    const t = TIERS[name] || TIERS.medium;
+    this.tierName = name;
+    this.tier = t;
+    this.pixelRatio = Math.min(window.devicePixelRatio || 1, t.pixelRatio);
+    this.renderer.setPixelRatio(this.pixelRatio);
+    this.renderer.transmissionResolutionScale = t.transmission;
+    this.ao.enabled = t.ao;
+    this.ao.configuration.halfRes = t.aoHalf;
+    this.dofPass.enabled = t.dof;
+    this.bloom.blendMode.opacity.value = t.bloom ? 1 : 0;
+    this.smaaPass.enabled = t.smaa;
+    if (this.key.shadow.mapSize.x !== t.shadow) {
+      this.key.shadow.mapSize.set(t.shadow, t.shadow);
+      if (this.key.shadow.map) {
+        this.key.shadow.map.dispose();
+        this.key.shadow.map = null;
+      }
+    }
+    if (this.width) this.resize();
   }
 
   // Narrow portrait screens get their own framing where a view defines one.
@@ -93,6 +194,7 @@ export class Stage {
     r.target.fromArray(view.target);
     r.fov = view.fov;
     r.fitW = view.fitW;
+    r.focus = view.focus || view.target;
   }
 
   // Glide to a station's angle. Returns a promise for when it lands.
@@ -116,17 +218,12 @@ export class Stage {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     this.renderer.setSize(w, h, false);
+    this.composer.setSize(w, h, false);
     const wasPortrait = this.width && this.width / this.height < 0.8;
     this.width = w;
     this.height = h;
     this.camera.aspect = w / h;
     if (this.viewName && wasPortrait !== w / h < 0.8) this.goTo(this.viewName, true);
-  }
-
-  setPixelRatio(pr) {
-    this.pixelRatio = pr;
-    this.renderer.setPixelRatio(pr);
-    this.resize();
   }
 
   addShake(a) {
@@ -153,10 +250,14 @@ export class Stage {
     }
     const cam = this.camera;
     cam.position.copy(r.pos);
-    if (!this.reducedMotion.matches) {
-      const d = CAMERA.drift * r.pos.distanceTo(r.target);
-      cam.position.x += Math.sin(this.time * 0.21) * d;
-      cam.position.y += Math.sin(this.time * 0.17 + 1) * d * 0.5;
+    const still = this.reducedMotion.matches;
+    const p = this.pointer;
+    p.sx += (p.x - p.sx) * (1 - Math.exp(-dt * 3));
+    p.sy += (p.y - p.sy) * (1 - Math.exp(-dt * 3));
+    if (!still) {
+      const d = r.pos.distanceTo(r.target);
+      cam.position.x += Math.sin(this.time * 0.21) * CAMERA.drift * d + p.sx * CAMERA.parallax * d;
+      cam.position.y += Math.sin(this.time * 0.17 + 1) * CAMERA.drift * d * 0.5 - p.sy * CAMERA.parallax * d * 0.5;
     }
     if (this.shake > 0.001) {
       cam.position.x += (Math.random() - 0.5) * this.shake;
@@ -170,14 +271,44 @@ export class Stage {
     const needV = (2 * Math.atan(r.fitW / 2 / dist / cam.aspect) * 180) / Math.PI;
     cam.fov = Math.min(75, Math.max(r.fov, needV));
     cam.updateProjectionMatrix();
+    // Focus follows the station's subject; range scales with distance.
+    const f = r.to && r.to.focus ? this._v.fromArray(r.to.focus) : r.target;
+    this.focus.lerp(f, 1 - Math.exp(-dt * 6));
+    this.dof.cocMaterial.focusRange = Math.max(2.2, dist * 0.32);
+    this.dof.bokehScale = r.to && r.to.bokeh != null ? r.to.bokeh : 3.2;
   }
 
-  render() {
-    this.renderer.render(this.scene, this.camera);
+  render(dt = 1 / 60) {
+    this.composer.render(dt);
   }
 }
 
-// Soft round glow for lanterns and sparkles.
+// A warm restaurant for reflections: dark wood room, a long softbox over the
+// counter, two lanterns and a dim front fill. Values above 1 are HDR.
+function restaurantEnvironment() {
+  const s = new Scene();
+  const hdr = (r, g, b) => new MeshBasicMaterial({ color: new Color(r, g, b), side: BackSide });
+  const room = new Mesh(new BoxGeometry(60, 24, 60), hdr(0.09, 0.055, 0.035));
+  room.position.y = 8;
+  s.add(room);
+  const panel = (w, h, color, pos, rotX = 0, rotY = 0) => {
+    const m = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ color, side: 2 }));
+    m.position.set(...pos);
+    m.rotation.set(rotX, rotY, 0);
+    s.add(m);
+  };
+  panel(26, 5, new Color(4, 3.6, 3.1), [0, 14, 2], Math.PI / 2); // softbox over the counter
+  panel(10, 3, new Color(2.2, 1.9, 1.6), [0, 9, 20], 0, Math.PI); // front fill
+  panel(60, 10, new Color(0.35, 0.22, 0.12), [0, -4, 0], -Math.PI / 2); // warm counter bounce
+  for (const x of [-10, 10]) {
+    const l = new Mesh(new SphereGeometry(1.4, 16, 12), new MeshBasicMaterial({ color: new Color(9, 4.2, 1.4) }));
+    l.position.set(x, 8, -12);
+    s.add(l);
+  }
+  return s;
+}
+
+// Soft round glow, for sparkles.
 export function glowTexture(inner = 'rgba(255,214,150,1)', outer = 'rgba(255,170,80,0)') {
   const c = document.createElement('canvas');
   c.width = c.height = 128;

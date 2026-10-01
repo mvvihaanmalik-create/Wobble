@@ -1,5 +1,7 @@
 import {
   CanvasTexture,
+  Color,
+  MeshStandardMaterial,
   CatmullRomCurve3,
   CircleGeometry,
   Group,
@@ -15,6 +17,7 @@ import {
 } from 'three';
 import { bodyMesh, Squishy, unitSphere } from './meshes.js';
 import { jellyCustomerMaterial } from './materials.js';
+import { mulberry } from './set.js';
 
 const CUSTOMER_SIM = {
   sim: { spring: 110, damping: 2.6, coupling: 2200, pressure: 90, maxDisplacement: 0.4, softLimit: 0.22 },
@@ -44,21 +47,21 @@ const MOUTHS = {
 let shared = null;
 function sharedParts() {
   if (shared) return shared;
-  const eye = new IcosahedronGeometry(0.1, 3);
-  eye.scale(1, 1.2, 0.55);
+  const eye = new IcosahedronGeometry(0.088, 4);
+  eye.scale(1, 1.12, 0.62);
   const tubes = {};
   for (const [k, pts] of Object.entries(MOUTHS)) {
     const curve = new CatmullRomCurve3(pts.map(([x, y]) => new Vector3(x, y, 0)), k === 'open');
-    tubes[k] = new TubeGeometry(curve, 24, 0.022, 6, k === 'open');
+    tubes[k] = new TubeGeometry(curve, 32, 0.011, 6, k === 'open');
   }
   shared = {
     eye,
-    shine: new IcosahedronGeometry(0.028, 1),
-    blush: new CircleGeometry(0.1, 20),
+    shine: new IcosahedronGeometry(0.02, 2),
+    bubble: new IcosahedronGeometry(1, 2),
     tubes,
-    ink: new MeshPhysicalMaterial({ color: '#1a1412', roughness: 0.15, clearcoat: 1 }),
-    white: new MeshBasicMaterial({ color: '#ffffff' }),
-    blushMat: new MeshBasicMaterial({ color: '#ff7f9c', transparent: true, opacity: 0.45, depthWrite: false }),
+    ink: new MeshPhysicalMaterial({ color: '#0d0907', roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.02, specularIntensity: 1 }),
+    white: new MeshBasicMaterial({ color: new Color(6, 6, 6) }),
+    bubbleMat: new MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.05, transmission: 1, thickness: 0.02, ior: 1.1, clearcoat: 1 }),
     heart: new SpriteMaterial({ map: heartTexture(), transparent: true, depthWrite: false }),
   };
   return shared;
@@ -78,12 +81,14 @@ export class Customer {
     }
     const mesh = bodyMesh(pos, base.idx);
     this.squishy = new Squishy(mesh, jellyCustomerMaterial(look.color, look.attenuation), CUSTOMER_SIM);
+    this.squishy.mesh.castShadow = true;
     this.body = this.squishy.body;
     this.group = new Group();
     this.inner = new Group(); // hop offsets live here
     this.inner.add(this.squishy.mesh);
     this.group.add(this.inner);
     this.buildFace();
+    this.buildCore();
     this.expression = 'smile';
     this.setExpression('smile');
     this.hop = null;
@@ -128,14 +133,40 @@ export class Customer {
       const shine = new Mesh(s.shine, s.white);
       shine.position.set(0.03, 0.045, 0.05);
       g.add(e, shine);
-      return add(g, side * spread, eyeY, 0.03);
+      return add(g, side * spread * 0.85, eyeY, 0.022);
     });
-    for (const side of [-1, 1]) {
-      const b = new Mesh(s.blush, s.blushMat);
-      add(b, side * (spread + 0.16), eyeY - 0.17, 0.025);
-    }
     this.mouth = new Mesh(s.tubes.smile, s.ink);
-    add(this.mouth, 0, eyeY - 0.24, 0.03);
+    this.mouth.scale.setScalar(0.75);
+    add(this.mouth, 0, eyeY - 0.2, 0.02);
+  }
+
+  // A softly lit candy core and a few suspended bubbles, seen through the
+  // clear jelly. The core is opaque, so the jelly refracts and tints it.
+  buildCore() {
+    const s = sharedParts();
+    const H = this.body.height;
+    const core = new Mesh(
+      new IcosahedronGeometry(1, 5),
+      new MeshStandardMaterial({ color: new Color(this.look.core), emissive: new Color(this.look.core), emissiveIntensity: 0.18, roughness: 0.7 }),
+    );
+    core.scale.set(this.body.width * 0.26, H * 0.24, this.body.depth * 0.24);
+    core.position.y = H * 0.36;
+    this.core = core;
+    this.coreRest = core.position.y;
+    this.inner.add(core);
+    this.bubbles = [];
+    const rand = mulberry(this.look.name.length * 31 + 7);
+    const { rest, N } = this.body;
+    for (let k = 0; k < 9; k++) {
+      const v = Math.floor(rand() * N);
+      const b = new Mesh(s.bubble, s.bubbleMat);
+      const r = 0.012 + rand() * 0.03;
+      b.scale.setScalar(r);
+      const depth = 0.25 + rand() * 0.45;
+      this.bubbles.push({ mesh: b, v, depth });
+      this.inner.add(b);
+    }
+    void rest;
   }
 
   setExpression(name) {
@@ -199,6 +230,15 @@ export class Customer {
       const n = new Vector3(normal[i3], normal[i3 + 1], normal[i3 + 2]);
       p.obj.position.set(out[i3] + n.x * p.lift, out[i3 + 1] + n.y * p.lift, out[i3 + 2] + n.z * p.lift);
       p.obj.lookAt(p.obj.position.clone().add(n));
+    }
+    // The core rides the squash a little behind the surface.
+    const sq = this.body.mode[1];
+    this.core.position.y = this.coreRest * (1 - sq * 0.8);
+    this.core.position.x = this.body.mode[0] * 0.5;
+    this.core.position.z = this.body.mode[2] * 0.5;
+    for (const bb of this.bubbles) {
+      const i3 = bb.v * 3;
+      bb.mesh.position.set(out[i3] * (1 - bb.depth), out[i3 + 1] * (1 - bb.depth * 0.6) + 0.05, out[i3 + 2] * (1 - bb.depth));
     }
     // Blink.
     this.blinkAt -= dt;

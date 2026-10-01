@@ -252,6 +252,34 @@ export class GameUI {
     );
   }
 
+  // Rating that floats up from a point on screen. kind: great | good | bad.
+  popup(text, x, y, kind = 'good') {
+    const el = document.createElement('div');
+    el.className = `popup ${kind}`;
+    el.textContent = text;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    $('popups').appendChild(el);
+    setTimeout(() => el.remove(), 1300);
+  }
+
+  // Ring under the finger while holding. value and band are 0..1.
+  holdRing(x, y, value, band, over) {
+    const ring = $('holdRing');
+    if (x == null) {
+      ring.hidden = true;
+      return;
+    }
+    ring.hidden = false;
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+    const C = 2 * Math.PI * 40;
+    $('holdProg').style.strokeDasharray = `${C * Math.min(1, value)} ${C}`;
+    $('holdBand').style.strokeDasharray = `0 ${C * band[0]} ${C * (band[1] - band[0])} ${C}`;
+    ring.classList.toggle('over', !!over);
+    ring.classList.toggle('in', value >= band[0] && value <= band[1]);
+  }
+
   toast(text, ms = 1800) {
     const t = $('toast');
     t.textContent = text;

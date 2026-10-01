@@ -11,18 +11,15 @@ import {
   Object3D,
   PlaneGeometry,
   Shape,
-  Sprite,
-  SpriteMaterial,
   TorusGeometry,
   Vector2,
-  AdditiveBlending,
   CapsuleGeometry,
   CircleGeometry,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYOUT } from './config.js';
-import { bakeFoodCoords, foodMaterial, plain } from './materials.js';
-import { glowTexture } from './stage.js';
+import { bakeFoodCoords, foodMaterial, plain, riceGrainGeometry, riceGrainMaterial } from './materials.js';
 
 const rand = mulberry(7);
 
@@ -64,7 +61,7 @@ export class SushiSet {
     top.position.set((c.x0 + c.x1) / 2, -c.thickness / 2, (c.zChef + c.zCustomer) / 2);
     this.group.add(top);
     // Darker apron below the chef's edge, and a step down to the guests.
-    const apron = new Mesh(new BoxGeometry(w, 4, 0.3), plain.dark());
+    const apron = new Mesh(withFood(new BoxGeometry(w, 4, 0.3)), foodMaterial('walnut'));
     apron.position.set(top.position.x, -c.thickness - 2, c.zChef - 0.15);
     const ledge = shadowed(new Mesh(withFood(new BoxGeometry(w, 0.5, 2.2)), foodMaterial('geta')), true, true);
     ledge.position.set(top.position.x, -c.thickness - 0.25, c.zCustomer - 1.1);
@@ -72,27 +69,49 @@ export class SushiSet {
   }
 
   buildBackdrop() {
-    const wall = new Mesh(new PlaneGeometry(80, 40), plain.wall());
-    wall.position.set(0, 6, -17);
+    // Dark back wall faced with vertical walnut slats.
+    const wall = new Mesh(new PlaneGeometry(80, 40), plain.dark());
+    wall.position.set(0, 6, -17.4);
     this.group.add(wall);
+    const slats = [];
+    for (let x = -26; x <= 26; x += 0.62) {
+      const g = new BoxGeometry(0.42, 22, 0.3);
+      g.translate(x, 6, -17);
+      slats.push(g);
+    }
+    const slatGeo = mergeGeometries(slats);
+    // Grain runs up the slats: swap x and y in the pattern coordinates.
+    const sp = slatGeo.attributes.position.array;
+    const sf = new Float32Array(sp.length);
+    for (let i = 0; i < sp.length; i += 3) {
+      sf[i] = sp[i + 1];
+      sf[i + 1] = sp[i + 2];
+      sf[i + 2] = sp[i];
+    }
+    slatGeo.setAttribute('aFood', new BufferAttribute(sf, 3));
+    const slatMesh = new Mesh(slatGeo, foodMaterial('walnut'));
+    slatMesh.receiveShadow = true;
+    this.group.add(slatMesh);
     // Back shelf with sake bottles and cups behind the guests.
     const shelf = shadowed(new Mesh(withFood(new BoxGeometry(30, 0.4, 2.2), 1, [0, 0, 3]), foodMaterial('geta')));
     shelf.position.set(0, 1.9, -15.6);
-    const cabinet = new Mesh(new BoxGeometry(30, 8, 2), plain.plaster());
+    const cabinet = shadowed(new Mesh(withFood(new BoxGeometry(30, 8, 2), 1, [0, 0, 5]), foodMaterial('walnut')), false, true);
     cabinet.position.set(0, -2.3, -15.7);
     this.group.add(shelf, cabinet);
     const bottle = [new Vector2(0, 0), new Vector2(0.55, 0), new Vector2(0.62, 0.15), new Vector2(0.62, 1.5), new Vector2(0.3, 2.1), new Vector2(0.2, 2.7), new Vector2(0.24, 2.8), new Vector2(0, 2.8)];
     const cup = [new Vector2(0, 0), new Vector2(0.28, 0), new Vector2(0.36, 0.1), new Vector2(0.42, 0.5), new Vector2(0.38, 0.5), new Vector2(0.3, 0.14), new Vector2(0, 0.12)];
-    const glazes = ['#2f4d6b', '#e8dfcf', '#7a3b22', '#3d5a3a', '#d9c7a8'];
+    const glazes = ['glazeIndigo', 'glazeShino', 'glazeRust', 'glazeCeladon', 'glazeTenmoku', 'glazeWhite'];
+    const bottleGeo = withFood(new LatheGeometry(bottle, 40));
+    const cupGeo = withFood(new LatheGeometry(cup, 32));
     let gi = 0;
     for (const x of [-12.5, -11, -4.5, 4.8, 11.5, 13]) {
-      const b = shadowed(new Mesh(new LatheGeometry(bottle, 28), plain.glaze(glazes[gi++ % glazes.length])));
+      const b = shadowed(new Mesh(bottleGeo, foodMaterial(glazes[gi++ % glazes.length])));
       b.position.set(x, 2.1, -15.4);
       b.scale.setScalar(x === -11 || x === 13 ? 0.8 : 1);
       this.group.add(b);
     }
     for (const x of [-9.6, -9, -2.6, 2.4, 3.1, 9.8]) {
-      const c = shadowed(new Mesh(new LatheGeometry(cup, 24), plain.glaze(glazes[gi++ % glazes.length])));
+      const c = shadowed(new Mesh(cupGeo, foodMaterial(glazes[gi++ % glazes.length])));
       c.position.set(x, 2.1, -15.1);
       this.group.add(c);
     }
@@ -117,8 +136,7 @@ export class SushiSet {
     rod.position.set(0, 10.9, -16.1);
     this.group.add(rod);
 
-    // Paper lanterns with a soft glow.
-    const glow = new SpriteMaterial({ map: glowTexture(), blending: AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55, toneMapped: false });
+    // Paper lanterns. Their glow comes from bloom in the post chain.
     const profile = [];
     for (let k = 0; k <= 20; k++) {
       const t = k / 20;
@@ -141,9 +159,6 @@ export class SushiSet {
         cap.position.y = y;
         g.add(cap);
       }
-      const halo = new Sprite(glow);
-      halo.scale.setScalar(7);
-      g.add(halo);
       g.position.set(x, 7.4, -12);
       g.userData.phase = x;
       this.group.add(g);
@@ -154,7 +169,7 @@ export class SushiSet {
   buildTub() {
     const t = LAYOUT.tub;
     const g = new Group();
-    const wallGeo = withFood(new CylinderGeometry(t.radius, t.radius * 0.94, t.height, 64, 1, true), 1);
+    const wallGeo = staveCoords(new CylinderGeometry(t.radius, t.radius * 0.94, t.height, 96, 1, true));
     const wall = shadowed(new Mesh(wallGeo, foodMaterial('tub', { side: 2 })));
     wall.position.y = t.height / 2;
     const base = shadowed(new Mesh(withFood(new CylinderGeometry(t.radius * 0.94, t.radius * 0.94, 0.12, 64)), foodMaterial('tub')));
@@ -179,7 +194,7 @@ export class SushiSet {
     const rice = shadowed(new Mesh(surf, foodMaterial('rice')), false, true);
     rice.position.y = t.height - 0.38;
     g.add(rice);
-    g.add(scatterGrains(rice, 520, t.radius * 0.92, (x, z) => 0.25 * (1 - (x * x + z * z) / (t.radius * t.radius))));
+    g.add(scatterGrains(rice, 1800, t.radius * 0.93, (x, z) => 0.25 * (1 - (x * x + z * z) / (t.radius * t.radius))));
     g.position.set(t.x, 0, t.z);
     this.tub = g;
     this.tubRice = rice;
@@ -254,7 +269,7 @@ export class SushiSet {
 
   buildTray() {
     const t = LAYOUT.tray;
-    const plate = shadowed(new Mesh(new RoundedBoxGeometry(3.4, 0.16, 3.2, 3, 0.07), plain.ceramic('#2c3b4f')));
+    const plate = shadowed(new Mesh(withFood(new RoundedBoxGeometry(3.4, 0.16, 3.2, 3, 0.07), 1, [0, 0.1, 0]), foodMaterial('glazeTenmoku')));
     plate.position.set(t.x, 0.08, t.z);
     this.tray = plate;
     this.group.add(plate);
@@ -264,18 +279,23 @@ export class SushiSet {
   // the build view picks that topping.
   buildBowls() {
     const items = [
-      { key: 'wasabi', x: 5.2, color: '#e9e4da' },
-      { key: 'sesame', x: 7.0, color: '#2d2a28' },
-      { key: 'scallion', x: 8.8, color: '#f0ebe0' },
-      { key: 'ikura', x: 10.6, color: '#1f2b3d' },
-      { key: 'sauce', x: 12.4, color: '#b4502e' },
+      { key: 'wasabi', x: 5.2, glaze: 'glazeWhite' },
+      { key: 'sesame', x: 7.0, glaze: 'glazeTenmoku' },
+      { key: 'scallion', x: 8.8, glaze: 'glazeCeladon' },
+      { key: 'ikura', x: 10.6, glaze: 'glazeIndigo' },
+      { key: 'sauce', x: 12.4, glaze: 'glazeShino' },
     ];
     this.bowls = {};
-    const profile = [new Vector2(0, 0), new Vector2(0.45, 0), new Vector2(0.62, 0.12), new Vector2(0.8, 0.5), new Vector2(0.86, 0.62), new Vector2(0.8, 0.62), new Vector2(0.72, 0.5), new Vector2(0.55, 0.16), new Vector2(0, 0.14)];
-    const lathe = new LatheGeometry(profile, 40);
+    // Thrown-bowl profile: a foot ring, a gentle belly, a thin rim.
+    const profile = [
+      new Vector2(0, 0.03), new Vector2(0.34, 0.03), new Vector2(0.36, 0), new Vector2(0.42, 0), new Vector2(0.43, 0.05),
+      new Vector2(0.62, 0.16), new Vector2(0.78, 0.38), new Vector2(0.86, 0.6), new Vector2(0.875, 0.64), new Vector2(0.85, 0.645),
+      new Vector2(0.83, 0.6), new Vector2(0.75, 0.4), new Vector2(0.6, 0.22), new Vector2(0.35, 0.12), new Vector2(0, 0.1),
+    ];
+    const lathe = withFood(new LatheGeometry(profile, 56));
     for (const it of items) {
       const g = new Group();
-      g.add(shadowed(new Mesh(lathe, plain.ceramic(it.color))));
+      g.add(shadowed(new Mesh(lathe, foodMaterial(it.glaze))));
       g.add(bowlFill(it.key));
       g.position.set(it.x, 0, 3.75);
       g.userData.topping = it.key;
@@ -307,37 +327,37 @@ function bowlFill(key) {
     const geo = withFood(new IcosahedronGeometry(0.42, 5), 2);
     geo.scale(1, 0.55, 1);
     const m = shadowed(new Mesh(geo, foodMaterial('wasabi')));
-    m.position.y = 0.32;
+    m.position.y = 0.2;
     g.add(m);
   } else if (key === 'ikura') {
-    const roe = new InstancedMesh(new IcosahedronGeometry(0.11, 3), plain.ikura(), 18);
+    const roe = new InstancedMesh(new IcosahedronGeometry(0.11, 3), plain.ikura(), 44);
     const o = new Object3D();
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 44; i++) {
       const a = rand() * Math.PI * 2;
-      const r = Math.sqrt(rand()) * 0.5;
-      o.position.set(Math.cos(a) * r, 0.36 + rand() * 0.12, Math.sin(a) * r);
+      const r = Math.sqrt(rand()) * 0.55;
+      o.position.set(Math.cos(a) * r, 0.2 + (1 - r / 0.55) * 0.14 + rand() * 0.06, Math.sin(a) * r);
       o.updateMatrix();
       roe.setMatrixAt(i, o.matrix);
     }
     g.add(roe);
   } else if (key === 'sesame') {
-    g.add(seedPile(plain.sesame(), 220, 0.58, 0.34));
+    g.add(seedPile(plain.sesame(), 700, 0.6, 0.2));
   } else if (key === 'scallion') {
-    const rings = new InstancedMesh(new TorusGeometry(0.075, 0.032, 6, 16), plain.scallion(), 40);
+    const rings = new InstancedMesh(new TorusGeometry(0.062, 0.017, 8, 22), plain.scallion(), 90);
     const o = new Object3D();
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 90; i++) {
       const a = rand() * Math.PI * 2;
-      const r = Math.sqrt(rand()) * 0.55;
-      o.position.set(Math.cos(a) * r, 0.34 + rand() * 0.1, Math.sin(a) * r);
+      const r = Math.sqrt(rand()) * 0.6;
+      o.position.set(Math.cos(a) * r, 0.2 + (1 - r / 0.6) * 0.1 + rand() * 0.08, Math.sin(a) * r);
       o.rotation.set(rand() * 3, rand() * 3, rand() * 3);
       o.updateMatrix();
       rings.setMatrixAt(i, o.matrix);
     }
     g.add(rings);
   } else if (key === 'sauce') {
-    const s = new Mesh(new CircleGeometry(0.66, 32), plain.sauce());
+    const s = new Mesh(new CircleGeometry(0.72, 40), plain.sauce());
     s.rotation.x = -Math.PI / 2;
-    s.position.y = 0.42;
+    s.position.y = 0.36;
     const brush = new Group();
     const handle = shadowed(new Mesh(new CylinderGeometry(0.05, 0.05, 2.2, 8), plain.handle()));
     handle.position.y = 1.1;
@@ -345,15 +365,31 @@ function bowlFill(key) {
     tip.position.y = 0.1;
     brush.add(handle, tip);
     brush.rotation.z = -0.5;
-    brush.position.set(0.2, 0.4, 0);
+    brush.position.set(0.2, 0.3, 0);
     g.add(s, brush);
   }
   return g;
 }
 
+// Pattern coordinates for barrel staves: grain runs up each stave and the
+// plank seams fall every stave width around the circumference.
+function staveCoords(geo) {
+  const p = geo.attributes.position.array;
+  const out = new Float32Array(p.length);
+  for (let i = 0; i < p.length; i += 3) {
+    const a = Math.atan2(p[i + 2], p[i]);
+    const r = Math.hypot(p[i], p[i + 2]);
+    out[i] = p[i + 1] * 3;
+    out[i + 1] = r;
+    out[i + 2] = a * 2.7;
+  }
+  geo.setAttribute('aFood', new BufferAttribute(out, 3));
+  return geo;
+}
+
 function seedPile(mat, n, radius, y) {
-  const geo = new IcosahedronGeometry(0.03, 1);
-  geo.scale(1, 0.5, 1.7);
+  const geo = new IcosahedronGeometry(0.022, 1);
+  geo.scale(1, 0.45, 1.75);
   const inst = new InstancedMesh(geo, mat, n);
   const o = new Object3D();
   for (let i = 0; i < n; i++) {
@@ -369,9 +405,8 @@ function seedPile(mat, n, radius, y) {
 
 // Loose grains lying on a surface, for the rice tub.
 function scatterGrains(surfaceMesh, n, radius, heightAt) {
-  const geo = new CapsuleGeometry(0.035, 0.085, 2, 6);
-  const mat = foodMaterial('rice');
-  withFood(geo, 3);
+  const geo = riceGrainGeometry(CapsuleGeometry);
+  const mat = riceGrainMaterial();
   const inst = new InstancedMesh(geo, mat, n);
   const o = new Object3D();
   for (let i = 0; i < n; i++) {
@@ -379,7 +414,7 @@ function scatterGrains(surfaceMesh, n, radius, heightAt) {
     const r = Math.sqrt(rand()) * radius;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    o.position.set(x, surfaceMesh.position.y + heightAt(x, z) + 0.03, z);
+    o.position.set(x, surfaceMesh.position.y + heightAt(x, z) + 0.02 + rand() * 0.03, z);
     o.rotation.set(Math.PI / 2 + (rand() - 0.5) * 0.5, rand() * 6.28, (rand() - 0.5) * 0.5);
     o.updateMatrix();
     inst.setMatrixAt(i, o.matrix);

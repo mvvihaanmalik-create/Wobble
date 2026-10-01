@@ -44,10 +44,10 @@
       <div class="actions" id="actions"></div>
 
       <nav class="stations" id="stations" aria-label="Stations">
-        <button type="button" data-station="counter"><span class="num mono">01</span>Counter<i class="dot"></i></button>
-        <button type="button" data-station="rice"><span class="num mono">02</span>Rice<i class="dot"></i></button>
-        <button type="button" data-station="knife"><span class="num mono">03</span>Knife<i class="dot"></i></button>
-        <button type="button" data-station="build"><span class="num mono">04</span>Build<i class="dot"></i></button>
+        <button type="button" data-station="counter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M5 5v9M9.7 5v11M14.3 5v11M19 5v9"/><path d="M3 20h18"/></svg><span class="label">Counter</span><span class="key mono">1</span><i class="dot"></i></button>
+        <button type="button" data-station="rice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12h17a8.5 8.5 0 0 1-17 0Z"/><path d="M8 20.5h8"/><path d="M9 8c0-1.5 1.2-1.5 1.2-3M13.5 8c0-1.5 1.2-1.5 1.2-3"/></svg><span class="label">Rice</span><span class="key mono">2</span><i class="dot"></i></button>
+        <button type="button" data-station="knife"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5 15.5 3c2 2.5 2.5 6 1 8.5L6 19"/><path d="M6 19l-2.6 2.6"/></svg><span class="label">Knife</span><span class="key mono">3</span><i class="dot"></i></button>
+        <button type="button" data-station="build"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="15" width="19" height="4" rx="1"/><path d="M6 15c0-3 2.5-5 6-5s6 2 6 5"/><path d="M7.5 11.5c2-1.6 7-1.6 9 0"/></svg><span class="label">Build</span><span class="key mono">4</span><i class="dot"></i></button>
       </nav>
     </div>
 
@@ -83,6 +83,14 @@
 
     <div class="rec-frame" id="recFrame" hidden><span class="mono" id="recCount">6</span></div>
     <div class="toast mono" id="toast" role="status" hidden></div>
+    <div class="popups" id="popups" aria-live="polite"></div>
+    <div class="hold-ring" id="holdRing" hidden>
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="40" class="track" />
+        <circle cx="50" cy="50" r="40" class="band" id="holdBand" />
+        <circle cx="50" cy="50" r="40" class="prog" id="holdProg" />
+      </svg>
+    </div>
 
     <script type="module" src="/src/sushi/main.js"></script>
   </body>

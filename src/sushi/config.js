@@ -23,16 +23,18 @@ export const LAYOUT = {
 
 // Camera angle for each station. fitW is the world width that must stay in
 // view at the target, so portrait phones widen the lens instead of cropping.
+// focus: the point kept sharp by depth of field. bokeh: how soft the rest goes.
 export const VIEWS = {
-  title: { pos: [0, 7.6, 15], target: [0, 3.2, -6], fov: 40, fitW: 18, portrait: { pos: [0, 4.2, 12], target: [0, -2.6, -6.5], fov: 40, fitW: 9.5 } },
-  counter: { pos: [0, 8.4, 13.5], target: [0, 2.6, -6], fov: 40, fitW: 17, portrait: { pos: [0, 7.4, 12], target: [0, 1.2, -5], fov: 40, fitW: 10 } },
-  rice: { pos: [-7.6, 11.5, 7.2], target: [-7.6, 0.2, 1.3], fov: 36, fitW: 11, portrait: { pos: [-8, 13.5, 9.2], target: [-8, 0.2, 3.1], fov: 36, fitW: 9.5 } },
-  knife: { pos: [-0.2, 2.9, 10.5], target: [-0.2, 0.85, 1.3], fov: 30, fitW: 10.5, portrait: { pos: [2.2, 3.4, 9.5], target: [2.2, 0.4, 1.3], fov: 30, fitW: 6 } },
-  build: { pos: [8.7, 7.6, 10.2], target: [8.7, 0.3, 2.9], fov: 36, fitW: 11, portrait: { pos: [9.4, 11, 10.2], target: [9.4, 0.3, 3.6], fov: 36, fitW: 8.6 } },
+  title: { pos: [0, 7.6, 15], target: [0, 3.2, -6], focus: [0, 2.2, -7.4], bokeh: 4.5, fov: 40, fitW: 18, portrait: { pos: [0, 4.2, 12], target: [0, -2.6, -6.5], focus: [0, 1.6, -7.4], bokeh: 4.5, fov: 40, fitW: 9.5 } },
+  counter: { pos: [0, 8.4, 13.5], target: [0, 2.6, -6], focus: [0, 2, -7.4], bokeh: 3.2, fov: 40, fitW: 17, portrait: { pos: [0, 7.4, 12], target: [0, 1.2, -5], focus: [0, 1.8, -7.4], bokeh: 3.2, fov: 40, fitW: 10 } },
+  rice: { pos: [-7.6, 11.5, 7.2], target: [-7.6, 0.2, 1.3], focus: [-7.2, 0.6, 1.5], bokeh: 2.2, fov: 36, fitW: 11, portrait: { pos: [-8, 13.5, 9.2], target: [-8, 0.2, 3.1], focus: [-7.4, 0.6, 1.6], bokeh: 2.2, fov: 36, fitW: 9.5 } },
+  knife: { pos: [-0.2, 2.9, 10.5], target: [-0.2, 0.85, 1.3], focus: [1.8, 1.1, 1.9], bokeh: 4.2, fov: 30, fitW: 10.5, portrait: { pos: [2.2, 3.4, 9.5], target: [2.2, 0.4, 1.3], focus: [2.4, 1.1, 1.9], bokeh: 4.2, fov: 30, fitW: 6 } },
+  build: { pos: [8.7, 7.6, 10.2], target: [8.7, 0.3, 2.9], focus: [10.2, 0.8, 1.6], bokeh: 3, fov: 36, fitW: 11, portrait: { pos: [9.4, 11, 10.2], target: [9.4, 0.3, 3.6], focus: [10.4, 0.8, 1.6], bokeh: 3, fov: 36, fitW: 8.6 } },
 };
 export const CAMERA = {
   moveSeconds: 0.75, // station to station camera move
-  drift: 0.012, // idle camera sway, radians
+  drift: 0.01, // idle camera sway, as a fraction of the camera's distance
+  parallax: 0.014, // how much the camera leans toward the pointer
 };
 
 // Rice station.
@@ -89,12 +91,13 @@ export const SCORE = {
 };
 
 export const CUSTOMER_LOOKS = [
-  { name: 'Mochi', shape: 'mochi', color: '#ffe3ef', attenuation: '#ff9cc0' },
-  { name: 'Yuzu', shape: 'drop', color: '#fff2b3', attenuation: '#ffc93c' },
-  { name: 'Matcha', shape: 'bean', color: '#e6f7c4', attenuation: '#8cc63a' },
-  { name: 'Ume', shape: 'mochi', color: '#ffd0c4', attenuation: '#ff6f61' },
-  { name: 'Ramune', shape: 'drop', color: '#d9f3ff', attenuation: '#4fb6f0' },
-  { name: 'Kinako', shape: 'bean', color: '#f6e2c4', attenuation: '#d9a05b' },
+  // color tints the surface, attenuation colors the depth, core glows inside.
+  { name: 'Mochi', shape: 'mochi', color: '#fff2f6', attenuation: '#ffb3cc', core: '#ffc2d6' },
+  { name: 'Yuzu', shape: 'drop', color: '#fffbea', attenuation: '#ffd877', core: '#ffe08a' },
+  { name: 'Matcha', shape: 'bean', color: '#f6fff0', attenuation: '#b6df85', core: '#c6e89a' },
+  { name: 'Ume', shape: 'mochi', color: '#fff4f0', attenuation: '#ffa48c', core: '#ffb39e' },
+  { name: 'Ramune', shape: 'drop', color: '#f2fbff', attenuation: '#97d4f7', core: '#a8dcff' },
+  { name: 'Kinako', shape: 'bean', color: '#fffaf2', attenuation: '#ecc796', core: '#f2d3a6' },
 ];
 
 export const PERF = {

@@ -4,14 +4,15 @@ import { NOISE, RECIPES } from './glsl.js';
 // Palettes (sRGB hex) and surface settings for each recipe in glsl.js.
 const KINDS = {
   salmon: {
-    colors: ['#e3502a', '#ff9460', '#fff0e6'],
-    bump: 0.55,
-    physical: { roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.25, sheen: 0.4, sheenColor: '#ffb090', sheenRoughness: 0.45 },
+    colors: ['#ea5c2c', '#fb8d52', '#ffd6bf'],
+    bump: 0.45,
+    // A little transmission so thin edges glow, the way raw fish does.
+    physical: { roughness: 0.34, clearcoat: 0.7, clearcoatRoughness: 0.18, sheen: 0.35, sheenColor: '#ffb48f', sheenRoughness: 0.4, transmission: 0.16, thickness: 0.35, attenuationColor: '#ff5a1e', attenuationDistance: 0.5, ior: 1.36 },
   },
   tuna: {
-    colors: ['#8e0b22', '#c21e36', '#f3c0c0'],
-    bump: 0.45,
-    physical: { roughness: 0.34, clearcoat: 0.65, clearcoatRoughness: 0.2, iridescence: 0.22, iridescenceIOR: 1.3, sheen: 0.25, sheenColor: '#ff6a7a' },
+    colors: ['#6e0919', '#951628', '#d98a92', '#3e0510'],
+    bump: 0.4,
+    physical: { roughness: 0.38, clearcoat: 0.6, clearcoatRoughness: 0.22, iridescence: 0.35, iridescenceIOR: 1.3, iridescenceThicknessRange: [200, 500], sheen: 0.2, sheenColor: '#ff4a5a', transmission: 0.1, thickness: 0.35, attenuationColor: '#b0101e', attenuationDistance: 0.4, ior: 1.36 },
   },
   tamago: {
     colors: ['#f9d257', '#f0b52e', '#c98a22', '#8d4f18'],
@@ -20,7 +21,7 @@ const KINDS = {
     physical: { roughness: 0.62, clearcoat: 0.15, sheen: 0.3, sheenColor: '#ffe08a' },
   },
   rice: {
-    colors: ['#fcfaf3', '#d6cdb9'],
+    colors: ['#fffcf5', '#e6dece'],
     bump: 0.9,
     physical: { roughness: 0.48, clearcoat: 0.25, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: '#ffffff', sheenRoughness: 0.6 },
   },
@@ -31,32 +32,46 @@ const KINDS = {
   },
   hinoki: {
     recipe: 'wood',
-    colors: ['#e2c18e', '#c99e66', '#a0733f', '#b8996c'],
-    param: [4.5, 0, 0, 0], // x: grain lines per unit across, y: knife scratches
-    bump: 0.25,
-    physical: { roughness: 0.58, clearcoat: 0.25, clearcoatRoughness: 0.5 },
+    colors: ['#ecd4a8', '#dcbd8c', '#b88c56', '#b8996c'],
+    param: [3.4, 0, 4.05, 0], // x: rings per unit, y: knife scratches, z: plank width
+    bump: 0.3,
+    physical: { roughness: 0.6, clearcoat: 0.12, clearcoatRoughness: 0.45, sheen: 0.15, sheenColor: '#fff0d0' },
   },
   board: {
     recipe: 'wood',
-    colors: ['#efe2c6', '#dfcca6', '#c4a676', '#a8926f'],
-    param: [3.2, 1, 0, 0],
-    bump: 0.3,
-    physical: { roughness: 0.66 },
+    colors: ['#e2d0ad', '#d2bc93', '#b89a6a', '#9c8562'],
+    param: [2.6, 1, 0, 0],
+    bump: 0.35,
+    physical: { roughness: 0.62 },
   },
   geta: {
     recipe: 'wood',
-    colors: ['#a8744a', '#7c4e2c', '#5a3519', '#6b4428'],
-    param: [5.5, 0, 0, 0],
+    colors: ['#9a6640', '#74452a', '#4b2a16', '#6b4428'],
+    param: [4.2, 0, 0, 0],
     bump: 0.3,
-    physical: { roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.35 },
+    physical: { roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.25 },
   },
   tub: {
     recipe: 'wood',
-    colors: ['#e2c79a', '#c8a571', '#a37a45', '#b89a70'],
-    param: [7.0, 0, 0, 0],
+    colors: ['#e6cc9e', '#cfac78', '#a77d48', '#b89a70'],
+    param: [6.0, 0, 0.62, 0],
     bump: 0.3,
-    physical: { roughness: 0.6, clearcoat: 0.2 },
+    physical: { roughness: 0.55, clearcoat: 0.2 },
   },
+  walnut: {
+    recipe: 'wood',
+    colors: ['#4a2d1c', '#3a2215', '#24130a', '#3a2215'],
+    param: [3.0, 0, 0, 0],
+    bump: 0.3,
+    physical: { roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.4 },
+  },
+  // Glazes: [glaze, pooled glaze, speckle, raw clay foot]. param.x = foot height.
+  glazeWhite: { recipe: 'ceramic', colors: ['#f1ece2', '#d9d0bf', '#5a4636', '#b98f66'], param: [0.05, 0, 0, 0], bump: 0.25, physical: { roughness: 0.16, clearcoat: 0.9, clearcoatRoughness: 0.08 } },
+  glazeIndigo: { recipe: 'ceramic', colors: ['#2e4467', '#172238', '#c9b48a', '#a5794f'], param: [0.05, 0, 0, 0], bump: 0.25, physical: { roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.06 } },
+  glazeCeladon: { recipe: 'ceramic', colors: ['#b9cbb2', '#8aa48a', '#4b5a44', '#b48a60'], param: [0.05, 0, 0, 0], bump: 0.25, physical: { roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 } },
+  glazeTenmoku: { recipe: 'ceramic', colors: ['#3a2418', '#170d08', '#b5703b', '#9b6b45'], param: [0.05, 0, 0, 0], bump: 0.25, physical: { roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.04 } },
+  glazeShino: { recipe: 'ceramic', colors: ['#efe3d2', '#e2b99a', '#c0704a', '#c58e62'], param: [0.05, 0, 0, 0], bump: 0.3, physical: { roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2 } },
+  glazeRust: { recipe: 'ceramic', colors: ['#9b4a2a', '#5e2a16', '#e0b27a', '#a5794f'], param: [0.05, 0, 0, 0], bump: 0.25, physical: { roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08 } },
   noren: {
     colors: ['#1c2850', '#efe6d2'],
     bump: 0.15,
@@ -147,41 +162,70 @@ export const plain = {
   wall: () => new MeshStandardMaterial({ color: '#3a2a20', roughness: 0.95 }),
   plaster: () => new MeshStandardMaterial({ color: '#c9b08c', roughness: 0.95 }),
   dark: () => new MeshStandardMaterial({ color: '#1e1612', roughness: 0.85 }),
-  lantern: () => new MeshStandardMaterial({ color: '#fff1d6', emissive: new Color('#ffb05a'), emissiveIntensity: 1.6, roughness: 0.9, side: DoubleSide }),
+  lantern: () => new MeshStandardMaterial({ color: '#fff1d6', emissive: new Color('#ffb466'), emissiveIntensity: 3.2, roughness: 0.9, side: DoubleSide }),
   ikura: () =>
     new MeshPhysicalMaterial({
-      color: '#ffc28a',
+      emissive: new Color('#ff6a12'),
+      emissiveIntensity: 0.3, // stands in for light scattering inside the egg
+      color: '#ffcf96',
       transmission: 1,
       thickness: 0.25,
       ior: 1.36,
       roughness: 0.04,
       clearcoat: 1,
-      attenuationColor: new Color('#ff5200'),
-      attenuationDistance: 0.18,
+      attenuationColor: new Color('#ff7a10'),
+      attenuationDistance: 0.32,
       specularIntensity: 1,
     }),
   yolk: () => new MeshStandardMaterial({ color: '#ff6a1a', emissive: new Color('#ff3c00'), emissiveIntensity: 0.25, roughness: 0.4 }),
-  sesame: () => new MeshPhysicalMaterial({ color: '#ead6a6', roughness: 0.45, clearcoat: 0.4, sheen: 0.5, sheenColor: new Color('#fff6dd') }),
-  scallion: () => new MeshPhysicalMaterial({ color: '#7cc34a', roughness: 0.3, clearcoat: 0.6, transmission: 0.25, thickness: 0.05, sheen: 0.4, sheenColor: new Color('#d8ffb0') }),
+  sesame: () => new MeshPhysicalMaterial({ color: '#efdcb0', roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.3, sheen: 0.6, sheenColor: new Color('#fff3d6') }),
+  scallion: () => new MeshPhysicalMaterial({ color: '#86c94e', roughness: 0.28, clearcoat: 0.8, clearcoatRoughness: 0.12, transmission: 0.35, thickness: 0.04, attenuationColor: new Color('#4f9a20'), attenuationDistance: 0.1, sheen: 0.4, sheenColor: new Color('#e2ffc0') }),
   sauce: () => new MeshPhysicalMaterial({ color: '#3a170a', roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, specularIntensity: 1 }),
   ginger: () => new MeshPhysicalMaterial({ color: '#ffc7c4', roughness: 0.3, transmission: 0.5, thickness: 0.05, clearcoat: 0.6, side: DoubleSide }),
   shiso: () => new MeshPhysicalMaterial({ color: '#2f8a3a', roughness: 0.4, clearcoat: 0.5, side: DoubleSide, sheen: 0.4, sheenColor: new Color('#9bd17a') }),
   glow: (texture) => new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: 2, toneMapped: false }),
 };
 
+// Cooked rice grain: glossy, slightly translucent, faintly warm inside.
+export function riceGrainMaterial() {
+  return new MeshPhysicalMaterial({
+    color: '#fffdf8',
+    emissive: new Color('#3a3226'), // light scattered inside the grain
+    roughness: 0.26,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.16,
+    transmission: 0.12,
+    thickness: 0.08,
+    attenuationColor: new Color('#efe0c0'),
+    attenuationDistance: 0.25,
+    sheen: 0.5,
+    sheenColor: new Color('#ffffff'),
+  });
+}
+
+// Grain shape: a plump rounded ellipsoid, a touch flatter on one axis.
+export function riceGrainGeometry(CapsuleGeometry) {
+  const g = new CapsuleGeometry(0.05, 0.12, 3, 10);
+  g.scale(1, 1, 0.78);
+  return g;
+}
+
 // Translucent jelly for customers, same family as the word toy.
 export function jellyCustomerMaterial(color, attenuation) {
   return new MeshPhysicalMaterial({
     color: new Color(color),
-    transmission: 0.72,
-    thickness: 0.5, // in local units; the body is scaled up, so keep this low
-    ior: 1.4,
-    roughness: 0.12,
+    transmission: 1,
+    thickness: 0.9, // local units; the body is scaled up
+    ior: 1.42,
+    dispersion: 0.35, // faint rainbow fringes at the edges
+    roughness: 0.035,
     clearcoat: 1,
-    clearcoatRoughness: 0.06,
+    clearcoatRoughness: 0.03,
     attenuationColor: new Color(attenuation),
-    attenuationDistance: 3.5,
+    attenuationDistance: 4.5,
+    iridescence: 0.12,
+    iridescenceIOR: 1.25,
     specularIntensity: 1,
-    envMapIntensity: 1,
+    envMapIntensity: 1.2,
   });
 }

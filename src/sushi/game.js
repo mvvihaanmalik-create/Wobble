@@ -1,6 +1,6 @@
 import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
 import { DAYS, GAME, LAYOUT, PERF, CUSTOMER_LOOKS } from './config.js';
-import { Stage } from './stage.js';
+import { Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
 import { Customer } from './customers.js';
 import { makeOrders, rankFor, scorePlate, tipFor } from './orders.js';
@@ -9,6 +9,7 @@ import { GameUI } from './ui.js';
 import { BarSound } from './audio.js';
 import { Recorder, canShareFile, download, shareOrDownload } from '../record.js';
 import { composeBar } from './capture.js';
+import { Effects, haptic } from './fx.js';
 
 const STATIONS = ['counter', 'rice', 'knife', 'build'];
 const ENTRANCE = new Vector3(-17, LAYOUT.customer.y, LAYOUT.customer.z);
@@ -17,9 +18,15 @@ const EXIT = new Vector3(17, LAYOUT.customer.y, LAYOUT.customer.z);
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
-    this.stage = new Stage(canvas);
+    const params = new URLSearchParams(location.search);
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    this.stage = new Stage(canvas, TIERS[params.get('tier')] ? params.get('tier') : coarse ? 'medium' : 'high');
     this.set = new SushiSet(this.stage.scene);
     this.sound = new BarSound();
+    this.fx = new Effects(this.stage.scene);
+    this.timeScale = 1;
+    this.slowFor = 0;
+    this.pointerPos = { x: 0, y: 0 };
     this.recorder = new Recorder(canvas);
     this.recorder.compose = composeBar;
     this.ray = new Raycaster();
@@ -28,7 +35,7 @@ export class Game {
     this.pieces = [];
     this.tray = [];
     this.progress = loadProgress();
-    this.quality = { prIndex: 0, slowFor: 0, avg: 16, fixed: new URLSearchParams(location.search).has('fixed') };
+    this.quality = { slowFor: 0, avg: 16, fixed: new URLSearchParams(location.search).has('fixed') || new URLSearchParams(location.search).has('tier') };
 
     this.ui = new GameUI({
       onStation: (s) => this.goStation(s),
@@ -315,6 +322,10 @@ export class Game {
     this.lastScore = score.total;
     await this.wait(400);
     this.sound.coins(Math.max(1, Math.round(mood * 5)));
+    const head = c.group.position.clone().add(new Vector3(0, c.body.height * LAYOUT.customer.scale + 0.4, 0));
+    this.popupAt(`+¥${tip.toLocaleString('en-US')}`, head, mood >= 0.8 ? 'great' : mood >= 0.5 ? 'good' : 'bad');
+    if (mood >= 0.8) this.fx.burst('glint', head, 26, { speed: 3, up: 4, gravity: 5, life: 1.2, size: 1.6 });
+    this.buzz(mood >= 0.8 ? 30 : 12);
     this.ui.setDay(this.day, this.scores.length, this.orders.length, this.tips);
     await this.wait(500);
     const last = this.orderIndex >= this.orders.length - 1;
@@ -405,6 +416,7 @@ export class Game {
     const c = this.canvas;
     c.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      this.pointerPos = { x: e.clientX, y: e.clientY };
       if (e.pointerType === 'mouse') this.sound.unlock();
       if (this.activePointer != null) return;
       this.activePointer = e.pointerId;
@@ -425,6 +437,7 @@ export class Game {
     });
     c.addEventListener('pointermove', (e) => {
       if (e.pointerId !== this.activePointer) return;
+      this.pointerPos = { x: e.clientX, y: e.clientY };
       if (this.mode === 'play' && !this.serving) this.stations[this.station].move(e);
     });
     const end = (e) => {
@@ -435,6 +448,14 @@ export class Game {
     c.addEventListener('pointerup', end);
     c.addEventListener('pointercancel', end);
     c.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener(
+      'pointermove',
+      (e) => {
+        this.stage.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        this.stage.pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
+      },
+      { passive: true },
+    );
     for (const type of ['pointerup', 'keydown', 'touchend']) window.addEventListener(type, () => this.sound.unlock(), { passive: true });
     // Keyboard: 1-4 switch stations, space holds.
     window.addEventListener('keydown', (e) => {
@@ -598,13 +619,40 @@ export class Game {
     const dt = Math.min(0.1, Math.max(0, raw));
     this.watchPerformance(raw);
     this.tick(dt);
-    this.stage.render();
+    this.stage.render(dt);
     this.recorder.capture(this.captureInfo());
     if (this.recStarted) this.ui.recording(true, Math.max(0, Math.ceil(6 - (performance.now() - this.recStarted) / 1000)));
   }
 
+  // Brief slow motion for big moments.
+  slowMo(scale, seconds) {
+    if (this.stage.reducedMotion.matches) return;
+    this.timeScale = scale;
+    this.slowFor = seconds;
+  }
+
+  // World point to screen pixels, for pop-ups.
+  screenOf(world) {
+    const v = world.clone().project(this.stage.camera);
+    const r = this.canvas.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  }
+
+  popupAt(text, world, kind = 'good') {
+    const p = this.screenOf(world);
+    this.ui.popup(text, p.x, p.y, kind);
+  }
+
+  buzz(ms) {
+    haptic(ms);
+  }
+
   // Everything but drawing, so tests can step time without rendering.
-  tick(dt) {
+  tick(realDt) {
+    if (this.slowFor > 0) this.slowFor -= realDt;
+    else this.timeScale += (1 - this.timeScale) * (1 - Math.exp(-realDt * 8));
+    const dt = realDt * this.timeScale;
+    this.fx.update(dt);
     this.stepTweens(dt);
     this.set.update(this.stage.time);
     for (const name of STATIONS) this.stations[name].update(dt);
@@ -633,7 +681,7 @@ export class Game {
       this.ui.setStation(this.station, status);
     }
 
-    this.stage.update(dt);
+    this.stage.update(realDt);
   }
 
   watchPerformance(raw) {
@@ -645,16 +693,8 @@ export class Game {
     if (q.slowFor < PERF.window) return;
     q.slowFor = 0;
     q.avg = 16;
-    if (q.prIndex < PERF.pixelRatioSteps.length - 1) {
-      q.prIndex++;
-      this.stage.setPixelRatio(Math.min(this.stage.pixelRatio, PERF.pixelRatioSteps[q.prIndex]));
-      if (q.prIndex >= 2) {
-        this.stage.renderer.transmissionResolutionScale = 0.5;
-        this.stage.key.shadow.mapSize.set(1024, 1024);
-        this.stage.key.shadow.map?.dispose();
-        this.stage.key.shadow.map = null;
-      }
-    }
+    const next = TIER_ORDER[TIER_ORDER.indexOf(this.stage.tierName) + 1];
+    if (next) this.stage.setTier(next);
   }
 }
 

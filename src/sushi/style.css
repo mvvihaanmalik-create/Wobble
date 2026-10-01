@@ -387,56 +387,164 @@ body {
   color: var(--paper);
 }
 
-/* Station tabs */
+/* Station dock: smoked glass over the scene */
 .stations {
   position: fixed;
   left: 50%;
   bottom: calc(var(--pad) + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
-  background: var(--paper);
-  color: var(--ink);
-  border: 1px solid var(--paper);
+  gap: 4px;
+  padding: 5px;
+  background: rgba(24, 15, 10, 0.55);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(247, 239, 226, 0.16);
+  border-radius: 16px;
 }
 .stations button {
-  font: 21px/1 var(--serif);
-  color: var(--ink);
+  font: 19px/1 var(--serif);
+  color: var(--on-night);
   background: transparent;
   border: 0;
-  border-left: 1px solid var(--rule);
-  padding: 10px 18px 11px;
+  border-radius: 11px;
+  padding: 9px 16px 9px 12px;
   cursor: pointer;
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  align-items: center;
+  gap: 8px;
   position: relative;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
 }
-.stations button:first-child {
-  border-left: 0;
+.stations button:hover {
+  background: rgba(247, 239, 226, 0.1);
 }
-.stations .num {
-  color: var(--muted);
-  font-size: 10px;
+.stations button:active {
+  transform: scale(0.96);
+}
+.stations svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.stations .key {
+  font-size: 9.5px;
+  color: var(--on-night-muted);
+  border: 1px solid rgba(247, 239, 226, 0.25);
+  border-radius: 4px;
+  padding: 2px 4px 1px;
 }
 .stations button[aria-current='true'] {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
 }
-.stations button[aria-current='true'] .num {
-  color: rgba(247, 241, 230, 0.6);
+.stations button[aria-current='true'] .key {
+  color: var(--muted);
+  border-color: var(--rule);
 }
 .stations .dot {
-  width: 6px;
-  height: 6px;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: transparent;
-  align-self: center;
 }
 .stations button.todo .dot {
   background: var(--vermilion);
+  box-shadow: 0 0 0 2px rgba(210, 70, 46, 0.25);
+  animation: pulse 1.6s ease-in-out infinite;
 }
 .stations button.ready .dot {
-  background: var(--good);
+  background: #6fc46a;
+}
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgba(210, 70, 46, 0);
+  }
+}
+
+/* Ratings that float up from the action */
+.popups {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.popup {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: italic 34px/1 var(--serif);
+  color: var(--on-night);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  animation: float-up 1.25s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+.popup.great {
+  color: #ffd98a;
+  font-size: 42px;
+}
+.popup.bad {
+  color: #ff8f78;
+}
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -20%) scale(0.7);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.06);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -160%) scale(1);
+  }
+}
+
+/* Hold ring under the finger */
+.hold-ring {
+  position: fixed;
+  width: 110px;
+  height: 110px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 4;
+}
+.hold-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.hold-ring circle {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+.hold-ring .track {
+  stroke: rgba(20, 12, 8, 0.45);
+}
+.hold-ring .band {
+  stroke: rgba(132, 214, 110, 0.75);
+  stroke-linecap: butt;
+}
+.hold-ring .prog {
+  stroke: var(--on-night);
+  transition: stroke 0.15s;
+}
+.hold-ring.in .prog {
+  stroke: #b8f2a0;
+}
+.hold-ring.over .prog {
+  stroke: var(--vermilion);
 }
 
 /* Full-screen overlays */
@@ -734,13 +842,20 @@ body {
   }
   .stations button {
     flex: 1;
+    flex-direction: column;
     justify-content: center;
-    font-size: 17px;
-    padding: 12px 4px;
-    gap: 4px;
+    font-size: 13px;
+    padding: 8px 2px 7px;
+    gap: 3px;
   }
-  .stations .num {
+  .stations .key {
     display: none;
+  }
+  .popup {
+    font-size: 28px;
+  }
+  .popup.great {
+    font-size: 34px;
   }
   .hint {
     font-size: 16px;

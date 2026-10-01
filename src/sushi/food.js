@@ -13,7 +13,7 @@ import {
   TubeGeometry,
   Vector3,
 } from 'three';
-import { bakeFoodCoords, foodMaterial, plain } from './materials.js';
+import { bakeFoodCoords, foodMaterial, plain, riceGrainGeometry, riceGrainMaterial } from './materials.js';
 import { bodyMesh, extrudedSolid, lumpNoise, Squishy, unitSphere } from './meshes.js';
 import { mulberry } from './set.js';
 
@@ -21,12 +21,10 @@ import { mulberry } from './set.js';
 let M = null;
 function mats() {
   if (M) return M;
-  const grainGeo = new CapsuleGeometry(0.038, 0.11, 2, 6);
-  grainGeo.scale(1, 1, 0.7);
-  grainGeo.setAttribute('aFood', new BufferAttribute(bakeFoodCoords(grainGeo, 4), 3));
+  const grainGeo = riceGrainGeometry(CapsuleGeometry);
   M = {
     rice: foodMaterial('rice'),
-    grain: foodMaterial('rice', { roughness: 0.4, clearcoat: 0.45 }),
+    grain: riceGrainMaterial(),
     grainGeo,
     salmon: foodMaterial('salmon'),
     tuna: foodMaterial('tuna'),
@@ -44,11 +42,11 @@ function mats() {
     roeGeo: new IcosahedronGeometry(0.12, 3),
     yolkGeo: new IcosahedronGeometry(0.045, 1),
     seedGeo: (() => {
-      const g = new IcosahedronGeometry(0.035, 1);
-      g.scale(1, 0.5, 1.7);
+      const g = new IcosahedronGeometry(0.024, 2);
+      g.scale(1, 0.45, 1.75);
       return g;
     })(),
-    ringGeo: new TorusGeometry(0.075, 0.03, 6, 16),
+    ringGeo: new TorusGeometry(0.062, 0.017, 8, 22),
   };
   return M;
 }
@@ -106,8 +104,8 @@ export class RiceMound {
     // Grains: tied to random vertices on the upper surface.
     const rand = mulberry(seed * 13 + 5);
     const cand = [];
-    for (let i = 0; i < this.body.N; i++) if (start[i * 3 + 1] > this.body.height * 0.18) cand.push(i);
-    const n = 230;
+    for (let i = 0; i < this.body.N; i++) if (start[i * 3 + 1] > this.body.height * 0.1) cand.push(i);
+    const n = 420;
     this.grains = new InstancedMesh(m.grainGeo, m.grain, n);
     this.grains.castShadow = true;
     this.grainVerts = new Int32Array(n);
@@ -170,7 +168,7 @@ export class RiceMound {
       _t.fromArray(this.grainDirs, k * 3);
       _t.addScaledVector(_n, -_t.dot(_n)).normalize();
       _q.setFromUnitVectors(UP, _t);
-      _o.position.set(out[i3] + _n.x * 0.012, out[i3 + 1] + _n.y * 0.012, out[i3 + 2] + _n.z * 0.012);
+      _o.position.set(out[i3] + _n.x * 0.022, out[i3 + 1] + _n.y * 0.022, out[i3 + 2] + _n.z * 0.022);
       _o.quaternion.copy(_q);
       _o.scale.setScalar(1);
       _o.updateMatrix();
@@ -395,8 +393,8 @@ export class Toppings {
     this.group = new Group();
     this.roe = new InstancedMesh(m.roeGeo, m.ikura, 12);
     this.yolk = new InstancedMesh(m.yolkGeo, m.yolk, 12);
-    this.seeds = new InstancedMesh(m.seedGeo, m.sesame, 90);
-    this.rings = new InstancedMesh(m.ringGeo, m.scallion, 30);
+    this.seeds = new InstancedMesh(m.seedGeo, m.sesame, 140);
+    this.rings = new InstancedMesh(m.ringGeo, m.scallion, 40);
     for (const im of [this.roe, this.yolk, this.seeds, this.rings]) {
       im.count = 0;
       im.castShadow = true;
@@ -432,18 +430,18 @@ export class Toppings {
   }
 
   addSesame(x, z) {
-    if (this.items.seeds.length >= 90) return false;
-    for (let k = 0; k < 15 && this.items.seeds.length < 90; k++) {
+    if (this.items.seeds.length >= 140) return false;
+    for (let k = 0; k < 24 && this.items.seeds.length < 140; k++) {
       const a = Math.random() * Math.PI * 2;
-      const r = Math.sqrt(Math.random()) * 0.4;
+      const r = Math.sqrt(Math.random()) * 0.42;
       this.items.seeds.push({ v: this.anchor(x + Math.cos(a) * r, z + Math.sin(a) * r * 0.6), born: performance.now(), lift: 0.02, spin: Math.random() * 6 });
     }
     return true;
   }
 
   addScallion(x, z) {
-    if (this.items.rings.length >= 30) return false;
-    for (let k = 0; k < 5 && this.items.rings.length < 30; k++) {
+    if (this.items.rings.length >= 40) return false;
+    for (let k = 0; k < 7 && this.items.rings.length < 40; k++) {
       const a = Math.random() * Math.PI * 2;
       const r = Math.sqrt(Math.random()) * 0.35;
       this.items.rings.push({ v: this.anchor(x + Math.cos(a) * r, z + Math.sin(a) * r * 0.6), born: performance.now(), lift: 0.03, spin: Math.random() * 6 });
