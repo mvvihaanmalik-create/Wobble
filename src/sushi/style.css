@@ -236,6 +236,8 @@ body {
   letter-spacing: 0.01em;
 }
 .day-badge {
+  white-space: nowrap;
+  flex: none;
   display: inline-flex;
   align-items: baseline;
   gap: 1px;
@@ -1186,10 +1188,45 @@ body {
   max-width: 400px;
 }
 .days {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 10px;
-  margin-top: 4px;
+  margin: 4px -6px 0;
+  padding: 8px 6px 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: #8a5530 transparent;
+}
+.days .day {
+  flex: 0 0 136px;
+  scroll-snap-align: start;
+}
+.day-tag {
+  margin-left: auto;
+  align-self: center;
+  padding: 3px 7px 4px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--gold);
+  font: 400 10px/1 var(--display);
+  color: var(--ink);
+}
+.day-tag.rush {
+  background: #ff7a2a;
+  color: #fff;
+}
+.day-stars {
+  display: flex;
+  gap: 1px;
+  font: 400 16px/1 var(--display);
+  color: #c9b08a;
+  -webkit-text-stroke: 1.5px var(--ink);
+}
+.day-stars i {
+  font-style: normal;
+}
+.day-stars i.on {
+  color: var(--gold);
 }
 .day {
   position: relative;
@@ -1225,6 +1262,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 2px;
+  white-space: nowrap;
 }
 .day-num b {
   font: 400 40px/0.9 var(--display);
@@ -1936,6 +1974,236 @@ body {
 
 /* --- Phones --------------------------------------------------------------------- */
 
+/* --- Rush, combos, banners, showcase -------------------------------------------- */
+
+.pill.combo {
+  padding: 0 14px 0 6px;
+  background: linear-gradient(#ffd34a, #ff8a2a);
+  color: #fff;
+}
+.pill.combo .ico {
+  width: 30px;
+  height: 30px;
+}
+.pill.combo b {
+  font: 400 22px/1 var(--display);
+  -webkit-text-stroke: 4px var(--ink);
+  paint-order: stroke fill;
+}
+.pill.combo.bump {
+  animation: bump 0.5s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+.ticket.rush {
+  border-color: #ff6a1a;
+  box-shadow: 0 5px 0 var(--ink), 0 0 0 4px #ff8a2a, var(--drop);
+}
+.ticket.rush::after {
+  content: 'Rush';
+  position: absolute;
+  top: -12px;
+  right: -10px;
+  padding: 4px 9px 5px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: #ff7a2a;
+  color: #fff;
+  font: 400 13px/1 var(--display);
+  transform: rotate(8deg);
+  animation: bob 0.9s ease-in-out infinite;
+}
+.banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 38%;
+  z-index: 26;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 18px 0 20px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(226, 72, 58, 0.92) 18%, rgba(226, 72, 58, 0.92) 82%, transparent);
+  border-top: 4px solid var(--ink);
+  border-bottom: 4px solid var(--ink);
+  transform: scaleY(0);
+}
+.banner.rush {
+  background: linear-gradient(90deg, transparent, rgba(255, 106, 26, 0.94) 15%, rgba(226, 52, 38, 0.94) 85%, transparent);
+}
+.banner.show {
+  animation: banner 2.4s cubic-bezier(0.3, 1.4, 0.4, 1) forwards;
+}
+.banner-text {
+  font: 400 clamp(44px, 8vw, 84px)/1 var(--display);
+  color: #fff;
+  -webkit-text-stroke: 9px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 7px 0 var(--ink);
+  animation: banner-text 2.4s ease-out forwards;
+}
+.banner-jp {
+  font: 800 18px/1 var(--body);
+  color: #fff3c4;
+  letter-spacing: 0.3em;
+}
+@keyframes banner {
+  0% {
+    transform: scaleY(0);
+  }
+  10%,
+  85% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+}
+@keyframes banner-text {
+  0% {
+    transform: translateX(-60%) skewX(-12deg);
+    opacity: 0;
+  }
+  14% {
+    transform: translateX(3%) skewX(-4deg);
+    opacity: 1;
+  }
+  22%,
+  80% {
+    transform: none;
+  }
+  100% {
+    transform: translateX(60%) skewX(-12deg);
+    opacity: 0;
+  }
+}
+.bonuses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+.bonus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 5px 6px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: #fff3c4;
+  font: 400 13px/1 var(--display);
+  animation: star-in 0.45s cubic-bezier(0.3, 1.9, 0.5, 1) backwards;
+  animation-delay: var(--d);
+}
+.bonus .ico {
+  width: 18px;
+  height: 18px;
+}
+.bonus b {
+  color: var(--shu);
+  font-weight: 400;
+}
+.showcase {
+  position: relative;
+  margin: 2px 0 0;
+  border: 4px solid var(--ink);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 5px 0 var(--ink);
+  animation: panel-in 0.5s cubic-bezier(0.3, 1.4, 0.4, 1);
+}
+.showcase img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+.showcase figcaption {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 7px 6px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--cream);
+  font: 400 16px/1 var(--display);
+}
+.showcase figcaption span[lang] {
+  font: 800 13px/1 var(--body);
+  color: var(--ink-soft);
+}
+.new-tag {
+  padding: 3px 8px 4px;
+  border-radius: 999px;
+  background: var(--shu);
+  color: #fff;
+  font: 400 12px/1 var(--display);
+  animation: bob 1s ease-in-out infinite;
+}
+.rush-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: #ffe1c8;
+  border: 2.5px solid #ff7a2a;
+  font: 800 13px/1.3 var(--body);
+}
+.rush-line .ico {
+  width: 24px;
+  height: 24px;
+}
+.goals {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.goal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 5px;
+  border-radius: 999px;
+  border: 2px solid rgba(59, 36, 23, 0.3);
+  background: var(--cream-2);
+  font: 400 13px/1 var(--display);
+}
+.goal.met {
+  border-color: var(--gold-dark);
+  background: #fff3c4;
+}
+.mini-stars {
+  color: var(--gold-dark);
+  font-size: 11px;
+  letter-spacing: -1px;
+}
+.day-result {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.big-stars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+.big-stars .star {
+  width: 60px;
+  height: 60px;
+}
+.big-stars .star:nth-child(2) {
+  width: 76px;
+  height: 76px;
+  margin-bottom: 8px;
+}
+
 @media (max-width: 720px) {
   .plaque {
     padding: 4px 5px 4px 11px;
@@ -2093,6 +2361,16 @@ body {
   .popup.great {
     font-size: 40px;
   }
+  .days .day {
+    flex-basis: 126px;
+  }
+  .day-tag {
+    padding: 2px 5px 3px;
+    font-size: 9px;
+  }
+  .banner-text {
+    -webkit-text-stroke-width: 7px;
+  }
   .title-screen {
     align-items: flex-end;
     background: linear-gradient(0deg, rgba(36, 20, 12, 0.95) 0%, rgba(36, 20, 12, 0.75) 55%, rgba(36, 20, 12, 0) 82%);
@@ -2151,5 +2429,17 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+  /* Things that animate out would end invisible: just show them. They are
+     removed on a timer anyway. */
+  .popup,
+  .banner.show,
+  .banner-text {
+    animation: none !important;
+    transform: translate(-50%, -50%);
+  }
+  .banner.show,
+  .banner-text {
+    transform: none;
   }
 }

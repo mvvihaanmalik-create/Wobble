@@ -32,11 +32,36 @@ At the end of a shift, the summary shows today's plate photos. Type a name and p
 - `npm run dev` and `npm run preview` serve the same API from memory, so the wall works locally with no setup. It resets when the server restarts.
 - Limits: names up to 16 letters, numbers, spaces and `._'-`. Photos are small JPEG data URLs (320 by 200, under 60 KB). Six posts per visitor per minute. The newest 48 plates and the best 100 shifts are kept.
 
-- **Day 1:** salmon only.
-- **Day 2:** tuna, sesame and scallion.
-- **Day 3:** egg, ikura and sweet sauce.
+Seven days, each adding something:
 
-An average of 50 or more unlocks the next day. Progress is kept in the browser.
+| Day | What's new |
+| --- | --- |
+| 1 | Salmon only. Learn the counter. |
+| 2 | Tuna, sesame and scallion. |
+| 3 | Tamago nigiri in a nori belt, and ikura. |
+| 4 | Rolls: hosomaki with cucumber or tuna. |
+| 5 | Unagi, grilled and glazed, with tare and a nori belt. Salmon rolls. |
+| 6 | Rush hour: seven guests, and a rush mid shift. |
+| 7 | Omakase night: everything, two nigiri a plate. |
+
+Each day has three star goals in tips, shown on its intro card. One star (or an average of 50) unlocks the next day. Stars and best tips show on the level select. Progress is kept in the browser.
+
+### Rolls
+
+A roll order runs its own little chain:
+1. **Rice:** with the nigiri rice done, a nori sheet waits on the mat. Scoop rice onto it, then hold to spread it (same green band as pressing).
+2. **Fill:** pick the filling the ticket asks for.
+3. **Roll:** swipe up across the mat.
+4. **Knife:** the log comes to the board with five dashed lines. Swipe down through each. Each cut is scored on how close it lands to its line.
+
+The six pieces then stand up on the serving board, cut face up. The cut faces are drawn by a shader: nori rim, packed rice grains, then the filling (cucumber with its seeds, tuna or salmon).
+
+### Rush
+
+- **Combo:** plates scoring 80 or more in a row raise the tip, up to x2. The streak shows as a flame in the top bar.
+- **Speedy:** serving well inside the guest's patience adds 20%.
+- **Rush hour:** on Days 6 and 7, a run of guests arrives in a rush. They have less patience but tip x1.5, and a banner announces them.
+- **Walkouts:** a guest whose patience runs out leaves without paying, and the combo breaks.
 
 Keys: `1` to `4` switch stations; hold `Space` to scoop and press; `Esc` pauses (resume, restart the day or quit to the title). The pause button in the top bar does the same on phones.
 
@@ -64,6 +89,10 @@ Feedback while you play:
 - A light trail and a short slow-motion beat when the knife goes through.
 - Haptics on phones that support them.
 
+### Loading
+
+A loading screen shows straight away, before any script arrives. Behind it the game builds one of every dish and tool, compiles every shader and runs one frame through the post chain. That way the first minutes of play never stall on a shader compiling.
+
 ### Interface
 
 The UI is drawn like a cozy cooking game rather than a web page:
@@ -83,6 +112,8 @@ Every texture is a shader driven by 3D coordinates baked into each piece (`src/s
 - **Salmon:** glossy, translucent orange flesh with soft peach seams and a fine juicy pulp, like fruit jelly.
 - **Tuna:** ruby red jelly with faint sinew and a little iridescence.
 - **Tamago:** glossy custard layers with a browned top.
+- **Unagi:** lacquered tare glaze with charred grill bars, char speckles and a dark skin edge.
+- **Nori:** near-black green with a fibrous sheen and pinholes. Used for the belts, roll sheets and roll sides.
 - **Rice:** packed grains, plus plump, glossy, slightly translucent grains riding on the surface, and steam rising off the tub.
 - **Wood:** growth rings, pores, plank seams and knife scratches on the hinoki counter, cutting board, serving board, rice tub staves and walnut wall slats.
 - **Ceramics:** six glazes that pool and speckle, with raw clay feet.
@@ -101,7 +132,8 @@ index.html            the bar
 src/sushi/config.js    layout, camera angles, days, scoring, every tuning number
 src/sushi/game.js      flow, customers, serving, input, capture, quality
 src/sushi/stations.js  counter, rice, knife and build stations
-src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces
+src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces, nori belts
+src/sushi/maki.js      rolls: sheet, rolling, log, cut pieces, cut-face shader
 src/sushi/critters.js  mochi animal guests, the sous chef, the chef's paw
 src/sushi/booth.js     ticket pictures and plate photos
 src/sushi/wall.js      the wall: posting, loading, local fallback

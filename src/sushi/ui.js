@@ -1,4 +1,5 @@
 import { DAYS, FISH, TOPPINGS } from './config.js';
+import { FILLINGS } from './maki.js';
 import { describePiece } from './orders.js';
 import { ICONS, star } from './icons.js';
 
@@ -14,9 +15,10 @@ const TOOL_LIST = [
   { key: 'sesame', label: 'Sesame' },
   { key: 'scallion', label: 'Scallion' },
   { key: 'sauce', label: 'Sauce' },
+  { key: 'nori', label: 'Nori' },
 ];
-const FISH_ICON = { salmon: 'fish', tuna: 'tuna', tamago: 'tamago' };
-const JP_DAYS = ['1日目', '2日目', '3日目'];
+const FISH_ICON = { salmon: 'fish', tuna: 'tuna', tamago: 'tamago', unagi: 'unagi' };
+const JP_DAYS = ['1日目', '2日目', '3日目', '4日目', '5日目', '6日目', '7日目'];
 
 // Count a number up (or down) inside an element.
 function countTo(el, to, ms = 600, fmt = (v) => String(Math.round(v))) {
@@ -84,7 +86,10 @@ export class GameUI {
         : best
           ? `<span class="day-foot"><span class="ico">${ICONS.coin}</span>Best ${yen(best)}</span>`
           : '<span class="day-foot new">New</span>';
-      b.innerHTML = `<span class="day-num"><b>${i + 1}</b><span lang="ja">${JP_DAYS[i].slice(1)}</span></span><span class="day-note">${d.note}</span>${foot}`;
+      const got = (progress.stars || [])[i] || 0;
+      const stars = locked ? '' : `<span class="day-stars" aria-label="${got} of 3 stars">${[0, 1, 2].map((k) => `<i class="${k < got ? 'on' : ''}">★</i>`).join('')}</span>`;
+      const tag = d.dish ? `<span class="day-tag">${{ tuna: 'Tuna', tamago: 'Tamago', maki: 'Rolls', unagi: 'Unagi' }[d.dish]}</span>` : d.rush ? '<span class="day-tag rush">Rush</span>' : '';
+      b.innerHTML = `<span class="day-num"><b>${i + 1}</b><span lang="ja">${JP_DAYS[i].slice(1)}</span>${tag}</span><span class="day-note">${d.note}</span>${stars}${foot}`;
       b.disabled = locked;
       b.setAttribute('aria-label', `${d.title}. ${d.note}${locked ? ' Locked.' : ''}`);
       b.setAttribute('aria-pressed', String(i === this.selectedDay));
@@ -94,6 +99,9 @@ export class GameUI {
       });
       list.appendChild(b);
     });
+    // Bring the day you are on into view in the strip.
+    const sel = list.children[this.selectedDay];
+    if (sel) requestAnimationFrame(() => (list.scrollLeft = Math.max(0, sel.offsetLeft - list.offsetLeft - 12)));
   }
 
   hideTitle() {
@@ -165,6 +173,7 @@ export class GameUI {
     const fresh = !this.ticketKey || !this.ticketKey.startsWith(`${number}|`);
     this.ticketKey = key;
     $('ticketNo').textContent = `#${String(number).padStart(2, '0')}`;
+    t.classList.toggle('rush', !!order.rush);
     $('ticketName').textContent = order.look.name;
     const ph = $('ticketPhoto');
     ph.hidden = !order.photo;
@@ -173,11 +182,12 @@ export class GameUI {
     $('ticketLines').innerHTML = order.pieces
       .map((p, i) => {
         const [main] = describePiece(p);
+        if (p.maki) return makiLine(p, progress[i] || {}, main);
         const pr = progress[i] || { rice: false, fish: false, wasabi: 0, tops: {} };
         const chips = [];
         const chip = (text, state) => chips.push(`<span class="chip${state ? ` ${state}` : ''}">${state === 'ok' ? '✓ ' : ''}${text}</span>`);
         if (p.wasabi) chip(`Wasabi ${pr.wasabi}/${p.wasabi}`, pr.wasabi === p.wasabi ? 'ok' : pr.wasabi > p.wasabi ? 'over' : '');
-        else if (p.fish !== 'tamago') chip('No wasabi', pr.wasabi ? 'over' : pr.fish ? 'ok' : '');
+        else if (p.fish !== 'tamago' && p.fish !== 'unagi') chip('No wasabi', pr.wasabi ? 'over' : pr.fish ? 'ok' : '');
         let topsOk = true;
         for (const [k, v] of Object.entries(p.toppings)) {
           if (k === 'ikura') {
@@ -268,7 +278,7 @@ export class GameUI {
   }
 
   actions(list) {
-    const key = list.map((a) => `${a.label}:${a.disabled ? 0 : 1}`).join('|');
+    const key = list.map((a) => `${a.label}:${a.disabled ? 0 : 1}:${a.primary ? 1 : 0}`).join('|');
     if (key === this.actionKey) return;
     this.actionKey = key;
     const wrap = $('actions');
@@ -311,8 +321,12 @@ export class GameUI {
     $('cardScreen').hidden = true;
   }
 
-  dayIntroCard(i, onGo) {
+  dayIntroCard(i, onGo, extra = {}) {
     const d = DAYS[i];
+    const rolls = d.maki ? d.maki.map((f) => `<span class="ingredient"><span class="ico">${ICONS[f === 'kappa' ? 'cucumber' : f === 'tekka' ? 'tuna' : 'fish']}</span>${FILLINGS[f].roll}</span>`).join('') : '';
+    const goals = extra.goals ? `<div class="goals">${extra.goals.map((g, k) => `<span class="goal"><span class="mini-stars">${'★'.repeat(k + 1)}</span>${yen(g)}</span>`).join('')}</div>` : '';
+    const show = extra.showcase ? `<figure class="showcase"><img src="${extra.showcase.img}" alt="${esc(extra.showcase.name)}" /><figcaption><span class="new-tag">New</span>${esc(extra.showcase.name)}<span lang="ja">${esc(extra.showcase.jp || '')}</span></figcaption></figure>` : '';
+    const rush = d.rush ? `<p class="rush-line"><span class="ico">${ICONS.flame}</span>Rush hour comes mid shift. Less patience, bigger tips.</p>` : '';
     const fish = d.fish.map((f) => `<span class="ingredient"><span class="ico">${ICONS[FISH_ICON[f]]}</span>${FISH[f].label}</span>`).join('');
     const tops = d.toppings.length
       ? d.toppings.map((t) => `<span class="ingredient"><span class="ico">${ICONS[t]}</span>${TOPPINGS[t].label}</span>`).join('')
@@ -320,9 +334,13 @@ export class GameUI {
     this.card(
       `<div class="ribbon"><h2>${d.title}</h2><span lang="ja">${JP_DAYS[i]}</span></div>
        <p class="panel-lead">${d.note}</p>
+       ${show}
        <div class="guests"><span class="ico">${ICONS.pochi}</span><span><b>${d.customers}</b> guests tonight</span></div>
-       <div class="shelf"><span class="shelf-label">Fish</span><div class="ingredients">${fish}</div></div>
+       <div class="shelf"><span class="shelf-label">Nigiri</span><div class="ingredients">${fish}</div></div>
+       ${rolls ? `<div class="shelf"><span class="shelf-label">Rolls</span><div class="ingredients">${rolls}</div></div>` : ''}
        <div class="shelf"><span class="shelf-label">Toppings</span><div class="ingredients">${tops}</div></div>
+       ${rush}
+       ${goals}
        <p class="tip-line">Match the photo on each ticket. Rice, knife, build, serve.</p>`,
       [{ label: 'Open the door', primary: true, onClick: onGo }],
       'intro',
@@ -343,7 +361,7 @@ export class GameUI {
     );
   }
 
-  scoreCard(name, quote, score, tip, onNext, last) {
+  scoreCard(name, quote, score, tip, onNext, last, bonuses = []) {
     const stars = Math.round(score.total / 20);
     const starHtml = Array.from({ length: 5 }, (_, i) => `<span class="star${i < stars ? ' on' : ''}" style="--d:${0.25 + i * 0.12}s">${star(i < stars)}</span>`).join('');
     const bar = (label, v, i) => `<div class="stat-bar"><span>${label}</span><span class="gauge"><i style="--w:${Math.round(v * 100)}%;--d:${0.5 + i * 0.1}s"></i></span><b>${Math.round(v * 100)}</b></div>`;
@@ -353,7 +371,8 @@ export class GameUI {
        <div class="score-big"><b id="scoreNum">0</b><span>/ 100</span></div>
        <p class="speech">${esc(quote)}</p>
        <div class="stat-bars">${bar('Rice', score.parts.rice, 0)}${bar('Cut', score.parts.cut, 1)}${bar('Build', score.parts.build, 2)}${bar('Wait', score.parts.wait, 3)}</div>
-       <div class="tip-pill"><span class="ico">${ICONS.coin}</span><span>Tip</span><b>+${yen(tip)}</b></div>`,
+       <div class="tip-pill"><span class="ico">${ICONS.coin}</span><span>Tip</span><b>+${yen(tip)}</b></div>
+       ${bonuses.length ? `<div class="bonuses">${bonuses.map((b, i) => `<span class="bonus" style="--d:${1.2 + i * 0.15}s">${b.label.startsWith('Combo') ? `<span class="ico">${ICONS.flame}</span>` : ''}${esc(b.label)} <b>${esc(b.value)}</b></span>`).join('')}</div>` : ''}`,
       [{ label: last ? 'Close up' : 'Next guest', primary: true, onClick: onNext }],
       'result',
     );
@@ -374,8 +393,13 @@ export class GameUI {
          <div><b>${stats.avg}</b><span>Average</span></div>
          <div><b>${stats.best}</b><span>Best plate</span></div>
        </div>
+       <div class="day-result">
+         <div class="big-stars" aria-label="${stats.stars} of 3 stars">${[0, 1, 2].map((k) => `<span class="star${k < stats.stars ? ' on' : ''}" style="--d:${0.5 + k * 0.25}s">${star(k < stats.stars)}</span>`).join('')}</div>
+         <div class="goals">${stats.goals.map((g, k) => `<span class="goal${stats.tips >= g ? ' met' : ''}"><span class="mini-stars">${'★'.repeat(k + 1)}</span>${yen(g)}</span>`).join('')}</div>
+       </div>
+       ${stats.walkouts ? `<p class="tip-line">${stats.walkouts} guest${stats.walkouts > 1 ? 's' : ''} walked out.</p>` : ''}
        <div class="hanko">${rank}</div>
-       ${!hasNext && dayIndex + 1 < DAYS.length && stats.avg < 50 ? `<p class="tip-line">Average 50 or more to unlock Day ${dayIndex + 2}.</p>` : ''}
+       ${!hasNext && dayIndex + 1 < DAYS.length ? `<p class="tip-line">Earn one star to unlock Day ${dayIndex + 2}.</p>` : ''}
        ${post.plates.length ? `<form class="post" id="postForm" autocomplete="off">
          <label for="postName">Sign the wall</label>
          <div class="post-row"><input id="postName" maxlength="16" placeholder="Your name" spellcheck="false" /><button class="btn btn-solid" type="submit" id="postBtn">Post</button></div>
@@ -404,6 +428,32 @@ export class GameUI {
         ? res.rank ? `Up on the wall. No. ${res.rank} on the board.` : 'Up on the wall.'
         : 'Saved on this device. The shared wall is not set up on this server.';
     });
+  }
+
+  // Combo badge in the top bar: shows from a two plate streak.
+  combo(n) {
+    const b = $('comboBadge');
+    if (n < 2) {
+      b.hidden = true;
+      return;
+    }
+    b.hidden = false;
+    $('comboNum').textContent = `×${n}`;
+    b.classList.remove('bump');
+    void b.offsetWidth;
+    b.classList.add('bump');
+  }
+
+  // A big banner across the screen for a moment: rush hour, a new dish.
+  banner(text, jp = '', kind = '') {
+    const el = $('banner');
+    el.className = `banner ${kind}`;
+    el.innerHTML = `<span class="banner-jp" lang="ja">${esc(jp)}</span><span class="banner-text">${esc(text)}</span>`;
+    el.hidden = false;
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = setTimeout(() => (el.hidden = true), 2400);
   }
 
   // --- The wall ------------------------------------------------------------------
@@ -537,4 +587,21 @@ export class GameUI {
     $('preview').hidden = true;
     $('previewMedia').innerHTML = '';
   }
+}
+
+// A roll on the ticket: filling, rolled, cut into six, plated.
+function makiLine(p, pr, main) {
+  const chips = [];
+  const chip = (text, state) => chips.push(`<span class="chip${state ? ` ${state}` : ''}">${state === 'ok' ? '✓ ' : ''}${text}</span>`);
+  const right = pr.filling === p.maki;
+  chip(FILLINGS[p.maki].label, pr.filling ? (right ? 'ok' : 'over') : '');
+  chip('Rolled', pr.rolled ? 'ok' : '');
+  chip(`Cut ${pr.cuts || 0}/5`, (pr.cuts || 0) >= 5 ? 'ok' : '');
+  const done = pr.plated && right;
+  const steps = `<span class="steps" aria-hidden="true"><i class="${pr.rice ? 'on' : ''}"></i><i class="${pr.rolled ? 'on' : ''}"></i><i class="${pr.plated ? 'on' : ''}"></i></span>`;
+  return `<div class="piece${done ? ' done' : ''}">
+    <span class="piece-ico ico">${ICONS.maki}</span>
+    <div class="piece-text"><b>${main}${steps}</b><span class="chips">${chips.join('')}</span></div>
+    ${done ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
+  </div>`;
 }

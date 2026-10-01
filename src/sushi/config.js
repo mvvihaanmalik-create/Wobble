@@ -69,6 +69,7 @@ export const FISH = {
   salmon: { label: 'Salmon', jp: 'Sake' },
   tuna: { label: 'Tuna', jp: 'Maguro' },
   tamago: { label: 'Egg', jp: 'Tamago' },
+  unagi: { label: 'Eel', jp: 'Unagi' },
 };
 
 export const TOPPINGS = {
@@ -76,14 +77,34 @@ export const TOPPINGS = {
   sesame: { label: 'Sesame' },
   scallion: { label: 'Scallion' },
   sauce: { label: 'Sweet sauce' },
+  nori: { label: 'Nori belt' },
 };
 
 // Each day adds something. pieces: [min, max] per order.
 export const DAYS = [
+  // fish: nigiri on the menu. maki: roll fillings, with makiChance per order.
+  // rush: guests (by index) who arrive in a rush: less patience, bigger tips.
+  // dish: what the day introduces, shown on its intro card.
   { title: 'Day 1', note: 'Salmon only. Learn the counter.', customers: 3, fish: ['salmon'], toppings: [], pieces: [1, 1], patience: 150 },
-  { title: 'Day 2', note: 'Tuna arrives. So do toppings.', customers: 4, fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], pieces: [1, 2], patience: 170 },
-  { title: 'Day 3', note: 'Egg, ikura and sweet sauce. Busy night.', customers: 5, fish: ['salmon', 'tuna', 'tamago'], toppings: ['sesame', 'scallion', 'ikura', 'sauce'], pieces: [1, 2], patience: 190 },
+  { title: 'Day 2', note: 'Tuna arrives. So do toppings.', customers: 4, fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], pieces: [1, 2], patience: 170, dish: 'tuna' },
+  { title: 'Day 3', note: 'Egg nigiri in a nori belt. Ikura too.', customers: 4, fish: ['salmon', 'tuna', 'tamago'], toppings: ['sesame', 'scallion', 'ikura', 'nori'], pieces: [1, 2], patience: 185, dish: 'tamago' },
+  { title: 'Day 4', note: 'Rolls. Spread, fill, roll and cut.', customers: 4, fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], maki: ['kappa', 'tekka'], makiChance: 0.65, pieces: [1, 1], patience: 230, dish: 'maki' },
+  { title: 'Day 5', note: 'Unagi, grilled and glazed.', customers: 5, fish: ['salmon', 'unagi', 'tamago'], toppings: ['sesame', 'scallion', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.3, pieces: [1, 2], patience: 210, dish: 'unagi' },
+  { title: 'Day 6', note: 'Rush hour. They keep coming.', customers: 7, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.25, pieces: [1, 2], patience: 175, rush: [2, 5] },
+  { title: 'Day 7', note: 'Omakase night. Anything goes.', customers: 6, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.4, pieces: [2, 2], patience: 240, rush: [3, 4] },
 ];
+
+// Rush hour, combos and speed.
+export const RUSH = {
+  patience: 0.62, // rush guests have this much of the usual patience
+  tip: 1.5, // and tip this much more
+  comboAt: 80, // plates scoring this or better keep a combo going
+  comboStep: 0.25, // each plate in a combo adds this to the tip multiplier
+  comboMax: 2, // up to x2
+  speedy: 0.4, // served within this share of patience: speed bonus
+  speedyTip: 0.2,
+  stars: [0.4, 0.62, 0.82], // share of a perfect day's tips for one, two, three stars
+};
 
 // How the final score is weighted.
 export const SCORE = {

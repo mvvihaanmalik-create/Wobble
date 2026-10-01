@@ -13,7 +13,8 @@ import {
 import { FISH, KNIFE, LAYOUT, RICE } from './config.js';
 import { BLOCKS, FishBlock, FishSlice, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
-import { cutScore, scoopScore } from './orders.js';
+import { cutScore, makiOf, nigiriOf, scoopScore } from './orders.js';
+import { FILLINGS, MAKI, MakiSheet } from './maki.js';
 import { Paw } from './critters.js';
 
 const v3 = () => new Vector3();
@@ -106,7 +107,7 @@ export class RiceStation extends Station {
       g.stage.scene.add(this.paw.group);
     }
     const p = this.paw.group;
-    const show = g.station === 'rice' && (this.rice || this.ball);
+    const show = g.station === 'rice' && (this.rice || this.ball || (this.sheet && this.state === 'pressing'));
     p.visible = !!show || p.position.y < 5.5;
     let tx = LAYOUT.mat.x + 1.6;
     let ty = 6.5;
@@ -117,6 +118,11 @@ export class RiceStation extends Station {
       tx = this.ball.position.x + 0.55 * this.ball.scale.x + 0.8;
       ty = this.ball.position.y - 0.1;
       tz = this.ball.position.z + 0.1;
+    } else if (show && this.sheet && this.state === 'pressing') {
+      tx = LAYOUT.mat.x;
+      tz = LAYOUT.mat.z;
+      ty = 0.75 - this.value * 0.25;
+      rate = 16;
     } else if (show && this.rice && this.state !== 'flying') {
       const top = this.rice.group.position.y + this.rice.body.height;
       tx = LAYOUT.mat.x;
@@ -147,19 +153,47 @@ export class RiceStation extends Station {
     if (this.state === 'scooping') this.cancelScoop();
   }
 
-  get needed() {
+  get nigiriNeeded() {
     const g = this.g;
     if (!g.order || !g.order.taken) return 0;
-    return g.order.pieces.length - g.pieces.length - (this.rice ? 1 : 0);
+    return nigiriOf(g.order).length - g.pieces.length - (this.rice ? 1 : 0);
+  }
+
+  get makiNeeded() {
+    const g = this.g;
+    if (!g.order || !g.order.taken) return 0;
+    return makiOf(g.order).length - g.rolls.length - (this.sheet && this.sheet.riceLayer.visible ? 1 : 0);
+  }
+
+  get needed() {
+    return this.nigiriNeeded + this.makiNeeded;
+  }
+
+  // Which roll the ticket wants next, for the fill step.
+  get wantedFilling() {
+    const g = this.g;
+    const want = makiOf(g.order)[g.rolls.length];
+    return want ? want.maki : null;
   }
 
   status() {
-    return this.needed > 0 || this.rice ? 'todo' : null;
+    return this.needed > 0 || this.rice || this.sheet ? 'todo' : null;
+  }
+
+  // A fresh nori sheet, waiting on the mat for the roll's rice.
+  ensureSheet() {
+    if (this.sheet) return;
+    this.sheet = new MakiSheet();
+    this.sheet.group.position.set(LAYOUT.mat.x, 0.2, LAYOUT.mat.z);
+    this.sheet.riceLayer.visible = false;
+    this.g.stage.scene.add(this.sheet.group);
   }
 
   update(dt) {
     const g = this.g;
     if (this.rice) this.rice.update(dt);
+    if (!this.sheet && this.state === 'idle' && g.station === 'rice' && this.nigiriNeeded <= 0 && this.makiNeeded > 0) this.ensureSheet();
+    if (this.sheet) this.sheet.update(dt);
     this.updatePaw(dt);
     if (this.ball) {
       const s = 0.25 + this.value * 0.75;
@@ -175,24 +209,33 @@ export class RiceStation extends Station {
       if (this.value >= 1) this.finishScoop();
     } else if (this.state === 'pressing') {
       this.value = Math.min(1, this.value + RICE.pressRate * dt);
-      this.rice.body.userMode[1] = this.value * 0.3;
+      if (this.rice) this.rice.body.userMode[1] = this.value * 0.3;
+      if (this.sheet) this.sheet.setSpread(0.12 + this.value * 0.5);
       if (g.station === 'rice') {
-        g.ui.meter('Press', this.value, RICE.pressGood, this.value > RICE.pressOver, this.dots());
+        g.ui.meter(this.sheet ? 'Spread' : 'Press', this.value, RICE.pressGood, this.value > RICE.pressOver, this.sheet ? '' : this.dots());
         g.ui.holdRing(g.pointerPos.x, g.pointerPos.y, this.value, RICE.pressGood, this.value > RICE.pressOver);
       }
       if (this.value >= 1) this.finishPress();
     }
     if (g.station !== 'rice') return;
-    if (this.state === 'ready') g.ui.meter('Press', 0, RICE.pressGood, false, this.dots());
+    if (this.state === 'ready') g.ui.meter(this.sheet ? 'Spread' : 'Press', 0, RICE.pressGood, false, this.sheet ? '' : this.dots());
     else if (this.state !== 'scooping' && this.state !== 'pressing') g.ui.meter(null);
     // Hints.
+    const makingMaki = this.sheet || (this.nigiriNeeded <= 0 && this.makiNeeded > 0);
     if (!g.order || !g.order.taken) g.ui.hint('Take an order at the counter first.');
-    else if (this.state === 'idle' && this.needed > 0) g.ui.hint(`Hold to scoop rice. Let go in the green. (${g.pieces.length + 1} of ${g.order.pieces.length})`);
-    else if (this.state === 'scooping') g.ui.hint('Let go in the green band.');
-    else if (this.state === 'ready') g.ui.hint('Hold to press. Let go in the green.');
-    else if (this.state === 'pressing') g.ui.hint(this.value > RICE.pressOver ? 'Too hard!' : 'Press...');
-    else if (this.needed <= 0 && !this.rice) g.ui.hint('Rice is done. On to the knife.');
-    g.ui.actions(this.needed <= 0 && !this.rice && g.order && g.order.taken ? [{ label: 'To the knife', primary: true, onClick: () => g.goStation('knife') }] : []);
+    else if (this.state === 'idle' && this.needed > 0) {
+      const n = nigiriOf(g.order).length;
+      g.ui.hint(makingMaki ? 'Roll time. Hold to scoop rice onto the nori.' : `Hold to scoop rice. Let go in the green. (${g.pieces.length + 1} of ${n})`);
+    } else if (this.state === 'scooping') g.ui.hint('Let go in the green band.');
+    else if (this.state === 'ready') g.ui.hint(this.sheet ? 'Hold to spread the rice. Let go in the green.' : 'Hold to press. Let go in the green.');
+    else if (this.state === 'pressing') g.ui.hint(this.value > RICE.pressOver ? 'Too hard!' : this.sheet ? 'Spread...' : 'Press...');
+    else if (this.state === 'fill') g.ui.hint(`Lay the filling. The ticket wants ${FILLINGS[this.wantedFilling]?.label.toLowerCase() || 'a filling'}.`);
+    else if (this.state === 'roll') g.ui.hint('Swipe up across the mat to roll it.');
+    else if (this.state === 'rolling') g.ui.hint('Rolling...');
+    else if (this.needed <= 0 && !this.rice && !this.sheet) g.ui.hint('Rice is done. On to the knife.');
+    if (this.state === 'fill') {
+      g.ui.actions(g.dayFillings().map((k) => ({ label: FILLINGS[k].label, primary: k === this.wantedFilling, onClick: () => this.fill(k) })));
+    } else g.ui.actions(this.needed <= 0 && !this.rice && !this.sheet && g.order && g.order.taken ? [{ label: 'To the knife', primary: true, onClick: () => g.goStation('knife') }] : []);
   }
 
   dots() {
@@ -203,7 +246,13 @@ export class RiceStation extends Station {
   down() {
     const g = this.g;
     if (!g.order || !g.order.taken) return g.ui.toast('Take the order first');
+    if (this.state === 'roll') {
+      this.rollFrom = { x: g.pointerPos.x, y: g.pointerPos.y };
+      return;
+    }
     if (this.state === 'idle' && this.needed > 0) {
+      // Nigiri rice first; once those are on the board, the roll.
+      if (this.nigiriNeeded <= 0 && this.makiNeeded > 0) this.ensureSheet();
       this.state = 'scooping';
       this.value = 0;
       this.ball = new Mesh(scoopBallGeometry(), foodMaterial('rice'));
@@ -220,19 +269,54 @@ export class RiceStation extends Station {
   }
 
   up() {
-    this.g.ui.holdRing(null);
+    const g = this.g;
+    g.ui.holdRing(null);
     if (this.state === 'scooping') this.finishScoop();
     else if (this.state === 'pressing') this.finishPress();
+    else if (this.state === 'roll' && this.rollFrom) {
+      const dy = g.pointerPos.y - this.rollFrom.y;
+      this.rollFrom = null;
+      if (dy < -40) this.doRoll();
+      else g.ui.toast('Swipe up across the mat to roll it');
+    }
+  }
+
+  // Lay the filling on the spread rice.
+  fill(kind) {
+    if (this.state !== 'fill' || !this.sheet) return;
+    const g = this.g;
+    this.sheet.addFilling(kind);
+    g.sound.plop();
+    g.buzz(10);
+    const at = new Vector3(LAYOUT.mat.x, 1.3, LAYOUT.mat.z);
+    if (kind !== this.wantedFilling) g.popupAt('Wrong filling?', at, 'bad');
+    this.state = 'roll';
+  }
+
+  async doRoll() {
+    const g = this.g;
+    const sheet = this.sheet;
+    this.state = 'rolling';
+    g.sound.whoosh();
+    g.fx.burst('grain', new Vector3(LAYOUT.mat.x, 0.6, LAYOUT.mat.z), 10, { speed: 2, up: 2.5, life: 0.8 });
+    const log = await sheet.roll();
+    if (this.sheet !== sheet) return; // reset while rolling
+    g.popupAt(sheet.spreadQuality > 0.85 ? 'Tight roll' : 'Rolled', new Vector3(LAYOUT.mat.x, 1.4, LAYOUT.mat.z), sheet.spreadQuality > 0.85 ? 'great' : 'good');
+    g.buzz(16);
+    this.sheet = null;
+    this.state = 'idle';
+    g.addRoll(log, sheet);
   }
 
   cancelScoop() {
     if (this.ball) this.g.stage.scene.remove(this.ball);
     this.ball = null;
-    this.state = 'idle';
+    if (this.state === 'scooping') this.state = 'idle';
   }
 
   finishScoop() {
     const g = this.g;
+    if (this.sheet) return this.finishMakiScoop();
     const scoop = this.value;
     const from = this.ball.position.clone();
     g.stage.scene.remove(this.ball);
@@ -268,6 +352,36 @@ export class RiceStation extends Station {
     g.ui.meter(null);
   }
 
+  // The scoop lands on the nori as a lump, ready to spread.
+  finishMakiScoop() {
+    const g = this.g;
+    const scoop = this.value;
+    const ball = this.ball;
+    const sheet = this.sheet;
+    this.ball = null;
+    this.state = 'flying';
+    sheet.scoop = scoop;
+    g.ui.meter(null);
+    g.tween({
+      obj: ball,
+      to: new Vector3(LAYOUT.mat.x, 0.5, LAYOUT.mat.z),
+      duration: 0.42,
+      arc: 1.2,
+      done: () => {
+        g.stage.scene.remove(ball);
+        if (this.sheet !== sheet) return;
+        sheet.riceLayer.visible = true;
+        sheet.setSpread(0.12);
+        g.sound.squelch(0.6);
+        this.state = 'ready';
+        const at = new Vector3(LAYOUT.mat.x, 0.6, LAYOUT.mat.z);
+        g.fx.burst('grain', at, 14, { speed: 2.2, up: 3, life: 0.9 });
+        const sc = scoopScore(scoop);
+        g.popupAt(sc > 0.95 ? 'Perfect scoop' : sc > 0.6 ? 'Good scoop' : 'Off scoop', at.clone().setY(1.6), sc > 0.95 ? 'great' : sc > 0.6 ? 'good' : 'bad');
+      },
+    });
+  }
+
   finishPress() {
     const g = this.g;
     const v = this.value;
@@ -279,6 +393,15 @@ export class RiceStation extends Station {
     else {
       quality = 0.45;
       over = Math.min(1, (v - b) / (1 - b)) * (v > RICE.pressOver ? 1.4 : 0.6);
+    }
+    if (this.sheet) {
+      this.sheet.spread(quality, over);
+      g.sound.squelch(0.4 + v * 0.5);
+      const at = new Vector3(LAYOUT.mat.x, 1.3, LAYOUT.mat.z);
+      g.popupAt(over > 0.5 ? 'Squashed' : v < a ? 'Patchy' : quality > 0.85 ? 'Even spread' : 'Spread', at, over > 0.5 || v < a ? 'bad' : quality > 0.85 ? 'great' : 'good');
+      g.fx.burst('grain', at.clone().setY(0.5), 6, { speed: 1.8, up: 1.6, life: 0.6 });
+      this.state = 'fill';
+      return;
     }
     this.rice.body.userMode[1] = 0;
     this.rice.press(quality, over);
@@ -311,6 +434,8 @@ export class RiceStation extends Station {
       this.g.stage.scene.remove(this.rice.group);
       this.rice.dispose();
     }
+    if (this.sheet) this.g.stage.scene.remove(this.sheet.group);
+    this.sheet = null;
     this.rice = null;
     this.cancelScoop();
   }
@@ -358,6 +483,32 @@ export class KnifeStation extends Station {
     this.guide.visible = false;
     this.knife.visible = false;
     for (const b of Object.values(this.blocks)) b.group.visible = false;
+    for (const gd of this.rollGuides || []) gd.visible = false;
+  }
+
+  // A rolled log waiting on the board to be cut.
+  get roll() {
+    return this.g.rolls.find((r) => r.onBoard && !r.cutDone) || null;
+  }
+
+  placeRollGuides(roll) {
+    if (!this.rollGuides) {
+      this.rollGuides = Array.from({ length: MAKI.pieces - 1 }, () => {
+        const gd = makeGuide();
+        this.g.stage.scene.add(gd);
+        return gd;
+      });
+    }
+    const cut = new Set(roll.cuts.map((c) => c.index));
+    const len = MAKI.radius * 2 + 0.35;
+    roll.guides.forEach((x, i) => {
+      const gd = this.rollGuides[i];
+      gd.scale.set(1, len, 1);
+      gd.rotation.set(0, 0, 0);
+      gd.material.map.repeat.set(1, len * 3);
+      gd.position.set(roll.group.position.x + x + (roll.pieces[i + 1].position.x - roll.pieces[i + 1].userData.rest), roll.group.position.y, roll.group.position.z + MAKI.radius + 0.03);
+      gd.visible = this.g.station === 'knife' && !cut.has(i);
+    });
   }
 
   block(kind) {
@@ -372,6 +523,14 @@ export class KnifeStation extends Station {
 
   show(kind) {
     this.kind = kind;
+    // A roll on the board comes first: the fish waits in the case.
+    if (this.roll) {
+      for (const b of Object.values(this.blocks)) b.group.visible = false;
+      this.guide.visible = false;
+      this.placeRollGuides(this.roll);
+      return;
+    }
+    for (const gd of this.rollGuides || []) gd.visible = false;
     for (const [k, b] of Object.entries(this.blocks)) b.group.visible = k === kind;
     this.block(kind).group.visible = true;
     this.placeGuide();
@@ -397,14 +556,19 @@ export class KnifeStation extends Station {
   }
 
   status() {
-    return this.g.order && this.g.order.taken && this.needed.total > 0 ? 'todo' : null;
+    return this.g.order && this.g.order.taken && (this.needed.total > 0 || this.roll) ? 'todo' : null;
   }
 
   update(dt) {
     const g = this.g;
     for (const b of Object.values(this.blocks)) if (b.group.visible) b.update(dt);
     const need = this.needed;
-    if (g.station === 'knife') {
+    const roll = this.roll;
+    if (g.station === 'knife' && roll) {
+      this.placeRollGuides(roll);
+      g.ui.actions([]);
+      g.ui.hint(this.stroke ? 'Straight down through the roll.' : `Cut the roll on each dashed line. (${roll.cuts.length} of ${MAKI.pieces - 1})`);
+    } else if (g.station === 'knife') {
       const kinds = g.dayFish();
       g.ui.actions([
         ...(kinds.length > 1 ? kinds.map((k) => ({ label: `${FISH[k].label}${need.byKind[k] ? ` ×${need.byKind[k]}` : ''}`, primary: k === this.kind, onClick: () => this.show(k) })) : []),
@@ -415,6 +579,59 @@ export class KnifeStation extends Station {
       else if (!need.byKind[this.kind]) g.ui.hint(`No ${FISH[this.kind].label.toLowerCase()} on this ticket. Switch fish.`);
       else if (this.stroke) g.ui.hint('Pull all the way through.');
       else g.ui.hint(`Swipe down through the ${FISH[this.kind].label.toLowerCase()} along the dashes.`);
+    }
+  }
+
+  // Ray onto the front of the roll, in world space.
+  rollPoint(e, roll) {
+    const plane = new Plane(new Vector3(0, 0, 1), -(roll.group.position.z + MAKI.radius));
+    return this.g.planeHit(e, plane);
+  }
+
+  downRoll(e, roll) {
+    const p = this.rollPoint(e, roll);
+    if (!p) return;
+    this.stroke = { pts: [p], roll };
+    this.knife.visible = true;
+    this.g.fx.trail.start();
+    this.g.fx.trail.add(p.clone().setZ(p.z + 0.05));
+    this.knife.position.set(p.x, p.y, p.z + 0.3);
+    this.knife.rotation.set(0, 0, Math.PI / 2 + Math.PI);
+  }
+
+  upRoll(roll) {
+    const g = this.g;
+    const pts = this.stroke.pts;
+    this.stroke = null;
+    g.fx.trail.end();
+    setTimeout(() => (this.knife.visible = false), 160);
+    const ys = pts.map((p) => p.y);
+    if (Math.max(...ys) - Math.min(...ys) < MAKI.radius * 1.2) return g.ui.toast('Swipe all the way down through the roll');
+    const x = pts.reduce((sum, p) => sum + p.x, 0) / pts.length - roll.group.position.x;
+    const cut = new Set(roll.cuts.map((c) => c.index));
+    let best = -1;
+    let bd = Infinity;
+    roll.guides.forEach((gx, i) => {
+      if (cut.has(i)) return;
+      const shifted = gx + (roll.pieces[i + 1].position.x - roll.pieces[i + 1].userData.rest);
+      const d = Math.abs(x - shifted);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    });
+    if (best < 0 || bd > roll.pieceLen * 0.55) return g.ui.toast('Cut on one of the dashed lines');
+    const score = Math.max(0, Math.min(1, 1 - bd / (roll.pieceLen * 0.5)));
+    roll.cut(best, score);
+    g.sound.slice(0.8);
+    g.stage.addShake(0.03);
+    g.buzz(14);
+    const at = roll.group.position.clone().add(new Vector3(roll.guides[best], MAKI.radius + 0.4, MAKI.radius));
+    if (score > 0.8) g.fx.burst('glint', at, 8, { speed: 1.8, up: 2, gravity: 5, life: 0.7 });
+    g.popupAt(score > 0.8 ? 'Clean' : score > 0.5 ? 'OK' : 'Wobbly', at.clone().setY(at.y + 0.6), score > 0.8 ? 'great' : score > 0.5 ? 'good' : 'bad');
+    if (roll.cutDone) {
+      const session = g.session;
+      setTimeout(() => g.session === session && g.plateRoll(roll), 550);
     }
   }
 
@@ -429,6 +646,7 @@ export class KnifeStation extends Station {
   down(e) {
     const g = this.g;
     if (!g.order || !g.order.taken) return g.ui.toast('Take the order first');
+    if (this.roll) return this.downRoll(e, this.roll);
     const p = this.facePoint(e);
     if (!p) return;
     this.stroke = { pts: [p], t0: performance.now() };
@@ -440,6 +658,14 @@ export class KnifeStation extends Station {
 
   move(e) {
     if (!this.stroke) return;
+    if (this.stroke.roll) {
+      const p = this.rollPoint(e, this.stroke.roll);
+      if (!p) return;
+      this.stroke.pts.push(p);
+      this.g.fx.trail.add(p.clone().setZ(p.z + 0.05));
+      this.knife.position.set(p.x, p.y, p.z + 0.3);
+      return;
+    }
     const p = this.facePoint(e);
     if (!p) return;
     const pts = this.stroke.pts;
@@ -463,6 +689,7 @@ export class KnifeStation extends Station {
 
   up() {
     if (!this.stroke) return;
+    if (this.stroke.roll) return this.upRoll(this.stroke.roll);
     const pts = this.stroke.pts;
     this.stroke = null;
     this.g.fx.trail.end();
@@ -560,7 +787,7 @@ function makeGuide() {
 // ---------------------------------------------------------------------------
 // 04 Build: wasabi on the rice, drag the fish on, then toppings.
 
-const TOPPING_TOOLS = ['ikura', 'sesame', 'scallion', 'sauce'];
+const TOPPING_TOOLS = ['ikura', 'sesame', 'scallion', 'sauce', 'nori'];
 
 export class BuildStation extends Station {
   name = 'build';
@@ -587,7 +814,7 @@ export class BuildStation extends Station {
     const g = this.g;
     if (!g.order) return [];
     const w = new Set();
-    g.order.pieces.forEach((want, i) => {
+    nigiriOf(g.order).forEach((want, i) => {
       const p = g.pieces[i];
       if (!p) {
         if (want.wasabi) w.add('wasabi');
@@ -599,7 +826,7 @@ export class BuildStation extends Station {
         if (p.wasabi.length < (want.wasabi || 0)) w.add('wasabi');
         w.add('fish');
       }
-      const tops = p.slice ? p.slice.toppings.counts : {};
+      const tops = p.tops;
       for (const [k, v] of Object.entries(want.toppings)) if (k === 'ikura' ? (tops.ikura || 0) < v : !tops[k]) w.add(k);
     });
     return [...w];
@@ -611,7 +838,7 @@ export class BuildStation extends Station {
     if (!g.order) return 'fish';
     for (let i = 0; i < g.pieces.length; i++) {
       const p = g.pieces[i];
-      const want = g.order.pieces[i];
+      const want = nigiriOf(g.order)[i];
       if (!want) continue;
       if (!p.slice) {
         if (p.wasabi.length < (want.wasabi || 0)) return 'wasabi';
@@ -621,9 +848,9 @@ export class BuildStation extends Station {
     if (g.pieces.some((p) => !p.slice) && g.tray.length) return 'fish';
     for (let i = 0; i < g.pieces.length; i++) {
       const p = g.pieces[i];
-      const want = g.order.pieces[i];
+      const want = nigiriOf(g.order)[i];
       if (!want || !p.slice) continue;
-      const tops = p.slice.toppings.counts;
+      const tops = p.tops;
       for (const [k, v] of Object.entries(want.toppings)) if (k === 'ikura' ? (tops.ikura || 0) < v : !tops[k]) return k;
     }
     return this.tool || 'fish';
@@ -652,9 +879,10 @@ export class BuildStation extends Station {
     if (g.station !== 'build') return;
     g.ui.tools(true, this.tool, this.available(), this.wanted());
     const complete = g.plateMatches();
-    g.ui.actions([{ label: 'Serve', primary: complete, disabled: !g.pieces.some((p) => p.slice), onClick: () => g.serve() }]);
+    g.ui.actions([{ label: 'Serve', primary: complete, disabled: !g.hasFood(), onClick: () => g.serve() }]);
     if (!g.order || !g.order.taken) return g.ui.hint('Take an order at the counter first.');
-    if (!g.pieces.length) return g.ui.hint('No rice yet. Make some at the rice station.');
+    if (!g.pieces.length && !g.rolls.length) return g.ui.hint('No rice yet. Make some at the rice station.');
+    if (!g.pieces.length) return g.ui.hint(complete ? 'Looks ready. Serve it.' : 'The roll is on its way. Finish it at the knife.');
     if (this.drag) return g.ui.hint('Drop it on the rice.');
     if (this.placing) return;
     const hints = {
@@ -664,6 +892,7 @@ export class BuildStation extends Station {
       sesame: 'Tap the fish to sprinkle sesame.',
       scallion: 'Tap the fish to add scallion.',
       sauce: 'Drag across the fish to brush on sauce.',
+      nori: 'Tap the fish to wrap a nori belt round it.',
     };
     g.ui.hint(complete ? 'Looks ready. Serve it.' : hints[this.tool]);
   }
@@ -706,12 +935,20 @@ export class BuildStation extends Station {
     }
     if (this.tool === 'fish') {
       // Take the slice this piece's ticket line asks for, if there is one.
-      const want = g.order && g.order.pieces[g.pieces.indexOf(piece)];
+      const want = g.order && nigiriOf(g.order)[g.pieces.indexOf(piece)];
       const slice = g.tray.find((x) => want && x.kind === want.fish) || g.tray[0];
       if (!piece.slice && slice) this.place(slice, piece, 0);
       return;
     }
     if (!piece.slice) return g.ui.toast('Put the fish on first');
+    if (this.tool === 'nori') {
+      if (piece.addNori()) {
+        g.sound.squelch(0.3);
+        piece.rice.body.kickAll(0, 0.8, 0);
+        this.advance();
+      }
+      return;
+    }
     const local = piece.slice.group.worldToLocal(hit.point.clone());
     const tops = piece.slice.toppings;
     if (this.tool === 'sauce') {
@@ -766,7 +1003,7 @@ export class BuildStation extends Station {
     const free = g.pieces.filter((p) => !p.slice);
     if (!d.moved) {
       // A tap on a slice sends it to the first rice that wants that fish.
-      const fits = free.find((p) => g.order && g.order.pieces[g.pieces.indexOf(p)]?.fish === d.slice.kind) || free[0];
+      const fits = free.find((p) => g.order && nigiriOf(g.order)[g.pieces.indexOf(p)]?.fish === d.slice.kind) || free[0];
       if (fits) this.place(d.slice, fits, 0, true);
       else this.dropBack(d.slice);
       return;

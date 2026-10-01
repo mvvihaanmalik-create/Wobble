@@ -158,6 +158,43 @@ export const RECIPES = {
     h = -pore * 0.5 - layer * 0.3;
     r = 1.0;
   }`,
+  // Unagi: eel grilled over charcoal and lacquered with tare. Deep amber
+  // glaze, darker where it caramelised, grill bars across the fillet, a pale
+  // flaky core and a thin dark skin along one edge.
+  unagi: /* glsl */ `
+  void food(vec3 p, out vec3 col, out float h, out float r) {
+    // Glaze: caramel pooled darker in the dips, lighter on the rises.
+    float t = fbm(p * vec3(2.2, 2.2, 2.6)) * 0.5 + 0.5;
+    vec3 glaze = mix(uA, uB, smoothstep(0.25, 0.85, t));
+    // Grill bars: dark charred stripes across the fillet, ragged at the edges.
+    float u = p.y * 1.55 + p.z * 0.35 + snoise(p * vec3(2.5, 1.0, 2.5)) * 0.08;
+    float bar = 1.0 - smoothstep(0.06, 0.16, abs(fract(u) - 0.5));
+    bar *= 0.6 + 0.4 * smoothstep(-0.4, 0.4, snoise(p * 4.0));
+    // Char speckles where the tare caught the coals.
+    vec2 c = worley(p * 9.0);
+    float speck = (1.0 - smoothstep(0.0, 0.12, c.x)) * step(0.55, fract(c.y * 7.3));
+    col = mix(glaze, uC, bar * 0.85);
+    col = mix(col, uC, speck * 0.6);
+    // Skin along one long edge.
+    float skin = 1.0 - smoothstep(0.08, 0.2, p.z);
+    col = mix(col, uD, skin);
+    h = bar * 0.6 + speck * 0.3 + t * 0.2 - skin * 0.2;
+    r = mix(0.7, 1.6, bar * 0.8 + speck * 0.4);
+  }`,
+  // Nori: roasted seaweed. Near black green, a fibrous sheen, faint
+  // pressed ripples and pinholes.
+  nori: /* glsl */ `
+  void food(vec3 p, out vec3 col, out float h, out float r) {
+    vec3 q = p * vec3(14.0, 14.0, 14.0);
+    float fib = fbm(q * vec3(1.0, 0.25, 0.3)) * 0.5 + 0.5;
+    float ripple = snoise(p * vec3(3.0, 3.0, 9.0)) * 0.5 + 0.5;
+    col = mix(uA, uB, fib * 0.7 + ripple * 0.3);
+    vec2 c = worley(p * 22.0);
+    float pin = 1.0 - smoothstep(0.0, 0.08, c.x);
+    col = mix(col, uC, pin * 0.5);
+    h = fib * 0.6 + ripple * 0.3 - pin * 0.4;
+    r = mix(0.85, 1.15, fib);
+  }`,
   // Rice: packed grains. Worley cells read as grains, shadowed between.
   rice: /* glsl */ `
   // The packed surface under the loose grains: rounded grain tops with

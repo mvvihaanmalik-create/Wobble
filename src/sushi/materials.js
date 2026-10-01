@@ -20,6 +20,17 @@ const KINDS = {
     bump: 0.35,
     physical: { roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.15, sheen: 0.4, sheenColor: '#fff0a0', transmission: 0.15, thickness: 0.5, attenuationColor: '#f0a010', attenuationDistance: 0.6 },
   },
+  unagi: {
+    colors: ['#7a3410', '#c9702a', '#260c04', '#2b2a2c'],
+    bump: 0.5,
+    // Lacquered: a thick glossy coat over the caramel.
+    physical: { roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.03, specularIntensity: 1, sheen: 0.3, sheenColor: '#ffb36a' },
+  },
+  nori: {
+    colors: ['#141a10', '#26301c', '#3d4a2a'],
+    bump: 0.35,
+    physical: { roughness: 0.55, sheen: 0.6, sheenColor: '#6f8a4a', sheenRoughness: 0.4, clearcoat: 0.15, clearcoatRoughness: 0.5 },
+  },
   rice: {
     colors: ['#fffcf5', '#e6dece'],
     bump: 0.9,
@@ -181,6 +192,7 @@ export const plain = {
   sesame: () => new MeshPhysicalMaterial({ color: '#efdcb0', roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.3, sheen: 0.6, sheenColor: new Color('#fff3d6') }),
   scallion: () => new MeshPhysicalMaterial({ color: '#86c94e', roughness: 0.28, clearcoat: 0.8, clearcoatRoughness: 0.12, transmission: 0.35, thickness: 0.04, attenuationColor: new Color('#4f9a20'), attenuationDistance: 0.1, sheen: 0.4, sheenColor: new Color('#e2ffc0') }),
   sauce: () => new MeshPhysicalMaterial({ color: '#3a170a', roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, specularIntensity: 1 }),
+  cucumber: () => new MeshPhysicalMaterial({ color: '#6fae3a', roughness: 0.25, clearcoat: 0.8, clearcoatRoughness: 0.1, sheen: 0.5, sheenColor: new Color('#d9ffb0'), transmission: 0.2, thickness: 0.2 }),
   ginger: () => new MeshPhysicalMaterial({ color: '#ffc7c4', roughness: 0.3, transmission: 0.5, thickness: 0.05, clearcoat: 0.6, side: DoubleSide }),
   shiso: () => new MeshPhysicalMaterial({ color: '#2f8a3a', roughness: 0.4, clearcoat: 0.5, side: DoubleSide, sheen: 0.4, sheenColor: new Color('#9bd17a') }),
   glow: (texture) => new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: 2, toneMapped: false }),

@@ -1,4 +1,5 @@
 import {
+  CylinderGeometry,
   BufferAttribute,
   CapsuleGeometry,
   CatmullRomCurve3,
@@ -38,6 +39,8 @@ function mats() {
       return t;
     })(),
     wasabi: foodMaterial('wasabi'),
+    unagi: foodMaterial('unagi'),
+    nori: foodMaterial('nori'),
     ikura: plain.ikura(),
     yolk: plain.yolk(),
     sesame: plain.sesame(),
@@ -228,6 +231,7 @@ export const BLOCKS = {
   salmon: { L: 7, H: 1.6, D: 1.15, angle: 45, thickness: 0.42 },
   tuna: { L: 7, H: 1.6, D: 1.15, angle: 45, thickness: 0.42 },
   tamago: { L: 7, H: 2.3, D: 1.15, angle: 0, thickness: 0.62 },
+  unagi: { L: 7, H: 2.15, D: 1.25, angle: 0, thickness: 0.5 },
 };
 
 const BLOCK_SIM = {
@@ -556,6 +560,32 @@ export class Piece {
     return true;
   }
 
+  // Everything on top of the rice, nori belt included, as the ticket counts it.
+  get tops() {
+    return { ...(this.slice ? this.slice.toppings.counts : {}), nori: !!this.nori };
+  }
+
+  // A strip of nori around the middle of the piece, over fish and rice.
+  addNori() {
+    if (this.nori || !this.slice) return false;
+    const top = this.rice.top + this.slice.thickness * 0.75;
+    const ry = top / 2 + 0.05;
+    const rz = this.rice.body.depth / 2 + 0.06;
+    const geo = new CylinderGeometry(1, 1, 0.42, 48, 1, true);
+    geo.rotateZ(Math.PI / 2);
+    geo.scale(1, ry, rz);
+    geo.setAttribute('aFood', new BufferAttribute(bakeFoodCoords(geo, 1), 3));
+    const band = new Mesh(geo, mats().nori);
+    band.material.side = 2;
+    band.position.set(this.placement ? this.placement.dx : 0, ry - 0.04, 0);
+    band.castShadow = true;
+    band.scale.set(1, 0.01, 0.01);
+    band.userData.born = performance.now();
+    this.nori = band;
+    this.group.add(band);
+    return true;
+  }
+
   setSlice(slice, dx, angle) {
     this.slice = slice;
     this.placement = { dx, angle };
@@ -569,6 +599,12 @@ export class Piece {
     this.rice.update(dt);
     if (this.slice) this.slice.update(dt);
     const now = performance.now();
+    if (this.nori) {
+      // Wraps on with a little overshoot.
+      const a = Math.min(1, (now - this.nori.userData.born) / 260);
+      const k = a < 1 ? a + Math.sin(a * Math.PI) * 0.12 : 1;
+      this.nori.scale.set(1, k, k);
+    }
     for (const d of this.wasabi) {
       const a = Math.min(1, (now - d.userData.born) / 200);
       d.scale.setScalar(a < 1 ? 0.2 + 0.8 * a + Math.sin(a * Math.PI) * 0.25 : 1);
@@ -580,4 +616,26 @@ export class Piece {
     this.rice.dispose();
     if (this.slice) this.slice.dispose();
   }
+}
+
+// One of each food, for compiling shaders before play. Returns a group.
+export function warmFoods() {
+  const g = new Group();
+  const rice = new RiceMound(0.6, 1);
+  g.add(rice.group);
+  for (const kind of Object.keys(BLOCKS)) {
+    const b = new FishBlock(kind);
+    b.group.position.x = 2;
+    g.add(b.group);
+  }
+  const B = BLOCKS.salmon;
+  const slice = new FishSlice('salmon', [[3, 0], [3.4, 0], [3.4 + B.H, B.H], [3 + B.H, B.H]], B.D);
+  slice.toppings.addRoe(0, 0);
+  slice.toppings.addSesame(0, 0);
+  slice.toppings.addScallion(0, 0);
+  for (let k = 0; k < 4; k++) slice.toppings.addSaucePoint(-0.6 + k * 0.4, 0);
+  slice.toppings.update();
+  g.add(slice.group);
+  g.add(wasabiDab(1));
+  return g;
 }

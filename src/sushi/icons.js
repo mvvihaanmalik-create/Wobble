@@ -63,6 +63,13 @@ export const ICONS = {
   tamago: svg(`<path d="M7 20 L37 16 L41 30 L11 35Z" fill="#ffd84f" ${o}/><path d="M7 20 L37 16 L38 20 L8 24.5Z" fill="#e2a33a" ${o}/><path d="M10 29 L39 25" stroke="#f6b92a" stroke-width="2.4" stroke-linecap="round"/>`),
   tuna: svg(`<path d="M6 30 C8 16 40 12 42 22 C40 30 12 38 6 30Z" fill="#b8283a" ${o}/><path d="M14 22 l5 7 M22 19 l5 7 M30 17 l4 6" stroke="#e8939c" stroke-width="2.2" stroke-linecap="round"/>`),
 
+  unagi: svg(`<path d="M6 30 C8 16 40 12 42 22 C40 30 12 38 6 30Z" fill="#b8642a" ${o}/><path d="M13 21 l3 10 M21 18 l3 10 M29 16 l3 9" stroke="#5a2410" stroke-width="2.6" stroke-linecap="round"/><path d="M12 22 c6 -4 14 -6 22 -6" fill="none" stroke="#ffd09a" stroke-width="2" stroke-linecap="round"/>`),
+  maki: svg(`<ellipse cx="24" cy="31" rx="15" ry="8" fill="#1d2416" ${o}/><path d="M9 21 v10 a15 8 0 0 0 30 0 v-10" fill="#1d2416" ${o}/><ellipse cx="24" cy="21" rx="15" ry="8" fill="#fffaf0" ${o}/><ellipse cx="24" cy="21" rx="15" ry="8" fill="none" stroke="#1d2416" stroke-width="3"/><ellipse cx="25" cy="21" rx="5.5" ry="3.2" fill="#ff6a3a" ${o} stroke-width="2"/>`),
+  roll: svg(`<rect x="7" y="16" width="34" height="16" rx="8" fill="#1d2416" ${o}/><ellipse cx="38" cy="24" rx="5" ry="8" fill="#fffaf0" ${o}/><ellipse cx="38.5" cy="24" rx="2" ry="3.2" fill="#5fa832"/>`),
+  nori: svg(`<rect x="10" y="8" width="28" height="32" rx="3" fill="#1d2416" ${o}/><path d="M15 14 h18 M15 20 h18 M15 26 h18 M15 32 h18" stroke="#3d4a2a" stroke-width="2" stroke-linecap="round"/>`),
+  cucumber: svg(`<circle cx="24" cy="24" r="16" fill="#3f8a22" ${o}/><circle cx="24" cy="24" r="12" fill="#d8f0a8"/><circle cx="24" cy="24" r="5" fill="#f4fbe0" stroke="#b8d88a" stroke-width="1.6"/>`),
+  flame: svg(`<path d="M24 5 C30 14 38 18 38 29 a14 14 0 0 1 -28 0 C10 22 16 18 18 12 C20 17 22 18 24 18 C24 12 22 9 24 5Z" fill="#ff7a2a" ${o}/><path d="M24 22 C28 26 31 28 31 32 a7 7 0 0 1 -14 0 C17 28 21 26 24 22Z" fill="#ffd34a"/>`),
+
   // Toppings.
   wasabi: svg(`<path d="M10 31 C8 22 16 15 23 17 C27 11 38 14 38 23 C43 27 39 36 31 35 C25 39 13 38 10 31Z" fill="#8cc63f" ${o}/><path d="M16 24 c2 -3 5 -4 8 -3" fill="none" stroke="#d6f0a8" stroke-width="2.6" stroke-linecap="round"/>`),
   fish: svg(`<path d="M6 30 C8 16 40 12 42 22 C40 30 12 38 6 30Z" fill="#ff7a45" ${o}/><path d="M14 22 l5 7 M22 19 l5 7 M30 17 l4 6" stroke="#ffd2b8" stroke-width="2.6" stroke-linecap="round"/>`),

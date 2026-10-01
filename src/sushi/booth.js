@@ -16,6 +16,8 @@ import {
 import { BLOCKS, FishSlice, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
 import { LAYOUT } from './config.js';
+import { makiOf, nigiriOf, plateLayout } from './orders.js';
+import { platedMaki } from './maki.js';
 
 // Photo booth: small still renders made on the main renderer between frames.
 // Used for the picture on each ticket (what the plate should look like) and
@@ -57,31 +59,41 @@ export class PhotoBooth {
   // Build the plate an order asks for, perfectly made, and photograph it.
   async orderPhoto(order, w = 480, h = 300) {
     const g = LAYOUT.geta;
-    const pieces = order.pieces.map((want, i) => idealPiece(want, i));
+    const layout = plateLayout(order);
+    const wantNigiri = nigiriOf(order);
+    const pieces = wantNigiri.map((want, i) => idealPiece(want, i));
     const holder = new Group();
-    const slots = LAYOUT.slots[pieces.length] || LAYOUT.slots[1];
     pieces.forEach((p, i) => {
-      p.group.position.set(slots[i] ?? 0, g.h, 0);
+      p.group.position.set(layout.nigiri[i] ?? 0, g.h, 0);
       p.group.rotation.y = LAYOUT.slotAngle;
       holder.add(p.group);
     });
+    for (const want of makiOf(order)) {
+      const roll = platedMaki(want.maki);
+      roll.position.set(layout.maki ?? 0, g.h, 0);
+      holder.add(roll);
+    }
     // Let the fish settle over the rice, then place toppings on it.
     for (let k = 0; k < 24; k++) for (const p of pieces) p.update(1 / 30);
-    pieces.forEach((p, i) => dress(p, order.pieces[i]));
+    pieces.forEach((p, i) => dress(p, wantNigiri[i]));
     for (let k = 0; k < 6; k++) for (const p of pieces) p.update(1 / 30);
     for (const p of pieces) if (p.slice) p.slice.toppings.update();
+    // A roll with a nigiri needs the wider shot.
+    const count = makiOf(order).length ? (pieces.length ? 2 : 1.4) : pieces.length;
     // The plate is only in the booth for its own shot, so queued jobs never
     // photograph each other's plates.
     const url = await this.shoot(w, h, () => {
       this.scene.add(holder);
-      this.aim(pieces.length);
+      this.aim(count, layout);
     }, null, this.scene, () => this.scene.remove(holder));
     for (const p of pieces) p.dispose();
     return url;
   }
 
-  aim(count) {
-    frame(this.camera, new Vector3(-0.55, LAYOUT.geta.h + 0.45, 0), count);
+  aim(count, layout) {
+    const xs = [...(layout ? layout.nigiri : [-0.55]), ...(layout && layout.maki != null ? [layout.maki] : [])];
+    const cx = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+    frame(this.camera, new Vector3(cx, LAYOUT.geta.h + 0.45, 0), count);
   }
 
   // Photograph the real serving board as it sits in the scene.
@@ -138,7 +150,7 @@ export class PhotoBooth {
 
 // Both pieces sit centered on the same point; two need twice the width.
 function frame(cam, target, count) {
-  const dist = count > 1 ? 7.6 : 4.6;
+  const dist = count > 1.5 ? 7.6 : count > 1 ? 6.2 : 4.6;
   cam.position.set(target.x - 0.25, target.y + dist * 0.56, target.z + dist * 0.83);
   cam.lookAt(target);
 }
@@ -177,5 +189,9 @@ function dress(p, want) {
   }
   if (tp.sesame) t.addSesame(0, 0);
   if (tp.sauce) for (let k = 0; k <= 8; k++) t.addSaucePoint(-0.9 + k * 0.225, k % 2 ? 0.12 : -0.12);
+  if (tp.nori) {
+    p.addNori();
+    p.nori.userData.born = -1e9;
+  }
   for (const list of Object.values(t.items)) for (const it of list) it.born = old();
 }

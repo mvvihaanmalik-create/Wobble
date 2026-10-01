@@ -1,9 +1,10 @@
 import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
-import { DAYS, GAME, LAYOUT, PERF, CUSTOMER_LOOKS } from './config.js';
+import { DAYS, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
-import { Customer, SousChef } from './critters.js';
-import { makeOrders, rankFor, scorePlate, tipFor } from './orders.js';
+import { Customer, Paw, SousChef } from './critters.js';
+import { makeOrders, makiOf, nigiriOf, orderSize, perfectDay, plateLayout, rankFor, scorePlate, starsFor, tipFor } from './orders.js';
+import { MAKI, makiSpots, MakiSheet, platedMaki } from './maki.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
 import { GameUI } from './ui.js';
 import { BarSound } from './audio.js';
@@ -11,9 +12,18 @@ import { Recorder, canShareFile, download, shareOrDownload } from '../record.js'
 import { composeBar } from './capture.js';
 import { Effects, haptic } from './fx.js';
 import { PhotoBooth } from './booth.js';
+import { warmFoods } from './food.js';
 import { loadWall, postRun, savedName } from './wall.js';
 
 const STATIONS = ['counter', 'rice', 'knife', 'build'];
+
+// The dish each day introduces, for the intro card's photo.
+const SHOWCASE = {
+  tuna: { name: 'Maguro nigiri', jp: '鮪', pieces: [{ fish: 'tuna', wasabi: 1, toppings: { scallion: true } }] },
+  tamago: { name: 'Tamago nigiri', jp: '玉子', pieces: [{ fish: 'tamago', wasabi: 0, toppings: { nori: true } }] },
+  maki: { name: 'Hosomaki rolls', jp: '細巻き', pieces: [{ maki: 'kappa', wasabi: 0, toppings: {} }] },
+  unagi: { name: 'Unagi nigiri', jp: '鰻', pieces: [{ fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } }] },
+};
 const ENTRANCE = new Vector3(-17, LAYOUT.customer.y, LAYOUT.customer.z);
 const EXIT = new Vector3(17, LAYOUT.customer.y, LAYOUT.customer.z);
 
@@ -56,6 +66,7 @@ export class Game {
     this.tweens = [];
     this.pieces = [];
     this.tray = [];
+    this.rolls = [];
     this.progress = loadProgress();
     this.quality = { slowFor: 0, avg: 16, fixed: new URLSearchParams(location.search).has('fixed') || new URLSearchParams(location.search).has('tier') };
 
@@ -93,6 +104,49 @@ export class Game {
     this.resume();
   }
 
+  // Build one of everything off to the side, compile all shaders and the post
+  // chain, then throw it away. Runs behind the loading screen.
+  async warmUp(progress = () => {}) {
+    const r = this.stage.renderer;
+    const scene = this.stage.scene;
+    const temp = warmFoods();
+    temp.add(new Paw().group);
+    const sheet = new MakiSheet();
+    sheet.addFilling('kappa');
+    temp.add(sheet.group);
+    for (const f of ['kappa', 'tekka', 'sake']) temp.add(platedMaki(f));
+    // Draw everything regardless of the camera, shadows included, so each
+    // material compiles in the same variants play will use.
+    temp.traverse((o) => {
+      o.visible = true;
+      o.frustumCulled = false;
+      if (o.isMesh) o.castShadow = true;
+    });
+    temp.position.set(0, 1, 0);
+    scene.add(temp);
+    await progress(0.1);
+    try {
+      if (r.compileAsync) {
+        await r.compileAsync(scene, this.stage.camera);
+        await progress(0.4);
+        await r.compileAsync(this.booth.scene, this.booth.camera);
+      }
+    } catch (err) {
+      console.warn('Shader warm-up skipped', err);
+    }
+    await progress(0.7);
+    // One full frame through the post chain compiles its passes too, and a
+    // ticket photo compiles what the photo booth uses.
+    const photo = this.booth.orderPhoto({ pieces: [{ fish: 'salmon', wasabi: 1, toppings: { ikura: 5, sesame: true } }, { fish: 'tuna', wasabi: 0, toppings: { scallion: true, sauce: true } }] }, 96, 60);
+    this.stage.render(1 / 60);
+    await photo;
+    // Leave the geometry to the garbage collector: some of it (toppings,
+    // grains) is shared with the real food.
+    scene.remove(temp);
+    await progress(1);
+    this.last = performance.now();
+  }
+
   // --- Flow ------------------------------------------------------------------
 
   showTitle() {
@@ -126,6 +180,9 @@ export class Game {
     this.tips = 0;
     this.scores = [];
     this.served = [];
+    this.combo = 0;
+    this.walkouts = 0;
+    this.perfect = perfectDay(this.orders, dayIndex);
     this.ui.hideTitle();
     this.removeCustomers();
     this.clearWork();
@@ -133,11 +190,20 @@ export class Game {
     this.placeSous(LAYOUT.sous, true);
     this.ui.setDay(dayIndex, 0, this.orders.length, 0);
     this.stage.goTo('counter');
-    this.ui.dayIntroCard(dayIndex, () => {
+    const go = () => {
       this.ui.hideCard();
       this.mode = 'play';
       this.nextCustomer();
-    });
+    };
+    const dish = DAYS[dayIndex].dish && SHOWCASE[DAYS[dayIndex].dish];
+    this.ui.dayIntroCard(dayIndex, go, { goals: this.goals() });
+    // A glamour shot of the day's new dish, dropped in once it is rendered.
+    if (dish) {
+      const session = this.session;
+      this.booth.orderPhoto({ pieces: dish.pieces }, 640, 360).then((img) => {
+        if (this.session === session && this.mode === 'intro') this.ui.dayIntroCard(dayIndex, go, { goals: this.goals(), showcase: { img, name: dish.name, jp: dish.jp } });
+      });
+    }
   }
 
   nextCustomer() {
@@ -167,6 +233,13 @@ export class Game {
     c.seated = false;
     this.sound.bell();
     this.sousSays({ jp: 'いらっしゃいませ', en: 'Welcome in' }, 'open', 900);
+    const prev = this.orders[this.orderIndex - 1];
+    if (order.rush && !(prev && prev.rush)) {
+      this.ui.banner('Rush hour!', 'ラッシュ', 'rush');
+      this.sound.bell();
+      setTimeout(() => this.sound.bell(), 180);
+      this.stage.addShake(0.05);
+    }
     const seat = new Vector3(LAYOUT.customer.x, LAYOUT.customer.y, LAYOUT.customer.z);
     c.group.scale.setScalar(LAYOUT.customer.scale);
     const hops = c.group.position.distanceTo(seat) > 10 ? [new Vector3(-9, seat.y, seat.z), seat] : [seat];
@@ -213,8 +286,7 @@ export class Game {
   // --- Work in progress ----------------------------------------------------------
 
   addPiece(piece) {
-    const count = this.order.pieces.length;
-    const slots = LAYOUT.slots[Math.min(2, count)] || LAYOUT.slots[2];
+    const slots = plateLayout(this.order).nigiri;
     const k = this.pieces.length;
     this.pieces.push(piece);
     const local = new Vector3(slots[k] ?? slots[slots.length - 1] + 1.3 * (k - slots.length + 1), LAYOUT.geta.h, 0);
@@ -235,7 +307,7 @@ export class Game {
         g.position.copy(local);
         piece.rice.body.kickAll(0, 2.2, 0);
         this.sound.squelch(0.6);
-        if (this.pieces.length >= this.order.pieces.length && this.station === 'rice') {
+        if (this.stations.rice.needed <= 0 && this.station === 'rice') {
           setTimeout(() => this.station === 'rice' && this.goStation('knife'), 700);
         }
       },
@@ -270,7 +342,7 @@ export class Game {
     const byKind = {};
     let total = 0;
     if (!this.order || !this.order.taken) return { byKind, total };
-    for (const p of this.order.pieces) byKind[p.fish] = (byKind[p.fish] || 0) + 1;
+    for (const p of nigiriOf(this.order)) byKind[p.fish] = (byKind[p.fish] || 0) + 1;
     for (const s of this.tray) if (byKind[s.kind]) byKind[s.kind]--;
     for (const p of this.pieces) if (p.slice && byKind[p.slice.kind]) byKind[p.slice.kind]--;
     for (const k of Object.keys(byKind)) total += Math.max(0, byKind[k]);
@@ -286,28 +358,125 @@ export class Game {
     return DAYS[this.day ?? 0].fish;
   }
 
+  dayFillings() {
+    return DAYS[this.day ?? 0].maki || [];
+  }
+
   dayToppings() {
     return DAYS[this.day ?? 0].toppings;
   }
 
-  pieceProgress(p) {
-    if (!p) return { rice: false, fish: false, wasabi: 0, tops: {} };
-    return { rice: true, fish: !!p.slice, wasabi: p.wasabi.length, tops: p.slice ? p.slice.toppings.counts : {} };
-  }
-
-  // Every piece matches its ticket line: fish on, wasabi count and toppings.
-  plateMatches() {
-    if (!this.plateComplete()) return false;
-    return this.order.pieces.every((want, i) => {
-      const p = this.pieces[i];
-      const tops = p.slice.toppings.counts;
-      if (p.wasabi.length !== (want.wasabi || 0)) return false;
-      return Object.entries(want.toppings).every(([k, v]) => (k === 'ikura' ? tops.ikura === v : !!tops[k]));
+  // How far each ticket line has come, in ticket order.
+  orderProgress() {
+    if (!this.order) return [];
+    let n = 0;
+    let m = 0;
+    return this.order.pieces.map((want) => {
+      if (want.maki) {
+        const r = this.rolls[m++];
+        const sheet = !r && m === this.rolls.length + 1 ? this.stations.rice.sheet : null;
+        return { maki: true, rice: !!(r || (sheet && sheet.riceLayer.visible)), filling: r ? r.filling : sheet ? sheet.filling : null, rolled: !!r, cuts: r ? r.cuts.length : 0, plated: !!(r && r.plated) };
+      }
+      const p = this.pieces[n++];
+      if (!p) return { rice: false, fish: false, wasabi: 0, tops: {} };
+      return { rice: true, fish: !!p.slice, wasabi: p.wasabi.length, tops: p.tops };
     });
   }
 
+  // Every line matches its ticket: fish on, wasabi count, toppings; rolls
+  // with the right filling, cut and plated.
+  plateMatches() {
+    if (!this.plateComplete()) return false;
+    const rollsOk = makiOf(this.order).every((want, i) => this.rolls[i] && this.rolls[i].filling === want.maki);
+    return (
+      rollsOk &&
+      nigiriOf(this.order).every((want, i) => {
+        const p = this.pieces[i];
+        const tops = p.tops;
+        if (p.wasabi.length !== (want.wasabi || 0)) return false;
+        return Object.entries(want.toppings).every(([k, v]) => (k === 'ikura' ? tops.ikura === v : !!tops[k]));
+      })
+    );
+  }
+
   plateComplete() {
-    return !!this.order && this.pieces.length >= this.order.pieces.length && this.pieces.every((p) => p.slice);
+    if (!this.order) return false;
+    const n = nigiriOf(this.order).length;
+    const m = makiOf(this.order).length;
+    return this.pieces.length >= n && this.pieces.every((p) => p.slice) && this.rolls.filter((r) => r.plated).length >= m;
+  }
+
+  // Something on the board to serve.
+  hasFood() {
+    return this.pieces.some((p) => p.slice) || this.rolls.some((r) => r.plated);
+  }
+
+  // --- Rolls -------------------------------------------------------------------
+
+  // A fresh roll goes from the mat to the cutting board.
+  addRoll(log, sheet) {
+    log.scoop = sheet.scoop ?? 0.65;
+    log.spreadQuality = sheet.spreadQuality;
+    this.rolls.push(log);
+    this.stage.scene.attach(log.group);
+    this.stage.scene.remove(sheet.group);
+    const target = new Vector3(LAYOUT.block.x + 3.4, LAYOUT.board.h + MAKI.radius, LAYOUT.block.z + 0.25);
+    const session = this.session;
+    this.tween({
+      obj: log.group,
+      to: target,
+      quaternion: new Quaternion(),
+      duration: 0.6,
+      arc: 1.6,
+      done: () => {
+        if (this.session !== session) return;
+        log.onBoard = true;
+        log.squash = 1;
+        this.sound.tap();
+        if (this.station === 'knife') this.stations.knife.show(this.stations.knife.kind);
+        if (this.station === 'rice' && this.stations.rice.needed <= 0) setTimeout(() => this.station === 'rice' && this.goStation('knife'), 500);
+      },
+    });
+  }
+
+  // Six cut pieces stand up on the serving board, cut face up.
+  plateRoll(roll) {
+    const layout = plateLayout(this.order);
+    const spots = makiSpots(layout.maki ?? 0);
+    const up = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), Math.PI / 2);
+    let landed = 0;
+    roll.pieces.forEach((p, i) => {
+      this.stage.scene.attach(p);
+      const local = spots[i].clone().setY(LAYOUT.geta.h + roll.pieceLen / 2);
+      const to = this.set.geta.localToWorld(local.clone());
+      setTimeout(() => {
+        this.tween({
+          obj: p,
+          to,
+          quaternion: up,
+          duration: 0.45,
+          arc: 1.4,
+          done: () => {
+            this.set.geta.attach(p);
+            p.position.copy(local);
+            p.userData.plated = true;
+            p.scale.set(1.15, 0.8, 1.15);
+            this.tween({ obj: p, scaleVec: new Vector3(1, 1, 1), duration: 0.25 });
+            this.sound.tap();
+            if (++landed === roll.pieces.length) {
+              roll.plated = true;
+              roll.onBoard = false;
+              this.popupAt(roll.cutScore > 0.8 ? 'Beautiful roll' : 'Plated', this.set.geta.localToWorld(spots[1].clone().setY(1.6)), roll.cutScore > 0.8 ? 'great' : 'good');
+              if (roll.cutScore > 0.8) this.fx.burst('glint', this.set.geta.localToWorld(spots[1].clone().setY(1.2)), 14, { speed: 2, up: 2.6, gravity: 5, life: 0.9 });
+              if (this.station === 'knife') {
+                if (this.slicesNeeded().total > 0) this.stations.knife.show(this.nextNeededFish());
+                else setTimeout(() => this.station === 'knife' && this.goStation(this.plateComplete() && !this.pieces.length ? 'counter' : 'build'), 600);
+              }
+            }
+          },
+        });
+      }, i * 70);
+    });
   }
 
   clearWork() {
@@ -319,15 +488,20 @@ export class Game {
       s.group.removeFromParent();
       s.dispose();
     }
+    for (const r of this.rolls || []) {
+      r.group.removeFromParent();
+      for (const p of r.pieces) p.removeFromParent();
+    }
     this.pieces = [];
     this.tray = [];
+    this.rolls = [];
     if (this.stations) this.stations.rice.reset();
   }
 
   // --- Serving -----------------------------------------------------------------
 
   async serve() {
-    if (this.serving || !this.order || !this.pieces.some((p) => p.slice)) return;
+    if (this.serving || !this.order || !this.hasFood()) return;
     this.serving = true;
     this.goStationForce('counter');
     const g = this.set.geta;
@@ -339,11 +513,30 @@ export class Game {
       cut: p.slice.cutScore ?? 0.5,
       wasabi: p.wasabi.length,
       dx: p.placement ? p.placement.dx : 0,
-      toppings: p.slice.toppings.counts,
+      toppings: p.tops,
     }));
+    for (const r of this.rolls.filter((x) => x.plated)) built.push({ maki: r.filling, scoop: r.scoop, shape: r.spreadQuality, cut: r.cutScore, wasabi: 0, dx: 0, toppings: {} });
     const score = scorePlate(this.order, built, this.order.waited || 0);
-    const tip = tipFor(score.total, this.day);
-    const photo = this.booth.platePhoto(480, 300, this.pieces.length);
+    // Tip: the plate, then rush, combo and speed on top.
+    const bonuses = [];
+    let mult = 1;
+    if (this.order.rush) {
+      mult *= RUSH.tip;
+      bonuses.push({ label: 'Rush', value: `×${RUSH.tip}` });
+    }
+    this.combo = score.total >= RUSH.comboAt ? (this.combo || 0) + 1 : 0;
+    if (this.combo >= 2) {
+      const c = Math.min(RUSH.comboMax, 1 + RUSH.comboStep * (this.combo - 1));
+      mult *= c;
+      bonuses.push({ label: `Combo ${this.combo}`, value: `×${c.toFixed(2).replace(/0$/, '').replace(/\.0$/, '')}` });
+    }
+    if ((this.order.waited || 0) < this.order.patience * RUSH.speedy && score.total >= 60) {
+      mult *= 1 + RUSH.speedyTip;
+      bonuses.push({ label: 'Speedy', value: `+${Math.round(RUSH.speedyTip * 100)}%` });
+    }
+    const tip = Math.round((tipFor(score.total, this.day, orderSize(this.order)) * mult) / 10) * 10;
+    this.ui.combo(this.combo);
+    const photo = this.booth.platePhoto(480, 300, this.rolls.length ? 2 : this.pieces.length);
     photo.then((img) => (this.served = [...(this.served || []), { img, score: score.total, tip, guest: this.order.look.name, species: this.order.look.species, day: this.day }]));
     await this.wait(350);
     this.sound.whoosh();
@@ -367,6 +560,17 @@ export class Game {
         await this.wait(200);
       }
       p.group.visible = false;
+    }
+    // Rolls go two pieces a bite.
+    const rollPieces = this.rolls.flatMap((r) => (r.plated ? r.pieces : []));
+    for (let k = 0; k < rollPieces.length; k += 2) {
+      c.setExpression(k % 4 ? 'chew' : 'open');
+      this.sound.chomp();
+      c.body.kickAll(0, 1.4, -0.7);
+      const pair = rollPieces.slice(k, k + 2);
+      await Promise.all(pair.map((p) => this.tweenP({ obj: p, scale: 0.001, duration: 0.16 })));
+      pair.forEach((p) => (p.visible = false));
+      await this.wait(180);
     }
     c.body.userMode[2] = 0;
     const mood = score.total / 100;
@@ -396,7 +600,7 @@ export class Game {
     this.ui.setDay(this.day, this.scores.length, this.orders.length, this.tips);
     await this.wait(500);
     const last = this.orderIndex >= this.orders.length - 1;
-    this.ui.scoreCard(c.look.name, quoteFor(score), score, tip, () => this.afterServe(home), last);
+    this.ui.scoreCard(c.look.name, quoteFor(score), score, tip, () => this.afterServe(home), last, bonuses);
   }
 
   async afterServe(home) {
@@ -428,13 +632,17 @@ export class Game {
     const avg = Math.round(this.scores.reduce((a, b) => a + b, 0) / Math.max(1, this.scores.length));
     const best = Math.max(0, ...this.scores);
     const p = this.progress;
+    const stars = starsFor(this.tips, this.perfect);
     p.best[this.day] = Math.max(p.best[this.day] || 0, this.tips);
-    if (avg >= 50) p.unlocked = Math.max(p.unlocked, Math.min(DAYS.length - 1, this.day + 1));
+    p.stars[this.day] = Math.max(p.stars[this.day] || 0, stars);
+    // One star, or a decent average, opens the next day.
+    if (stars >= 1 || avg >= 50) p.unlocked = Math.max(p.unlocked, Math.min(DAYS.length - 1, this.day + 1));
     saveProgress(p);
     const hasNext = this.day + 1 < DAYS.length && p.unlocked > this.day;
+    if (stars === 3) this.fx.burst('glint', this.stage.camera.position.clone().add(new Vector3(0, -2, -8)), 40, { speed: 4, up: 5, gravity: 4, life: 1.6, size: 2 });
     this.ui.summaryCard(
       this.day,
-      { tips: this.tips, served: this.scores.length, avg, best },
+      { tips: this.tips, served: this.scores.length, avg, best, stars, goals: this.goals(), walkouts: this.walkouts },
       rankFor(avg),
       hasNext,
       () => {
@@ -453,7 +661,6 @@ export class Game {
         plates: this.todaysPlates(),
         name: savedName(),
         onWall: () => this.openWall(),
-      onPause: () => this.openPause(),
         onPost: async (name) => {
           const res = await postRun({ name, day: this.day, tips: this.tips, avg, plates: this.todaysPlates() });
           this.openWall(res);
@@ -461,6 +668,43 @@ export class Game {
         },
       },
     );
+  }
+
+  goals() {
+    return RUSH.stars.map((k) => Math.round((this.perfect * k) / 10) * 10);
+  }
+
+  // Patience ran out: the guest leaves, the streak breaks, no tip.
+  async walkout() {
+    if (this.serving || !this.order || !this.customer) return;
+    this.serving = true;
+    const c = this.customer;
+    const order = this.order;
+    order.walked = true;
+    this.walkouts = (this.walkouts || 0) + 1;
+    this.combo = 0;
+    this.ui.combo(0);
+    this.goStationForce('counter');
+    c.setExpression('frown');
+    c.body.kickAll(0, -1.2, 0);
+    this.sound.voice(0.05);
+    const head = c.group.position.clone().add(new Vector3(-3, c.body.height * LAYOUT.customer.scale * 0.8, 0));
+    this.popupAt({ jp: 'もういい！', en: 'Forget it!' }, head, 'say');
+    this.ui.toast(`${order.look.name} gave up and left.`, 2600);
+    this.sousSays(null, 'frown', 1800);
+    this.scores.push(0);
+    this.ui.setDay(this.day, this.scores.length, this.orders.length, this.tips);
+    await this.wait(1400);
+    this.order = null;
+    this.ui.ticket(null);
+    c.seated = false;
+    c.hopTo(new Vector3(-17, c.group.position.y, c.group.position.z), 0.6, 1).then(() => {
+      c.group.removeFromParent();
+      c.dispose();
+    });
+    this.clearWork();
+    this.serving = false;
+    this.nextCustomer();
   }
 
   // Up to three of today's plates, best first.
@@ -601,9 +845,11 @@ export class Game {
 
   // --- Tweens --------------------------------------------------------------------
 
-  tween({ obj, to, quaternion, scale, duration, arc = 0, done }) {
+  tween({ obj, to, quaternion, scale, scaleVec, duration, arc = 0, done }) {
     const t = {
       obj,
+      sv0: scaleVec ? obj.scale.clone() : null,
+      sv1: scaleVec ? scaleVec.clone() : null,
       from: obj.position.clone(),
       to: to ? to.clone() : null,
       q0: obj.quaternion.clone(),
@@ -638,6 +884,7 @@ export class Game {
       }
       if (t.q1) t.obj.quaternion.slerpQuaternions(t.q0, t.q1, e);
       if (t.s1 != null) t.obj.scale.setScalar(t.s0 + (t.s1 - t.s0) * e);
+      if (t.sv1) t.obj.scale.lerpVectors(t.sv0, t.sv1, e);
       if (t.k >= 1) {
         this.tweens.splice(this.tweens.indexOf(t), 1);
         if (t.done) t.done();
@@ -822,6 +1069,7 @@ export class Game {
     for (const name of STATIONS) this.stations[name].update(dt);
     for (const p of this.pieces) p.update(dt);
     for (const s of this.tray) s.update(dt);
+    for (const r of this.rolls) r.update(dt);
     const dragging = this.stations.build.drag;
     if (dragging) dragging.slice.update(dt);
     if (this.customer) {
@@ -832,7 +1080,8 @@ export class Game {
         this.customer.impatience = Math.min(1, Math.max(0, waited / this.order.patience - 0.35) / 0.65);
         this.ui.patience(1 - waited / this.order.patience);
         if (this.customer.impatience > 0.7 && this.customer.expression === 'smile') this.customer.setExpression('flat');
-        if (this.customer.impatience > 0.6 && !this.order.warned) {
+        if (waited >= this.order.patience && this.order.taken !== undefined && this.mode === 'play' && !this.order.walked) this.walkout();
+        if (this.customer.impatience > 0.6 && !this.order.warned && !this.order.walked) {
           this.order.warned = true;
           this.ui.toast(`${this.order.look.name} is getting hungry. Speed up.`, 2600);
           this.sousSays({ jp: '急いで！', en: 'Hurry!' }, 'open', 900);
@@ -847,7 +1096,7 @@ export class Game {
 
     if (this.mode === 'play') {
       const showTicket = this.order && (this.order.taken || (this.customer && this.customer.seated));
-      this.ui.ticket(showTicket ? this.order : null, this.orderIndex + 1, showTicket ? this.order.pieces.map((_, i) => this.pieceProgress(this.pieces[i])) : []);
+      this.ui.ticket(showTicket ? this.order : null, this.orderIndex + 1, showTicket ? this.orderProgress() : []);
       const status = {};
       for (const s of STATIONS) status[s] = this.stations[s].status ? this.stations[s].status() : null;
       if (this.order && this.customer && this.customer.seated && !this.order.taken) status.counter = 'todo';
@@ -929,11 +1178,11 @@ function saveTier(t) {
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(`${GAME.storageKey}.progress`));
-    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, best: p.best || [] };
+    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, best: p.best || [], stars: p.stars || [] };
   } catch {
     // No saved progress.
   }
-  return { unlocked: 0, best: [] };
+  return { unlocked: 0, best: [], stars: [] };
 }
 
 function saveProgress(p) {
