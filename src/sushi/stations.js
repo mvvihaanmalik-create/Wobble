@@ -41,6 +41,7 @@ export class CounterStation extends Station {
 
   update() {
     const g = this.g;
+    if (g.station !== 'counter') return;
     if (g.serving) {
       g.ui.hint('');
       g.ui.actions([]);
@@ -118,18 +119,17 @@ export class RiceStation extends Station {
     }
     if (this.state === 'scooping') {
       this.value = Math.min(1, this.value + RICE.scoopRate * dt);
-      g.ui.meter('Scoop', this.value, RICE.scoopTarget, false, '');
+      if (g.station === 'rice') g.ui.meter('Scoop', this.value, RICE.scoopTarget, false, '');
       if (this.value >= 1) this.finishScoop();
     } else if (this.state === 'pressing') {
       this.value = Math.min(1, this.value + RICE.pressRate * dt);
       this.rice.body.userMode[1] = this.value * 0.3;
-      g.ui.meter('Press', this.value, RICE.pressGood, this.value > RICE.pressOver, this.dots());
+      if (g.station === 'rice') g.ui.meter('Press', this.value, RICE.pressGood, this.value > RICE.pressOver, this.dots());
       if (this.value >= 1) this.finishPress();
-    } else if (this.state === 'ready') {
-      g.ui.meter('Press', 0, RICE.pressGood, false, this.dots());
-    } else {
-      g.ui.meter(null);
     }
+    if (g.station !== 'rice') return;
+    if (this.state === 'ready') g.ui.meter('Press', 0, RICE.pressGood, false, this.dots());
+    else if (this.state !== 'scooping' && this.state !== 'pressing') g.ui.meter(null);
     // Hints.
     if (!g.order || !g.order.taken) g.ui.hint('Take an order at the counter first.');
     else if (this.state === 'idle' && this.needed > 0) g.ui.hint(`Hold to scoop rice. Let go in the green. (${g.pieces.length + 1} of ${g.order.pieces.length})`);

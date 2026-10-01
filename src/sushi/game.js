@@ -278,7 +278,11 @@ export class Game {
     const tip = tipFor(score.total, this.day);
     await this.wait(350);
     this.sound.whoosh();
-    await this.tweenP({ obj: g, to: new Vector3(0, 0, LAYOUT.counter.zCustomer + 1.6), duration: 0.8, arc: 0.3 });
+    // Back along the customer side of the counter, then across to the guest,
+    // so the board never passes through the cutting board.
+    const lane = LAYOUT.counter.zCustomer + 1.3;
+    await this.tweenP({ obj: g, to: new Vector3(home.x, 0, lane), duration: 0.35, arc: 0.4 });
+    await this.tweenP({ obj: g, to: new Vector3(0, 0, lane), duration: 0.6, arc: 0.15 });
     const c = this.customer;
     c.setExpression('open');
     c.body.userMode[2] = 0.18;
@@ -331,7 +335,9 @@ export class Game {
       c.dispose();
     });
     this.clearWork();
-    await this.tweenP({ obj: this.set.geta, to: home, duration: 0.6, arc: 0.2 });
+    const lane = this.set.geta.position.z;
+    await this.tweenP({ obj: this.set.geta, to: new Vector3(home.x, 0, lane), duration: 0.5, arc: 0.15 });
+    await this.tweenP({ obj: this.set.geta, to: home, duration: 0.3, arc: 0.2 });
     this.serving = false;
     this.nextCustomer();
   }
