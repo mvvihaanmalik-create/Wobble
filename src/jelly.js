@@ -11,7 +11,12 @@ const MAX_GRABS = 4;
 //     at the floor and chained to the neighboring letters.
 // Final position = rest + offset + mode displacement.
 export class SoftBody {
-  constructor(mesh) {
+  // opts.sim / opts.modes / opts.input override the defaults in config.js for
+  // this body only, so food and customers can feel different from letters.
+  constructor(mesh, opts = {}) {
+    this.sim = { ...SIM, ...opts.sim };
+    this.modes = { ...MODES, ...opts.modes };
+    this.input = { ...INPUT, ...opts.input };
     const N = mesh.positions.length / 3;
     this.N = N;
     this.rest = mesh.positions;
@@ -44,7 +49,7 @@ export class SoftBody {
       const h = Math.min(1.2, this.rest[i * 3 + 1] / g.height);
       this.h[i] = h;
       const low = Math.max(0, 1 - h * 2.2);
-      this.anchor[i] = 1 + SIM.anchor * low * low;
+      this.anchor[i] = 1 + this.sim.anchor * low * low;
     }
 
     this.buildAdjacency();
@@ -53,7 +58,7 @@ export class SoftBody {
 
     // Vertices close enough to the floor that they could be pushed through it.
     const low = [];
-    for (let i = 0; i < N; i++) if (this.rest[i * 3 + 1] < SIM.maxDisplacement + 0.02) low.push(i);
+    for (let i = 0; i < N; i++) if (this.rest[i * 3 + 1] < this.sim.maxDisplacement + 0.02) low.push(i);
     this.floorVerts = new Int32Array(low);
 
     // Per-letter modes: sway x, sway z, squash y, with velocities and targets.
@@ -139,8 +144,8 @@ export class SoftBody {
   // dent around it. That becomes outward pressure: push one spot in and the
   // surface around it bulges out, a cheap stand-in for volume preservation.
   buildGrid() {
-    const c = SIM.gridCell;
-    const pad = c * (SIM.gridBlur + 2);
+    const c = this.sim.gridCell;
+    const pad = c * (this.sim.gridBlur + 2);
     this.gx0 = -this.width / 2 - pad;
     this.gy0 = -pad;
     this.gw = Math.ceil((this.width + pad * 2) / c) + 2;
@@ -161,7 +166,7 @@ export class SoftBody {
       this.fy[i] = Math.min(1, Math.max(0, gy - iy));
     }
     this.gPress = new Float32Array(this.N);
-    const R = SIM.gridBlur;
+    const R = this.sim.gridBlur;
     this.kernel = new Float32Array(R * 2 + 1);
     let ks = 0;
     for (let k = -R; k <= R; k++) {
@@ -248,28 +253,28 @@ export class SoftBody {
 
   // Advance by a frame. weight is the optional falling weight collider.
   step(frameDt, weight) {
-    this.accum = Math.min(this.accum + frameDt, SIM.dt * SIM.maxSubsteps);
-    const steps = Math.floor(this.accum / SIM.dt);
+    this.accum = Math.min(this.accum + frameDt, this.sim.dt * this.sim.maxSubsteps);
+    const steps = Math.floor(this.accum / this.sim.dt);
     this.simulated = 0;
     if (steps === 0) return;
-    this.accum -= steps * SIM.dt;
-    this.simulated = steps * SIM.dt;
+    this.accum -= steps * this.sim.dt;
+    this.simulated = steps * this.sim.dt;
     const busy = (weight && weight.active) || this.grabs.some((g) => g.active);
     if (busy) this.wake();
     if (!this.asleep) this.updateGrid();
     for (let s = 0; s < steps; s++) {
-      this.time += SIM.dt;
-      if (!this.asleep) this.substep(SIM.dt);
-      this.stepModes(SIM.dt);
+      this.time += this.sim.dt;
+      if (!this.asleep) this.substep(this.sim.dt);
+      this.stepModes(this.sim.dt);
       if (weight && weight.active) {
-        weight.substep(SIM.dt, this);
+        weight.substep(this.sim.dt, this);
         this.collideWeight(weight);
       }
       if (!this.asleep) this.collideFloor();
     }
     this.measure();
     // Nothing moving and nothing holding it: park the per-vertex layer.
-    if (!this.asleep && !busy && this.vertexEnergy < SIM.sleepEnergy) {
+    if (!this.asleep && !busy && this.vertexEnergy < this.sim.sleepEnergy) {
       this.quiet += frameDt;
       if (this.quiet > 0.6) this.sleep();
     } else {
@@ -295,17 +300,17 @@ export class SoftBody {
   substep(dt) {
     const { N, u, v, w, restNormal: n, anchor, adjStart, adj, gPress } = this;
     const firm = this.params.firmness;
-    const k = SIM.spring * firm;
-    const c = SIM.damping * this.params.damping;
+    const k = this.sim.spring * firm;
+    const c = this.sim.damping * this.params.damping;
     // Neighbor stiffness is scaled so a poke spreads the same distance in em
     // whatever the mesh density turns out to be.
-    const kc = Math.min(SIM.coupling * firm * (0.035 / this.edge) ** 2, 0.35 / (dt * dt));
-    const beta = SIM.couplingViscosity / Math.max(kc, 1);
+    const kc = Math.min(this.sim.coupling * firm * (0.035 / this.edge) ** 2, 0.35 / (dt * dt));
+    const beta = this.sim.couplingViscosity / Math.max(kc, 1);
     this.beta = beta;
-    const kp = SIM.pressure * firm;
-    const maxD2 = SIM.maxDisplacement * SIM.maxDisplacement;
-    const soft2 = SIM.softLimit * SIM.softLimit;
-    const invSoftBand = 1 / (SIM.maxDisplacement - SIM.softLimit);
+    const kp = this.sim.pressure * firm;
+    const maxD2 = this.sim.maxDisplacement * this.sim.maxDisplacement;
+    const soft2 = this.sim.softLimit * this.sim.softLimit;
+    const invSoftBand = 1 / (this.sim.maxDisplacement - this.sim.softLimit);
     const wOut = this.w2;
 
     // Grab springs: pull each captured vertex toward weight * target offset.
@@ -338,8 +343,8 @@ export class SoftBody {
       const d0 = ux * ux + uy * uy + uz * uz;
       let ka = k * anchor[i];
       if (d0 > soft2) {
-        const over = (Math.sqrt(d0) - SIM.softLimit) * invSoftBand;
-        ka *= 1 + over * over * SIM.softStiffen;
+        const over = (Math.sqrt(d0) - this.sim.softLimit) * invSoftBand;
+        ka *= 1 + over * over * this.sim.softStiffen;
       }
       const p = kp * gPress[i];
       const ax = -ka * ux + kc * (lx * inv - w[i3]) + p * n[i3];
@@ -352,9 +357,9 @@ export class SoftBody {
       const d2 = nx * nx + ny * ny + nz * nz;
       if (d2 > maxD2) {
         // Clamp: pull back onto the limit and drop the outward velocity.
-        const f = SIM.maxDisplacement / Math.sqrt(d2);
+        const f = this.sim.maxDisplacement / Math.sqrt(d2);
         nx *= f; ny *= f; nz *= f;
-        const dir = (vx * nx + vy * ny + vz * nz) / (SIM.maxDisplacement * SIM.maxDisplacement);
+        const dir = (vx * nx + vy * ny + vz * nz) / (this.sim.maxDisplacement * this.sim.maxDisplacement);
         if (dir > 0) { vx -= dir * nx; vy -= dir * ny; vz -= dir * nz; }
       }
       u[i3] = nx; u[i3 + 1] = ny; u[i3 + 2] = nz;
@@ -369,27 +374,27 @@ export class SoftBody {
     const { G, mode, modeV, modeT, userMode } = this;
     const firm = this.params.firmness;
     const t = this.time;
-    const damp = Math.exp(-MODES.damping * this.params.damping * dt);
+    const damp = Math.exp(-this.modes.damping * this.params.damping * dt);
     for (let g = 0; g < G; g++) {
       const ph = g * 1.7;
       const gm = this.grabMode;
-      modeT[g * 3] = MODES.tremble * Math.sin(t * 0.83 + ph) + userMode[0] + gm[g * 3];
-      modeT[g * 3 + 1] = MODES.breathing * Math.sin(t * MODES.breathingRate + g * 0.35) + userMode[1] + gm[g * 3 + 1];
-      modeT[g * 3 + 2] = MODES.tremble * 0.7 * Math.sin(t * 0.61 + ph * 1.3) + userMode[2] + gm[g * 3 + 2];
+      modeT[g * 3] = this.modes.tremble * Math.sin(t * 0.83 + ph) + userMode[0] + gm[g * 3];
+      modeT[g * 3 + 1] = this.modes.breathing * Math.sin(t * this.modes.breathingRate + g * 0.35) + userMode[1] + gm[g * 3 + 1];
+      modeT[g * 3 + 2] = this.modes.tremble * 0.7 * Math.sin(t * 0.61 + ph * 1.3) + userMode[2] + gm[g * 3 + 2];
     }
     for (let g = 0; g < G; g++) {
       for (let a = 0; a < 3; a++) {
         const o = g * 3 + a;
-        const k = (a === 1 ? MODES.squashSpring : MODES.shearSpring) * firm;
+        const k = (a === 1 ? this.modes.squashSpring : this.modes.shearSpring) * firm;
         let acc = -k * (mode[o] - modeT[o]);
-        if (g > 0) acc += MODES.neighborCoupling * (mode[o - 3] - mode[o]);
-        if (g < G - 1) acc += MODES.neighborCoupling * (mode[o + 3] - mode[o]);
+        if (g > 0) acc += this.modes.neighborCoupling * (mode[o - 3] - mode[o]);
+        if (g < G - 1) acc += this.modes.neighborCoupling * (mode[o + 3] - mode[o]);
         modeV[o] = (modeV[o] + acc * dt) * damp;
       }
     }
     for (let o = 0; o < G * 3; o++) {
       mode[o] += modeV[o] * dt;
-      const lim = o % 3 === 1 ? MODES.maxSquash : MODES.maxShear;
+      const lim = o % 3 === 1 ? this.modes.maxSquash : this.modes.maxShear;
       if (mode[o] > lim) { mode[o] = lim; if (modeV[o] > 0) modeV[o] *= -0.3; }
       if (mode[o] < -lim) { mode[o] = -lim; if (modeV[o] < 0) modeV[o] *= -0.3; }
     }
@@ -397,7 +402,7 @@ export class SoftBody {
 
   collideFloor() {
     const { u, v, rest, md, floorVerts } = this;
-    const fr = 1 - SIM.floorFriction;
+    const fr = 1 - this.sim.floorFriction;
     for (let q = 0; q < floorVerts.length; q++) {
       const i3 = floorVerts[q] * 3;
       const y = rest[i3 + 1] + u[i3 + 1] + md[i3 + 1];
@@ -467,6 +472,37 @@ export class SoftBody {
     for (const g of this.grabs) g.active = false;
   }
 
+  // Swap in a new rest shape with the same topology (rice being pressed,
+  // fish settling over rice). Offsets and velocities carry over, so the
+  // change itself wobbles. Skip the grid rebuild while animating a morph.
+  setRest(positions, rebuildGrid = true) {
+    const { N, rest } = this;
+    rest.set(positions);
+    computeNormals(rest, this.index, this.restNormal);
+    let maxAbsX = 0;
+    for (const g of this.glyphs) g.height = 1e-3;
+    for (let i = 0; i < N; i++) {
+      const g = this.glyphs[this.glyphOf[i]];
+      maxAbsX = Math.max(maxAbsX, Math.abs(rest[i * 3]));
+      g.height = Math.max(g.height, rest[i * 3 + 1]);
+    }
+    this.width = maxAbsX * 2;
+    this.height = Math.max(...this.glyphs.map((g) => g.height));
+    for (let i = 0; i < N; i++) {
+      const h = Math.min(1.2, rest[i * 3 + 1] / this.glyphs[this.glyphOf[i]].height);
+      this.h[i] = h;
+      const low = Math.max(0, 1 - h * 2.2);
+      this.anchor[i] = 1 + this.sim.anchor * low * low;
+    }
+    if (rebuildGrid) {
+      this.buildGrid();
+      const lowVerts = [];
+      for (let i = 0; i < N; i++) if (rest[i * 3 + 1] < this.sim.maxDisplacement + 0.02) lowVerts.push(i);
+      this.floorVerts = new Int32Array(lowVerts);
+    }
+    this.showingRestNormals = false;
+  }
+
   // Mode displacement plus final positions and normals, written for the GPU.
   compose() {
     const { N, rest, u, md, out, glyphOf, glyphs, h, mode } = this;
@@ -518,7 +554,7 @@ export class SoftBody {
     const cut = (radius * 3) ** 2;
     for (let i = 0; i < N; i++) {
       const i3 = i * 3;
-      const ex = rest[i3] - px, ey = rest[i3 + 1] - py, ez = (rest[i3 + 2] - pz) * SIM.depthFalloff;
+      const ex = rest[i3] - px, ey = rest[i3 + 1] - py, ez = (rest[i3 + 2] - pz) * this.sim.depthFalloff;
       const d2 = ex * ex + ey * ey + ez * ez;
       if (d2 > cut) continue;
       const f = strength * Math.exp(-d2 * inv2);
@@ -551,19 +587,19 @@ export class SoftBody {
 
   // Start a grab around a rest-space point, limited to one letter so a pull
   // never drags the neighbors along. Returns a slot index or -1.
-  grab(px, py, pz, glyph, stiffness = INPUT.grabStiffness) {
+  grab(px, py, pz, glyph, stiffness = this.input.grabStiffness) {
     const slot = this.grabs.findIndex((g) => !g.active);
     if (slot < 0) return -1;
     const g = this.grabs[slot];
     const { N, rest, glyphOf } = this;
     // Candidates out to the widest the kernel can grow to; weights are
     // recomputed as the pull changes.
-    const cut = (INPUT.grabRadius * 1.5 * 2.6) ** 2;
+    const cut = (this.input.grabRadius * 1.5 * 2.6) ** 2;
     let n = 0;
     for (let i = 0; i < N; i++) {
       if (glyphOf[i] !== glyph) continue;
       const i3 = i * 3;
-      const ex = rest[i3] - px, ey = rest[i3 + 1] - py, ez = (rest[i3 + 2] - pz) * SIM.depthFalloff;
+      const ex = rest[i3] - px, ey = rest[i3 + 1] - py, ez = (rest[i3 + 2] - pz) * this.sim.depthFalloff;
       const d2 = ex * ex + ey * ey + ez * ez;
       if (d2 > cut) continue;
       g.idx[n] = i;
@@ -577,7 +613,7 @@ export class SoftBody {
     g.hh = Math.min(1.2, Math.max(0.3, py / this.glyphs[glyph].height));
     g.D.fill(0);
     g.sigma = 0;
-    this.weighGrab(g, INPUT.grabRadius);
+    this.weighGrab(g, this.input.grabRadius);
     g.active = n > 0;
     if (g.active) this.wake();
     return g.active ? slot : -1;
@@ -594,14 +630,14 @@ export class SoftBody {
   // lean and stretch take a share of it (anchored at the floor, so it reads
   // as the whole letter giving way); the local surface pull does the rest.
   // The kernel widens with distance so the trailing side never folds over.
-  setGrabTarget(slot, dx, dy, dz, share = INPUT.leanShare) {
+  setGrabTarget(slot, dx, dy, dz, share = this.input.leanShare) {
     const g = this.grabs[slot];
     if (!g || !g.active) return;
     const o = g.glyph * 3;
     const hs = g.hh * g.hh;
-    const lx = Math.max(-MODES.maxShear, Math.min(MODES.maxShear, (dx * share) / hs));
-    const lz = Math.max(-MODES.maxShear, Math.min(MODES.maxShear, (dz * share) / hs));
-    const ly = Math.max(-MODES.maxSquash, Math.min(MODES.maxSquash, -(dy * share) / g.hy));
+    const lx = Math.max(-this.modes.maxShear, Math.min(this.modes.maxShear, (dx * share) / hs));
+    const lz = Math.max(-this.modes.maxShear, Math.min(this.modes.maxShear, (dz * share) / hs));
+    const ly = Math.max(-this.modes.maxSquash, Math.min(this.modes.maxSquash, -(dy * share) / g.hy));
     this.grabMode[o] += lx;
     this.grabMode[o + 1] += ly;
     this.grabMode[o + 2] += lz;
@@ -609,12 +645,12 @@ export class SoftBody {
     const rx = dx - lx * hs;
     const ry = dy + ly * g.hy;
     const rz = dz - lz * hs;
-    const comp = 1 + SIM.spring / g.k;
+    const comp = 1 + this.sim.spring / g.k;
     g.D[0] = rx * comp;
     g.D[1] = ry * comp;
     g.D[2] = rz * comp;
     const len = Math.hypot(g.D[0], g.D[1], g.D[2]);
-    this.weighGrab(g, Math.min(INPUT.grabRadius * 1.5, Math.max(INPUT.grabRadius, len * 1.3)));
+    this.weighGrab(g, Math.min(this.input.grabRadius * 1.5, Math.max(this.input.grabRadius, len * 1.3)));
   }
 
   release(slot) {

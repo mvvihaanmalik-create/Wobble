@@ -1,0 +1,581 @@
+import {
+  BufferAttribute,
+  CapsuleGeometry,
+  CatmullRomCurve3,
+  Group,
+  IcosahedronGeometry,
+  InstancedMesh,
+  Matrix4,
+  Mesh,
+  Object3D,
+  Quaternion,
+  TorusGeometry,
+  TubeGeometry,
+  Vector3,
+} from 'three';
+import { bakeFoodCoords, foodMaterial, plain } from './materials.js';
+import { bodyMesh, extrudedSolid, lumpNoise, Squishy, unitSphere } from './meshes.js';
+import { mulberry } from './set.js';
+
+// Shared materials and geometry, created once.
+let M = null;
+function mats() {
+  if (M) return M;
+  const grainGeo = new CapsuleGeometry(0.038, 0.11, 2, 6);
+  grainGeo.scale(1, 1, 0.7);
+  grainGeo.setAttribute('aFood', new BufferAttribute(bakeFoodCoords(grainGeo, 4), 3));
+  M = {
+    rice: foodMaterial('rice'),
+    grain: foodMaterial('rice', { roughness: 0.4, clearcoat: 0.45 }),
+    grainGeo,
+    salmon: foodMaterial('salmon'),
+    tuna: foodMaterial('tuna'),
+    tamago: (() => {
+      const t = foodMaterial('tamago');
+      t.userData.uniforms.uParam.value.x = BLOCKS.tamago.H;
+      return t;
+    })(),
+    wasabi: foodMaterial('wasabi'),
+    ikura: plain.ikura(),
+    yolk: plain.yolk(),
+    sesame: plain.sesame(),
+    scallion: plain.scallion(),
+    sauce: plain.sauce(),
+    roeGeo: new IcosahedronGeometry(0.12, 3),
+    yolkGeo: new IcosahedronGeometry(0.045, 1),
+    seedGeo: (() => {
+      const g = new IcosahedronGeometry(0.035, 1);
+      g.scale(1, 0.5, 1.7);
+      return g;
+    })(),
+    ringGeo: new TorusGeometry(0.075, 0.03, 6, 16),
+  };
+  return M;
+}
+
+const UP = new Vector3(0, 1, 0);
+const _o = new Object3D();
+const _n = new Vector3();
+const _t = new Vector3();
+const _p = new Vector3();
+const _q = new Quaternion();
+
+// ---------------------------------------------------------------------------
+// Rice: starts as a loose clump, each press moves it toward a neat nigiri
+// mound. Pressing too hard squashes it flat. The surface is a soft body and
+// real grains ride on top of it.
+
+const RICE_SIM = {
+  sim: { spring: 260, damping: 4, coupling: 2600, pressure: 70, softLimit: 0.12, maxDisplacement: 0.24, gridCell: 0.075, depthFalloff: 0.8 },
+  modes: { shearSpring: 95, squashSpring: 130, damping: 3.4, maxShear: 0.14, maxSquash: 0.38, breathing: 0, tremble: 0.0006 },
+};
+
+export class RiceMound {
+  constructor(scoop, seed = 1) {
+    const m = mats();
+    this.scoop = scoop;
+    const s = 0.8 + scoop * 0.45;
+    this.size = s;
+    const base = unitSphere(13);
+    this.idx = base.idx;
+    const noise = lumpNoise(seed);
+    this.shapes = {
+      clump: shapeFrom(base.pos, (x, y, z) => {
+        const r = 1 + 0.17 * noise(x * 1.3, y * 1.3, z * 1.3) + 0.05 * noise(x * 4, y * 4, z * 4);
+        const yy = Math.max(-0.55, y * r);
+        return [x * r * 0.74 * s, yy > 0 ? yy * 0.72 * s : yy * 0.45 * s, z * r * 0.62 * s];
+      }),
+      formed: shapeFrom(base.pos, (x, y, z) => [
+        sp(x, 0.72) * 1.08 * s,
+        y > 0 ? Math.pow(y, 0.85) * 0.74 * s : y * 0.07 * s,
+        sp(z, 0.72) * 0.5 * s,
+      ]),
+      flat: shapeFrom(base.pos, (x, y, z) => [sp(x, 0.62) * 1.3 * s, y > 0 ? Math.pow(y, 0.7) * 0.36 * s : y * 0.05 * s, sp(z, 0.62) * 0.64 * s]),
+    };
+    const start = this.shapes.clump.slice();
+    const mesh = bodyMesh(start, this.idx);
+    this.squishy = new Squishy(mesh, m.rice, RICE_SIM, bakeFoodCoords({ attributes: { position: { array: start } } }, 1));
+    this.body = this.squishy.body;
+    this.group = new Group();
+    this.group.add(this.squishy.mesh);
+    this.formed = 0;
+    this.over = 0;
+    this.presses = [];
+    this.morph = null;
+
+    // Grains: tied to random vertices on the upper surface.
+    const rand = mulberry(seed * 13 + 5);
+    const cand = [];
+    for (let i = 0; i < this.body.N; i++) if (start[i * 3 + 1] > this.body.height * 0.18) cand.push(i);
+    const n = 230;
+    this.grains = new InstancedMesh(m.grainGeo, m.grain, n);
+    this.grains.castShadow = true;
+    this.grainVerts = new Int32Array(n);
+    this.grainDirs = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) {
+      this.grainVerts[k] = cand[Math.floor(rand() * cand.length)];
+      const d = new Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize();
+      d.toArray(this.grainDirs, k * 3);
+    }
+    this.group.add(this.grains);
+    this.updateGrains();
+  }
+
+  // Blend toward the formed shape (0..1), then toward flat by `over`.
+  targetShape(formed, over) {
+    const { clump, formed: f, flat } = this.shapes;
+    const out = new Float32Array(clump.length);
+    for (let i = 0; i < out.length; i++) {
+      const a = clump[i] + (f[i] - clump[i]) * formed;
+      out[i] = a + (flat[i] - a) * over;
+    }
+    return out;
+  }
+
+  // One press. quality 0..1 (how well timed), over 0..1 (how much too hard).
+  press(quality, over) {
+    this.presses.push({ quality, over });
+    const from = this.targetShape(this.formed, this.over);
+    this.formed = Math.min(1, this.formed + 0.2 + 0.2 * quality);
+    this.over = Math.min(1, this.over + over * 0.45);
+    const to = this.targetShape(this.formed, this.over);
+    this.morph = { from, to, t: 0, len: 0.22 };
+    this.body.kickAll(0, 2.2 + over * 2, 0);
+    this.body.impulse(0, this.body.height, 0, 0, -1, 0, 1.2, 0.6);
+  }
+
+  update(dt) {
+    dt = Math.max(0, dt);
+    if (this.morph) {
+      const mo = this.morph;
+      mo.t = Math.min(1, mo.t + dt / mo.len);
+      const k = 1 - Math.pow(1 - mo.t, 3);
+      const cur = new Float32Array(mo.from.length);
+      for (let i = 0; i < cur.length; i++) cur[i] = mo.from[i] + (mo.to[i] - mo.from[i]) * k;
+      this.body.setRest(cur, mo.t === 1);
+      if (mo.t === 1) {
+        this.morph = null;
+        this.squishy.refreshBounds();
+      }
+    }
+    this.squishy.step(dt);
+    this.updateGrains();
+  }
+
+  updateGrains() {
+    const { out, normal } = this.body;
+    for (let k = 0; k < this.grainVerts.length; k++) {
+      const i3 = this.grainVerts[k] * 3;
+      _n.set(normal[i3], normal[i3 + 1], normal[i3 + 2]);
+      _t.fromArray(this.grainDirs, k * 3);
+      _t.addScaledVector(_n, -_t.dot(_n)).normalize();
+      _q.setFromUnitVectors(UP, _t);
+      _o.position.set(out[i3] + _n.x * 0.012, out[i3 + 1] + _n.y * 0.012, out[i3 + 2] + _n.z * 0.012);
+      _o.quaternion.copy(_q);
+      _o.scale.setScalar(1);
+      _o.updateMatrix();
+      this.grains.setMatrixAt(k, _o.matrix);
+    }
+    this.grains.instanceMatrix.needsUpdate = true;
+  }
+
+  // Top of the rice at its center, in its own space.
+  get top() {
+    return this.body.height;
+  }
+
+  get halfLength() {
+    return this.body.width / 2;
+  }
+
+  // 0..1: shape (well formed, not squashed) and press timing.
+  shapeScore() {
+    const timing = this.presses.length ? this.presses.reduce((s, p) => s + p.quality, 0) / this.presses.length : 0;
+    return Math.max(0, Math.min(1, this.formed * 0.55 + timing * 0.45 - this.over * 0.7));
+  }
+
+  dispose() {
+    this.squishy.dispose();
+  }
+}
+
+function sp(v, e) {
+  return Math.sign(v) * Math.pow(Math.abs(v), e);
+}
+
+function shapeFrom(unit, fn) {
+  const out = new Float32Array(unit.length);
+  let minY = Infinity;
+  for (let i = 0; i < unit.length; i += 3) {
+    const [x, y, z] = fn(unit[i], unit[i + 1], unit[i + 2]);
+    out[i] = x;
+    out[i + 1] = y;
+    out[i + 2] = z;
+    minY = Math.min(minY, y);
+  }
+  for (let i = 1; i < out.length; i += 3) out[i] -= minY;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Fish blocks and slices. Everything is built in block space: x along the
+// block (0 at the far left end), y up, z across. The pattern coordinates are
+// block space too, so a slice shows exactly the grain that was in the block.
+
+export const BLOCKS = {
+  salmon: { L: 7, H: 1.6, D: 1.15, angle: 45, thickness: 0.42 },
+  tuna: { L: 7, H: 1.6, D: 1.15, angle: 45, thickness: 0.42 },
+  tamago: { L: 7, H: 2.3, D: 1.15, angle: 0, thickness: 0.62 },
+};
+
+const BLOCK_SIM = {
+  sim: { spring: 300, softLimit: 0.06, maxDisplacement: 0.12, pressure: 40, gridCell: 0.12 },
+  modes: { shearSpring: 140, squashSpring: 180, maxShear: 0.05, maxSquash: 0.06, breathing: 0, tremble: 0 },
+};
+
+export class FishBlock {
+  constructor(kind) {
+    this.kind = kind;
+    const b = BLOCKS[kind];
+    this.L = b.L;
+    this.H = b.H;
+    this.D = b.D;
+    // The end comes pre-trimmed at the ideal angle.
+    const lean = Math.tan((b.angle * Math.PI) / 180) * b.H;
+    this.end = [b.L - lean, b.L];
+    this.group = new Group();
+    this.rebuild();
+  }
+
+  outline() {
+    return [
+      [0, 0],
+      [this.end[0], 0],
+      [this.end[1], this.H],
+      [0, this.H],
+    ];
+  }
+
+  rebuild() {
+    if (this.squishy) {
+      this.group.remove(this.squishy.mesh);
+      this.squishy.dispose();
+    }
+    const solid = extrudedSolid(this.outline(), this.D, { bevel: 0.06, maxEdge: 0.16 });
+    const food = solid.pos.slice();
+    const mesh = bodyMesh(solid.pos, solid.idx);
+    this.shift = mesh.shift;
+    const mat = mats()[this.kind];
+    this.squishy = new Squishy(mesh, mat, BLOCK_SIM, food);
+    this.squishy.mesh.position.set(this.shift[0], this.shift[1], this.shift[2]);
+    this.group.add(this.squishy.mesh);
+  }
+
+  // Remaining length along the bottom edge.
+  get remaining() {
+    return this.end[0];
+  }
+
+  update(dt) {
+    this.squishy.step(dt);
+  }
+
+  wobble(s = 1) {
+    this.squishy.body.kickAll(0.3 * s, 0.8 * s, 0);
+  }
+}
+
+const SLICE_SIM = {
+  sim: { spring: 200, damping: 4.5, coupling: 2200, pressure: 30, softLimit: 0.07, maxDisplacement: 0.16, gridCell: 0.07, depthFalloff: 0.9, anchor: 0.6 },
+  modes: { shearSpring: 70, squashSpring: 110, damping: 3, maxShear: 0.12, maxSquash: 0.2, breathing: 0, tremble: 0.0008 },
+};
+
+export class FishSlice {
+  // quad: block-space outline of the slice. Builds the slice in block space,
+  // then re-expresses it in its own frame: x along the cut, y through the
+  // thickness, z across.
+  constructor(kind, quad, D) {
+    this.kind = kind;
+    const solid = extrudedSolid(quad, D, { bevel: 0.035, maxEdge: 0.12 });
+    const food = solid.pos.slice();
+    const [p0, , , p3] = quad;
+    const d = new Vector3(p3[0] - p0[0], p3[1] - p0[1], 0).normalize();
+    const n = new Vector3(-d.y, d.x, 0);
+    const local = new Float32Array(solid.pos.length);
+    for (let i = 0; i < local.length; i += 3) {
+      const x = solid.pos[i] - p0[0];
+      const y = solid.pos[i + 1] - p0[1];
+      local[i] = x * d.x + y * d.y;
+      local[i + 1] = x * n.x + y * n.y;
+      local[i + 2] = solid.pos[i + 2];
+    }
+    const mesh = bodyMesh(local, solid.idx);
+    this.flat = mesh.positions.slice();
+    // Where the slice sat inside the block, for the cut animation.
+    const s = mesh.shift;
+    this.blockPose = {
+      position: new Vector3(p0[0] + d.x * s[0] + n.x * s[1], p0[1] + d.y * s[0] + n.y * s[1], s[2]),
+      quaternion: new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(d, n, new Vector3(0, 0, 1))),
+    };
+    this.squishy = new Squishy(mesh, mats()[kind], SLICE_SIM, food);
+    this.body = this.squishy.body;
+    this.group = new Group();
+    this.group.add(this.squishy.mesh);
+    this.length = mesh.width;
+    this.thickness = mesh.height;
+    this.width = mesh.depth;
+    this.morph = null;
+    this.toppings = new Toppings(this);
+    this.group.add(this.toppings.group);
+  }
+
+  // Bend over a rice mound whose top is `top` high and `half` long, so the
+  // ends droop and the middle hugs the rice.
+  drapeShape(top, half, halfWidth) {
+    const out = this.flat.slice();
+    const t = this.thickness;
+    for (let i = 0; i < out.length; i += 3) {
+      const x = out[i];
+      const z = out[i + 2];
+      const q = Math.abs(x) / (half * 1.12);
+      let base = top * Math.pow(Math.max(0, 1 - Math.pow(q, 2.4)), 0.5);
+      base = Math.max(base, top * 0.22 * Math.exp(-(q - 1) * 1.5));
+      base -= top * 0.18 * Math.pow(Math.min(1, Math.abs(z) / (halfWidth * 1.15)), 2);
+      out[i + 1] = Math.max(0, base - t * 0.35) + out[i + 1];
+    }
+    return out;
+  }
+
+  drapeOver(rice, seconds = 0.35) {
+    const shape = this.drapeShape(rice.top, rice.halfLength, rice.body.depth / 2);
+    this.morph = { from: this.currentRest(), to: shape, t: 0, len: seconds };
+    this.body.kickAll(0, 1.6, 0);
+  }
+
+  lieFlat(seconds = 0.25) {
+    this.morph = { from: this.currentRest(), to: this.flat.slice(), t: 0, len: seconds };
+  }
+
+  currentRest() {
+    return this.body.rest.slice();
+  }
+
+  update(dt) {
+    dt = Math.max(0, dt);
+    if (this.morph) {
+      const mo = this.morph;
+      mo.t = Math.min(1, mo.t + dt / mo.len);
+      const k = 1 - Math.pow(1 - mo.t, 3);
+      const cur = new Float32Array(mo.from.length);
+      for (let i = 0; i < cur.length; i++) cur[i] = mo.from[i] + (mo.to[i] - mo.from[i]) * k;
+      this.body.setRest(cur, mo.t === 1);
+      if (mo.t === 1) {
+        this.morph = null;
+        this.squishy.refreshBounds();
+      }
+    }
+    this.squishy.step(dt);
+    this.toppings.update();
+  }
+
+  dispose() {
+    this.squishy.dispose();
+    this.toppings.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Toppings ride on the slice: each item is pinned to a slice vertex and
+// follows it as the fish wobbles.
+
+export class Toppings {
+  constructor(slice) {
+    const m = mats();
+    this.slice = slice;
+    this.group = new Group();
+    this.roe = new InstancedMesh(m.roeGeo, m.ikura, 12);
+    this.yolk = new InstancedMesh(m.yolkGeo, m.yolk, 12);
+    this.seeds = new InstancedMesh(m.seedGeo, m.sesame, 90);
+    this.rings = new InstancedMesh(m.ringGeo, m.scallion, 30);
+    for (const im of [this.roe, this.yolk, this.seeds, this.rings]) {
+      im.count = 0;
+      im.castShadow = true;
+      im.frustumCulled = false;
+      this.group.add(im);
+    }
+    this.items = { roe: [], seeds: [], rings: [] };
+    this.sauce = null;
+    this.sauceVerts = [];
+    this.pop = [];
+  }
+
+  // Nearest upward-facing vertex to a point in slice space.
+  anchor(x, z) {
+    const { out, normal, N } = this.slice.body;
+    let best = 0;
+    let bd = Infinity;
+    for (let i = 0; i < N; i++) {
+      if (normal[i * 3 + 1] < 0.5) continue;
+      const d = (out[i * 3] - x) ** 2 + (out[i * 3 + 2] - z) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  addRoe(x, z) {
+    if (this.items.roe.length >= 12) return false;
+    this.items.roe.push({ v: this.anchor(x, z), born: performance.now(), lift: 0.1, spin: Math.random() * 6 });
+    return true;
+  }
+
+  addSesame(x, z) {
+    if (this.items.seeds.length >= 90) return false;
+    for (let k = 0; k < 15 && this.items.seeds.length < 90; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 0.4;
+      this.items.seeds.push({ v: this.anchor(x + Math.cos(a) * r, z + Math.sin(a) * r * 0.6), born: performance.now(), lift: 0.02, spin: Math.random() * 6 });
+    }
+    return true;
+  }
+
+  addScallion(x, z) {
+    if (this.items.rings.length >= 30) return false;
+    for (let k = 0; k < 5 && this.items.rings.length < 30; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 0.35;
+      this.items.rings.push({ v: this.anchor(x + Math.cos(a) * r, z + Math.sin(a) * r * 0.6), born: performance.now(), lift: 0.03, spin: Math.random() * 6 });
+    }
+    return true;
+  }
+
+  // Sauce stroke: points in slice space, pinned to vertices.
+  addSaucePoint(x, z) {
+    const v = this.anchor(x, z);
+    if (this.sauceVerts[this.sauceVerts.length - 1] === v) return;
+    this.sauceVerts.push(v);
+    this.rebuildSauce();
+  }
+
+  rebuildSauce() {
+    if (this.sauce) {
+      this.group.remove(this.sauce);
+      this.sauce.geometry.dispose();
+    }
+    if (this.sauceVerts.length < 2) return;
+    const { out, normal } = this.slice.body;
+    const pts = this.sauceVerts.map((v) => new Vector3(out[v * 3] + normal[v * 3] * 0.03, out[v * 3 + 1] + normal[v * 3 + 1] * 0.03, out[v * 3 + 2] + normal[v * 3 + 2] * 0.03));
+    const curve = new CatmullRomCurve3(pts);
+    const geo = new TubeGeometry(curve, Math.min(120, pts.length * 6), 0.045, 8, false);
+    this.sauce = new Mesh(geo, mats().sauce);
+    this.sauce.castShadow = true;
+    this.group.add(this.sauce);
+  }
+
+  get counts() {
+    return { ikura: this.items.roe.length, sesame: this.items.seeds.length > 0, scallion: this.items.rings.length > 0, sauce: this.sauceVerts.length >= 4 };
+  }
+
+  update() {
+    const { out, normal } = this.slice.body;
+    const now = performance.now();
+    const place = (inst, list, scale, extra) => {
+      list.forEach((it, k) => {
+        const i3 = it.v * 3;
+        _n.set(normal[i3], normal[i3 + 1], normal[i3 + 2]);
+        const age = Math.min(1, (now - it.born) / 220);
+        const pop = age < 1 ? 1 + Math.sin(age * Math.PI) * 0.35 : 1;
+        _p.set(out[i3], out[i3 + 1], out[i3 + 2]).addScaledVector(_n, it.lift * scale);
+        _o.position.copy(_p);
+        _o.position.y += (1 - age) * 0.5;
+        _o.quaternion.setFromUnitVectors(UP, _n);
+        _o.rotateY(it.spin);
+        if (extra) extra(_o, it);
+        _o.scale.setScalar(scale * pop);
+        _o.updateMatrix();
+        inst.setMatrixAt(k, _o.matrix);
+      });
+      inst.count = list.length;
+      inst.instanceMatrix.needsUpdate = true;
+    };
+    place(this.roe, this.items.roe, 1);
+    place(this.yolk, this.items.roe, 1, (o) => o.translateX(0.035).translateY(0.02));
+    place(this.seeds, this.items.seeds, 1);
+    place(this.rings, this.items.rings, 1, (o) => o.rotateX(Math.PI / 2));
+  }
+
+  dispose() {
+    if (this.sauce) this.sauce.geometry.dispose();
+  }
+}
+
+// A dab of wasabi on the rice, under the fish.
+export function wasabiDab(seed) {
+  const g = new IcosahedronGeometry(0.16, 4);
+  const noise = lumpNoise(seed);
+  const p = g.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    const r = 1 + 0.25 * noise(p[i] * 8, p[i + 1] * 8, p[i + 2] * 8);
+    p[i] *= r * 1.3;
+    p[i + 1] *= r * 0.55;
+    p[i + 2] *= r;
+  }
+  g.computeVertexNormals();
+  g.setAttribute('aFood', new BufferAttribute(bakeFoodCoords(g, 1), 3));
+  const m = new Mesh(g, mats().wasabi);
+  m.castShadow = true;
+  return m;
+}
+
+// One nigiri being assembled on the serving board.
+export class Piece {
+  constructor(rice) {
+    this.rice = rice;
+    this.slice = null;
+    this.wasabi = [];
+    this.group = new Group();
+    this.group.add(rice.group);
+    this.fishGroup = new Group();
+    this.group.add(this.fishGroup);
+    this.placement = null; // offset and angle of the fish when dropped
+  }
+
+  addWasabi() {
+    if (this.slice || this.wasabi.length >= 3) return false;
+    const d = wasabiDab(this.wasabi.length + 3);
+    const k = this.wasabi.length;
+    d.position.set((k - 1) * 0.28, this.rice.top - 0.05, 0);
+    d.scale.setScalar(0.01);
+    d.userData.born = performance.now();
+    this.wasabi.push(d);
+    this.group.add(d);
+    return true;
+  }
+
+  setSlice(slice, dx, angle) {
+    this.slice = slice;
+    this.placement = { dx, angle };
+    slice.group.position.set(dx, 0, 0);
+    slice.group.rotation.set(0, angle, 0);
+    this.fishGroup.add(slice.group);
+    slice.drapeOver(this.rice);
+  }
+
+  update(dt) {
+    this.rice.update(dt);
+    if (this.slice) this.slice.update(dt);
+    const now = performance.now();
+    for (const d of this.wasabi) {
+      const a = Math.min(1, (now - d.userData.born) / 200);
+      d.scale.setScalar(a < 1 ? 0.2 + 0.8 * a + Math.sin(a * Math.PI) * 0.25 : 1);
+      d.position.y = this.rice.top - 0.06;
+    }
+  }
+
+  dispose() {
+    this.rice.dispose();
+    if (this.slice) this.slice.dispose();
+  }
+}

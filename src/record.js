@@ -35,7 +35,7 @@ export function pickMimeType(withAudio) {
 }
 
 export function outputSize(aspect) {
-  const a = RECORD.aspects[aspect] || 9 / 16;
+  const a = typeof aspect === 'number' ? aspect : RECORD.aspects[aspect] || 9 / 16;
   const long = RECORD.longSide;
   let w;
   let h;
@@ -53,7 +53,7 @@ export function outputSize(aspect) {
 
 // The largest centered crop of the canvas with the given aspect, CSS pixels.
 export function cropRect(canvasW, canvasH, aspect) {
-  const a = RECORD.aspects[aspect] || 9 / 16;
+  const a = typeof aspect === 'number' ? aspect : RECORD.aspects[aspect] || 9 / 16;
   let w = canvasW;
   let h = w / a;
   if (h > canvasH) {
@@ -129,6 +129,8 @@ export class Recorder {
     this.ctx = this.canvas.getContext('2d');
     this.state = 'idle';
     this.pendingShot = null;
+    // Swap this to draw a different overlay (same signature as composite).
+    this.compose = composite;
   }
 
   get busy() {
@@ -187,7 +189,7 @@ export class Recorder {
 
   // Call right after rendering, while the WebGL buffer is still valid.
   capture(info) {
-    if (this.state === 'recording') composite(this.ctx, this.canvas.width, this.canvas.height, this.gl, this.crop, info);
+    if (this.state === 'recording') this.compose(this.ctx, this.canvas.width, this.canvas.height, this.gl, this.crop, info);
     if (this.pendingShot) {
       const { aspect, crop, resolve } = this.pendingShot;
       this.pendingShot = null;
@@ -196,7 +198,7 @@ export class Recorder {
       const scale = 1.5;
       c.width = Math.round(w * scale);
       c.height = Math.round(h * scale);
-      composite(c.getContext('2d'), c.width, c.height, this.gl, crop, info);
+      this.compose(c.getContext('2d'), c.width, c.height, this.gl, crop, info);
       c.toBlob((blob) => resolve({ blob, type: 'image/png', ext: 'png' }), 'image/png');
     }
   }

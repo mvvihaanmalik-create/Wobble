@@ -3,130 +3,87 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#f6f1e8" />
-    <meta name="description" content="Type a word. It turns into jelly. Poke it until it gives." />
-    <title>Squish.</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23ffb347'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#1b120d" />
+    <meta name="description" content="A tiny sushi bar where everything wobbles. Scoop, press, slice and plate nigiri for jelly customers." />
+    <title>Squishi.</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='14' rx='7' fill='%23fbf8f0'/%3E%3Cpath d='M3 15c4-7 22-7 26 0v3H3z' fill='%23ff7a45'/%3E%3C/svg%3E" />
   </head>
   <body>
-    <canvas id="gl" aria-label="A jelly version of your word. Drag, tap or double tap it."></canvas>
-    <div id="stage" aria-hidden="true"></div>
+    <canvas id="gl" aria-label="The sushi counter. Tap, hold and swipe to work each station."></canvas>
 
-    <header class="masthead">
-      <h1 class="title">Squish.</h1>
-      <p class="tagline">Type the problem. Poke it until it gives.</p>
-      <p class="hint mono">Drag to pull. Tap to poke. Double tap to drop a weight.</p>
-    </header>
+    <div id="hud" hidden>
+      <header class="topbar">
+        <div class="brand">
+          <span class="logo">Squishi.</span>
+          <span class="mono" id="dayLabel">Day 1</span>
+        </div>
+        <div class="stats mono">
+          <span class="stat">Served <b id="servedValue">0 / 3</b></span>
+          <span class="stat">Tips <b id="tipsValue">¥0</b></span>
+          <button class="chip-btn" id="muteBtn" type="button" aria-pressed="false">Sound</button>
+          <button class="chip-btn rec" id="recBtn" type="button">Record</button>
+          <button class="chip-btn" id="shotBtn" type="button">Photo</button>
+        </div>
+      </header>
 
-    <section class="meter" id="meter" aria-live="polite">
-      <div class="mono label" id="meterLabel">Stress released</div>
-      <div class="meter-value"><span id="stressValue">0</span><span class="pct">%</span></div>
-      <div class="meter-bar"><i id="stressBar"></i></div>
+      <aside class="ticket" id="ticket" hidden>
+        <div class="ticket-head mono"><span id="ticketNo">No. 01</span><span id="ticketName">Mochi</span></div>
+        <div class="ticket-body" id="ticketLines"></div>
+        <div class="patience" aria-label="Patience"><i id="patienceBar"></i></div>
+      </aside>
+
+      <div class="hint" id="hint" aria-live="polite"></div>
+
+      <div class="meter" id="meter" hidden>
+        <span class="meter-label mono" id="meterLabel">Scoop</span>
+        <div class="meter-track"><div class="band" id="meterBand"></div><div class="fill" id="meterFill"></div></div>
+        <span class="meter-dots" id="meterDots"></span>
+      </div>
+
+      <div class="tools" id="tools" hidden role="radiogroup" aria-label="Topping"></div>
+      <div class="actions" id="actions"></div>
+
+      <nav class="stations" id="stations" aria-label="Stations">
+        <button type="button" data-station="counter"><span class="num mono">01</span>Counter<i class="dot"></i></button>
+        <button type="button" data-station="rice"><span class="num mono">02</span>Rice<i class="dot"></i></button>
+        <button type="button" data-station="knife"><span class="num mono">03</span>Knife<i class="dot"></i></button>
+        <button type="button" data-station="build"><span class="num mono">04</span>Build<i class="dot"></i></button>
+      </nav>
+    </div>
+
+    <section class="screen title-screen" id="title">
+      <div class="title-card">
+        <p class="mono eyebrow">A very small sushi bar</p>
+        <h1 class="logo-big">Squishi.</h1>
+        <p class="lede">Scoop the rice, press it, slice the fish, plate it. The customers are jelly. So is everything else, a little.</p>
+        <div class="days" id="dayList"></div>
+        <div class="title-actions">
+          <button class="btn btn-solid" id="startBtn" type="button">Open the shop</button>
+          <a class="btn" href="./break.html">Break room</a>
+        </div>
+        <p class="mono foot">Tap, hold and swipe. Sound on.</p>
+      </div>
     </section>
 
-    <div class="readouts mono" id="readouts">
-      <span>Fig. 1</span>
-      <span id="figCaption">Monday, in amber</span>
-      <span><b id="vertCount">0</b> vertices</span>
-      <span>KE <b id="keValue">0.000</b></span>
-    </div>
-
-    <aside class="panel" id="panel">
-      <div class="group group-word">
-        <div class="mono label"><span class="num">01</span> Word</div>
-        <div class="word-row">
-          <label class="field">
-            <input id="word" type="text" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-label="Word" />
-            <span class="mono count" id="wordCount">6/12</span>
-          </label>
-          <button class="btn btn-record mobile-only" id="recordQuick" type="button">Record</button>
-        </div>
-        <div class="chips" id="presets" role="group" aria-label="Presets"></div>
-      </div>
-
-      <div class="group group-flavor">
-        <div class="mono label"><span class="num">02</span> Flavor</div>
-        <div class="flavors" id="flavors" role="radiogroup" aria-label="Flavor"></div>
-        <div class="actions mobile-only">
-          <button class="btn" type="button" data-action="nudge">Nudge</button>
-          <button class="btn" type="button" data-action="reset">Reset</button>
-          <button class="btn" type="button" data-action="mute">Mute</button>
-          <button class="btn" type="button" data-action="more" aria-expanded="false">More</button>
-        </div>
-      </div>
-
-      <div class="group group-feel extra">
-        <div class="mono label"><span class="num">03</span> Feel</div>
-        <div class="slider">
-          <div class="slider-head"><span>Firmness</span><span class="mono" id="firmOut">50</span></div>
-          <input type="range" id="firmness" min="0" max="100" value="50" aria-label="Firmness" />
-          <div class="ends mono"><span>soft</span><span>firm</span></div>
-        </div>
-        <div class="slider">
-          <div class="slider-head"><span>Damping</span><span class="mono" id="dampOut">50</span></div>
-          <input type="range" id="damping" min="0" max="100" value="50" aria-label="Damping" />
-          <div class="ends mono"><span>wobbly</span><span>calm</span></div>
-        </div>
-      </div>
-
-      <div class="group group-do desktop-only">
-        <div class="mono label"><span class="num">04</span> Do</div>
-        <div class="actions">
-          <button class="btn" type="button" data-action="nudge">Nudge</button>
-          <button class="btn" type="button" data-action="reset">Reset</button>
-          <button class="btn" type="button" data-action="mute">Mute</button>
-        </div>
-      </div>
-
-      <div class="group group-capture extra">
-        <div class="mono label"><span class="num">05</span> Capture</div>
-        <div class="chips aspect" id="aspects" role="radiogroup" aria-label="Crop"></div>
-        <div class="actions">
-          <button class="btn btn-record desktop-inline" id="record" type="button">Record 6s</button>
-          <button class="btn" id="screenshot" type="button">Screenshot</button>
-        </div>
-      </div>
-    </aside>
-
-    <div class="rec-frame" id="recFrame" hidden>
-      <div class="rec-top">
-        <div>
-          <div class="mono small">Now squishing</div>
-          <div class="rec-word" id="recWord">Monday</div>
-        </div>
-        <div class="ring" id="ring">
-          <svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="19" class="track" /><circle cx="22" cy="22" r="19" class="prog" id="ringProg" /></svg>
-          <span class="mono" id="ringText">6</span>
-        </div>
-      </div>
-      <div class="rec-bottom">
-        <div>
-          <div class="mono small" id="recLabel">Stress released</div>
-          <div class="rec-value"><span id="recValue">0</span><span class="pct">%</span></div>
-        </div>
-        <div class="rec-mark">
-          <div class="rec-wordmark" id="recMark"></div>
-          <div class="mono small" id="recUrl"></div>
-        </div>
-      </div>
-      <div class="rec-bar"><i id="recBar"></i></div>
-    </div>
+    <section class="screen card-screen" id="cardScreen" hidden>
+      <div class="menu-card" id="card"></div>
+    </section>
 
     <div class="preview" id="preview" hidden role="dialog" aria-modal="true" aria-labelledby="previewTitle">
       <div class="preview-inner">
-        <div class="mono label" id="previewTitle">Clip ready</div>
+        <div class="mono" id="previewTitle">Clip ready</div>
         <div class="preview-media" id="previewMedia"></div>
-        <div class="actions">
+        <div class="row">
           <button class="btn btn-solid" id="previewShare" type="button">Share</button>
           <button class="btn" id="previewDownload" type="button">Download</button>
-          <button class="btn" id="previewAgain" type="button">Try again</button>
           <button class="btn" id="previewClose" type="button">Close</button>
         </div>
       </div>
     </div>
 
+    <div class="rec-frame" id="recFrame" hidden><span class="mono" id="recCount">6</span></div>
     <div class="toast mono" id="toast" role="status" hidden></div>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/sushi/main.js"></script>
   </body>
 </html>

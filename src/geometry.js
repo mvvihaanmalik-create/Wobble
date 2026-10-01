@@ -174,7 +174,7 @@ function surfaceArea(pos, idx) {
 // midpoint, and each triangle is re-cut according to how many of its edges
 // were split. Splits are decided per edge, so neighbors always agree and the
 // mesh never gets T-junctions (which would crack open when it deforms).
-function subdivide(pos0, idx0, glyph0, maxEdge) {
+export function subdivide(pos0, idx0, glyph0, maxEdge, sideFactor = GEOMETRY.sideEdgeFactor) {
   const pos = Array.from(pos0);
   const glyph = Array.from(glyph0);
   let idx = Array.from(idx0);
@@ -182,7 +182,7 @@ function subdivide(pos0, idx0, glyph0, maxEdge) {
   // edge length. Bevels and sides are already dense along the sweep and use
   // a longer one. An edge splits if either triangle next to it wants it to.
   const capL2 = maxEdge * maxEdge;
-  const sideL2 = capL2 * GEOMETRY.sideEdgeFactor ** 2;
+  const sideL2 = capL2 * sideFactor ** 2;
   const KEY = 2 ** 22;
 
   const d2 = (a, b) => {
@@ -259,7 +259,7 @@ function subdivide(pos0, idx0, glyph0, maxEdge) {
 // Sort vertices along a Morton curve, and triangles by their first vertex, so
 // neighbors sit close together in memory. The simulation touches every
 // vertex's neighbors every substep, and this keeps those reads in cache.
-function reorder(mesh) {
+export function reorder(mesh) {
   const { pos, idx, glyphOf } = mesh;
   const n = pos.length / 3;
   let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;

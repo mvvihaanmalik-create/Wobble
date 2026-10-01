@@ -16,6 +16,12 @@ export default defineConfig({
   },
   build: {
     target: 'es2020',
+    rollupOptions: {
+      input: {
+        main: 'index.html', // Squishi, the sushi bar
+        break: 'break.html', // the word toy
+      },
+    },
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 900,
   },
