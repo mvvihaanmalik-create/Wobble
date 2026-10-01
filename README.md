@@ -25,14 +25,37 @@ An average of 50 or more unlocks the next day. Progress is kept in the browser.
 
 Keys: `1` to `4` switch stations; hold `Space` to scoop and press. Record makes a 6 second clip of the screen with the bar's name, the day, tips and the last plate's stars. Photo saves a PNG.
 
+### Look
+
+Rendering goes through a post chain (`src/sushi/stage.js`):
+- **Ambient occlusion** (N8AO).
+- **Depth of field.** Each station keeps its subject sharp and lets the rest go soft, like food photography.
+- **Bloom** on the lanterns and glints.
+- **Grade:** ACES tone mapping, a light grade, vignette, fine grain and SMAA.
+
+Lighting is a warm key with pin spots over each station and a cool rim behind the guests. Reflections come from a generated restaurant environment: a softbox over the counter and two lanterns.
+
+Quality tiers (`high`, `medium`, `low`, `minimal`):
+- Phones start on `medium`, desktops on `high`.
+- If frames stay slow for a few seconds, the game steps down a tier on its own.
+- `?tier=low` forces a tier.
+
+Feedback while you play:
+- Rating pop-ups and glints on good moves.
+- Rice grains that fly when you scoop and press.
+- A ring under your finger while holding.
+- A light trail and a short slow-motion beat when the knife goes through.
+- Haptics on phones that support them.
+
 ### What is generated
 
 Every texture is a shader driven by 3D coordinates baked into each piece (`src/sushi/glsl.js`), so a cut face shows the grain that was inside the block:
 - **Salmon:** fat lines that bend into chevrons across the width.
 - **Tuna:** deep red with sparse sinew and a little iridescence.
 - **Tamago:** folded layers with a browned top.
-- **Rice:** packed grains, plus real grains riding on the surface.
-- **Wood:** grain for the hinoki counter, cutting board (with knife scratches) and serving board.
+- **Rice:** packed grains, plus glossy, slightly translucent grains riding on the surface.
+- **Wood:** growth rings, pores, plank seams and knife scratches on the hinoki counter, cutting board, serving board, rice tub staves and walnut wall slats.
+- **Ceramics:** six glazes that pool and speckle, with raw clay feet.
 - **Noren:** the curtain's seigaiha wave print.
 
 Rice, fish, blocks and customers are all soft bodies on the same simulation as the word toy. Rice forming and fish draping over rice are shape changes the simulation wobbles through.

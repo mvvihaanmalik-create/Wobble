@@ -464,6 +464,7 @@ export class Game {
       if (i >= 0) this.goStation(STATIONS[i]);
       if (e.code === 'Space' && (this.station === 'rice' || this.station === 'counter')) {
         e.preventDefault();
+        this.pointerPos = { x: window.innerWidth / 2, y: window.innerHeight * 0.45 };
         if (this.station === 'counter') this.takeOrder();
         else this.stations.rice.down();
       }

@@ -216,8 +216,8 @@ export function jellyCustomerMaterial(color, attenuation) {
     color: new Color(color),
     transmission: 1,
     thickness: 0.9, // local units; the body is scaled up
-    ior: 1.42,
-    dispersion: 0.35, // faint rainbow fringes at the edges
+    ior: 1.33,
+    dispersion: 0.25, // faint rainbow fringes at the edges
     roughness: 0.035,
     clearcoat: 1,
     clearcoatRoughness: 0.03,
