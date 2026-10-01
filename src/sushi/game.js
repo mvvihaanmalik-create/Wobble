@@ -1,6 +1,6 @@
 import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
 import { DAYS, GAME, LAYOUT, PERF, CUSTOMER_LOOKS } from './config.js';
-import { Stage, TIERS, TIER_ORDER } from './stage.js';
+import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
 import { Customer, SousChef } from './critters.js';
 import { makeOrders, rankFor, scorePlate, tipFor } from './orders.js';
@@ -22,7 +22,23 @@ export class Game {
     this.canvas = canvas;
     const params = new URLSearchParams(location.search);
     const coarse = window.matchMedia('(pointer: coarse)').matches;
-    this.stage = new Stage(canvas, TIERS[params.get('tier')] ? params.get('tier') : coarse ? 'medium' : 'high');
+    // Start on the lower of what the GPU suggests and what last worked here.
+    const forced = TIERS[params.get('tier')] ? params.get('tier') : null;
+    const saved = loadTier();
+    const guess = guessTier(coarse);
+    const start = forced || TIER_ORDER[Math.max(TIER_ORDER.indexOf(guess), saved ? TIER_ORDER.indexOf(saved) : 0)];
+    this.stage = new Stage(canvas, start);
+    this.stage.onFailure = () => this.stepDown();
+    // A GPU reset (the driver gave up on a long frame) loses everything on the
+    // card. Reload one tier lower rather than sit on a dead canvas.
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.pause();
+      const next = TIER_ORDER[Math.min(TIER_ORDER.length - 1, TIER_ORDER.indexOf(this.stage.tierName) + 1)];
+      saveTier(next);
+      this.ui.toast('Graphics reset. Reloading with lighter settings.', 4000);
+      setTimeout(() => location.reload(), 900);
+    });
     this.set = new SushiSet(this.stage.scene);
     this.sound = new BarSound();
     this.fx = new Effects(this.stage.scene);
@@ -127,7 +143,10 @@ export class Game {
     const order = this.orders[this.orderIndex];
     order.taken = false;
     this.photograph(order);
-    if (this.orders[this.orderIndex + 1]) this.photograph(this.orders[this.orderIndex + 1]);
+    // The next guest's picture waits until this one has settled in, so the
+    // two builds never land in the same frame.
+    const upcoming = this.orders[this.orderIndex + 1];
+    if (upcoming) setTimeout(() => this.photograph(upcoming), 2500);
     order.arrived = performance.now();
     this.order = order;
     this.goStation('counter');
@@ -767,15 +786,26 @@ export class Game {
 
   watchPerformance(raw) {
     const q = this.quality;
-    if (q.fixed || this.recorder.busy || raw > 0.5) return;
-    q.avg += (raw * 1000 - q.avg) * 0.05;
-    if (q.avg > PERF.slowFrameMs) q.slowFor += raw;
+    if (q.fixed || this.recorder.busy || raw > 3) return; // > 3 s: the tab was asleep
+    // Give shaders a moment to compile after loading or a tier change.
+    q.settle = (q.settle ?? PERF.settle) - raw;
+    if (q.settle > 0) return;
+    const ms = Math.min(raw, 0.5) * 1000;
+    q.avg += (ms - q.avg) * 0.1;
+    if (q.avg > PERF.slowFrameMs) q.slowFor += Math.min(raw, 0.5);
     else q.slowFor = Math.max(0, q.slowFor - raw * 0.5);
-    if (q.slowFor < PERF.window) return;
+    if (q.slowFor >= PERF.window) this.stepDown();
+  }
+
+  stepDown() {
+    const q = this.quality;
     q.slowFor = 0;
     q.avg = 16;
+    q.settle = PERF.settle;
     const next = TIER_ORDER[TIER_ORDER.indexOf(this.stage.tierName) + 1];
-    if (next) this.stage.setTier(next);
+    if (!next) return;
+    this.stage.setTier(next);
+    saveTier(next);
   }
 }
 
@@ -802,6 +832,24 @@ function stamp() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+// The lowest tier this browser needed, so the next visit starts there.
+const TIER_KEY = `${GAME.storageKey}.tier`;
+function loadTier() {
+  try {
+    const t = localStorage.getItem(TIER_KEY);
+    return TIERS[t] ? t : null;
+  } catch {
+    return null;
+  }
+}
+function saveTier(t) {
+  try {
+    localStorage.setItem(TIER_KEY, t);
+  } catch {
+    // Not important.
+  }
 }
 
 function loadProgress() {

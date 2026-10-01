@@ -43,12 +43,33 @@ const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 // Quality tiers. The game starts on the tier that suits the device and steps
 // down on its own if frames run slow.
+// pixelRatio is a cap; below 1 renders under native resolution and lets the
+// browser scale it up. glass: false turns off see-through food and garnish.
 export const TIERS = {
-  high: { pixelRatio: 2, ao: true, aoHalf: false, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.75 },
-  medium: { pixelRatio: 1.5, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6 },
-  low: { pixelRatio: 1.25, ao: false, aoHalf: true, dof: false, bloom: true, smaa: true, shadow: 1024, transmission: 0.5 },
-  minimal: { pixelRatio: 1, ao: false, aoHalf: true, dof: false, bloom: false, smaa: false, shadow: 1024, transmission: 0.5 },
+  high: { pixelRatio: 1.75, ao: true, aoHalf: false, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6, glass: true },
+  medium: { pixelRatio: 1.25, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.45, glass: true },
+  low: { pixelRatio: 1, ao: false, aoHalf: true, dof: false, bloom: true, smaa: true, shadow: 1024, transmission: 0.35, glass: true },
+  minimal: { pixelRatio: 0.75, ao: false, aoHalf: true, dof: false, bloom: false, smaa: false, shadow: 1024, transmission: 0.25, glass: false },
 };
+
+// Pick a starting tier from the GPU's name. Integrated and mobile GPUs start
+// low; software renderers start at the bottom. Unknown GPUs start on medium.
+export function guessTier(coarse) {
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl2') || c.getContext('webgl');
+    if (!gl) return 'minimal';
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase();
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    if (/swiftshader|llvmpipe|software|basic render/.test(name)) return 'minimal';
+    if (coarse || /intel|uhd|iris|mali|adreno|powervr|apple gpu|vivante|videocore/.test(name)) return 'low';
+    if (/rtx|radeon rx|rx \d{4}|geforce gtx 1[0-9]{3}|apple m[2-9] (pro|max|ultra)/.test(name)) return 'high';
+    return 'medium';
+  } catch {
+    return 'low';
+  }
+}
 export const TIER_ORDER = ['high', 'medium', 'low', 'minimal'];
 
 export class Stage {
@@ -166,12 +187,18 @@ export class Stage {
     this.tier = t;
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, t.pixelRatio);
     this.renderer.setPixelRatio(this.pixelRatio);
+    this.glass = t.glass;
+    if (!t.glass) this.dropGlass();
     this.renderer.transmissionResolutionScale = t.transmission;
     this.ao.enabled = t.ao;
     this.ao.configuration.halfRes = t.aoHalf;
     this.dofPass.enabled = t.dof;
     this.bloom.blendMode.opacity.value = t.bloom ? 1 : 0;
     this.smaaPass.enabled = t.smaa;
+    // Only the last enabled pass may draw to the screen. With SMAA off, that
+    // is the grade pass; without this the canvas would get nothing at all.
+    const live = this.composer.passes.filter((p) => p.enabled);
+    for (const p of this.composer.passes) p.renderToScreen = p === live[live.length - 1];
     if (this.key.shadow.mapSize.x !== t.shadow) {
       this.key.shadow.mapSize.set(t.shadow, t.shadow);
       if (this.key.shadow.map) {
@@ -180,6 +207,20 @@ export class Stage {
       }
     }
     if (this.width) this.resize();
+  }
+
+  // Turn off transmission on every material in the scene. Called on the
+  // lowest tier, and again now and then for food made since.
+  dropGlass() {
+    this.scene.traverse((o) => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        if (m.transmission > 0) {
+          m.transmission = 0;
+          m.needsUpdate = true;
+        }
+      }
+    });
   }
 
   // Narrow portrait screens get their own framing where a view defines one.
@@ -280,7 +321,24 @@ export class Stage {
 
   render(dt = 1 / 60) {
     if (this.beforeRender) this.beforeRender();
-    this.composer.render(dt);
+    if (!this.glass && (this.glassCheck = (this.glassCheck || 0) + 1) % 60 === 0) this.dropGlass();
+    // If the post chain fails (a driver bug, a lost resource), draw the scene
+    // plainly rather than leaving a frozen frame, and tell the game.
+    try {
+      if (this.plain) this.renderer.render(this.scene, this.camera);
+      else this.composer.render(dt);
+    } catch (err) {
+      console.error(err);
+      this.failures = (this.failures || 0) + 1;
+      if (this.failures >= 3) this.plain = true;
+      try {
+        this.renderer.setRenderTarget(null);
+        this.renderer.render(this.scene, this.camera);
+      } catch {
+        // Nothing more to do this frame.
+      }
+      if (this.onFailure) this.onFailure(err);
+    }
   }
 }
 

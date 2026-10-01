@@ -103,7 +103,8 @@ export const CUSTOMER_LOOKS = [
 ];
 
 export const PERF = {
-  slowFrameMs: 24,
-  window: 2.5,
+  slowFrameMs: 22, // average frame time that counts as slow
+  window: 1.5, // seconds of slow frames before stepping down a tier
+  settle: 2, // seconds to ignore after loading or a tier change
   pixelRatioSteps: [2, 1.5, 1.25, 1],
 };

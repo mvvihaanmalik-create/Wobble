@@ -194,8 +194,8 @@ export function riceGrainMaterial() {
     roughness: 0.18,
     clearcoat: 1,
     clearcoatRoughness: 0.08,
-    transmission: 0.12,
-    thickness: 0.08,
+    // No transmission: thousands of grains in the glass pass cost too much.
+    // The warm emissive stands in for light scattered inside.
     attenuationColor: new Color('#efe0c0'),
     attenuationDistance: 0.25,
     sheen: 0.5,
