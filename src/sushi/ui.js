@@ -336,14 +336,24 @@ export class GameUI {
   }
 
   // Rating that floats up from a point on screen. kind: great | good | bad.
+  // text may be { jp, en } for a spoken line: Japanese with a small gloss.
   popup(text, x, y, kind = 'good') {
     const el = document.createElement('div');
     el.className = `popup ${kind}`;
-    el.textContent = text;
+    if (typeof text === 'object') {
+      const jp = document.createElement('span');
+      jp.className = 'jp';
+      jp.lang = 'ja';
+      jp.textContent = text.jp;
+      const en = document.createElement('span');
+      en.className = 'gloss';
+      en.textContent = text.en;
+      el.append(jp, en);
+    } else el.textContent = text;
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
     $('popups').appendChild(el);
-    setTimeout(() => el.remove(), 1300);
+    setTimeout(() => el.remove(), kind === 'say' ? 1900 : 1300);
   }
 
   // Ring under the finger while holding. value and band are 0..1.

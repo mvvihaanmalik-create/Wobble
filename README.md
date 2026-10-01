@@ -1,21 +1,36 @@
 # Squishi.
 
-A very small sushi bar where everything wobbles. Jelly customers order nigiri; you make it across four stations, each with its own camera angle, and get scored on how close you got.
+A very small sushi bar where everything wobbles. Soft mochi animals order nigiri. Each ticket carries a photo of the plate they want. You make it across four stations, each with its own camera angle, and get scored on how close you got. At the end of a shift your best plates can go up on a shared wall next to everyone else's.
 
 The word toy that started this, **Squish.**, is still here as the Break room at `/break.html`.
 
-Everything runs in the browser: no backend, no accounts, no analytics, no requests to anything but the page's own files.
+The game runs in the browser. The only server part is the wall: one small function that stores plate photos and a board of best shifts. There are no accounts, no analytics and no cookies. The wall keeps only the name a player types and their plate photos.
 
 ## How to play
 
 | Station | Angle | What you do |
 | --- | --- | --- |
-| 01 Counter | Eye level, across the bar | A guest hops in and pins an order ticket. Take the order. Poke the guest if you like. |
-| 02 Rice | Over the rice tub | Hold to scoop, let go inside the green band. Then hold to press and let go in the green, three times. Press too hard and the rice squashes flat. |
-| 03 Knife | Low, along the cutting board | Swipe down through the fish block along the dashed guide. Angle and thickness are scored. Salmon and tuna want a 45° cut, egg a straight one. |
-| 04 Build | Three quarters, over the serving board | Tap the rice for wasabi (one tap per dab), drag a slice onto the rice, then add the toppings on the ticket. Serve. |
+| 01 Counter 受付 | Eye level, across the bar | A guest hops in and pins an order ticket with a photo of the plate they want. Take the order. Poke the guest if you like. |
+| 02 Rice 酢飯 | Over the rice tub | Hold to scoop, let go inside the green band. Then hold to press and let go in the green, three times. Press too hard and the rice squashes flat. |
+| 03 Knife 包丁 | Low, along the cutting board | Swipe down through the fish block along the dashed guide. Angle and thickness are scored. Salmon and tuna want a 45° cut, egg a straight one. |
+| 04 Build 盛付 | Three quarters, over the serving board | Tap the rice for wasabi (one tap per dab), drag a slice onto the rice, then add the toppings on the ticket. Serve. |
 
 The guest eats it in three bites and reacts. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
+
+### The cast
+
+The guests are mochi animals: a calico cat, a shiba, a bunny, a bear, a panda and a fox. Each is a soft body with fur markings drawn in the shader. Ears, eyes, blush, nose, whiskers and mouth are pinned to the surface and follow every squash. Ears droop when a guest waits too long, and eyes close into happy arcs at a great plate.
+
+Pochi, the shiba sous chef, sits on the counter in a chef's toque. He greets each guest, cheers good plates and frets over bad ones. The chef is a cat: a paw cups the rice when you scoop and presses it on the mat.
+
+### The wall
+
+At the end of a shift, the summary shows today's plate photos. Type a name and post: your three best plates go up on the wall, and the shift goes on a board ranked by tips. The wall is also on the title screen.
+
+- `api/gallery.js` is a Vercel function. It needs a Redis REST store: add **Upstash for Redis** (or Vercel KV) to the project in the Vercel dashboard under Storage. That sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`).
+- Without a store, the wall still works but only shows the player's own shifts, saved in their browser, and says so.
+- `npm run dev` and `npm run preview` serve the same API from memory, so the wall works locally with no setup. It resets when the server restarts.
+- Limits: names up to 16 letters, numbers, spaces and `._'-`. Photos are small JPEG data URLs (320 by 200, under 60 KB). Six posts per visitor per minute. The newest 48 plates and the best 100 shifts are kept.
 
 - **Day 1:** salmon only.
 - **Day 2:** tuna, sesame and scallion.
@@ -50,15 +65,19 @@ Feedback while you play:
 ### What is generated
 
 Every texture is a shader driven by 3D coordinates baked into each piece (`src/sushi/glsl.js`), so a cut face shows the grain that was inside the block:
-- **Salmon:** fat lines that bend into chevrons across the width.
-- **Tuna:** deep red with sparse sinew and a little iridescence.
-- **Tamago:** folded layers with a browned top.
-- **Rice:** packed grains, plus glossy, slightly translucent grains riding on the surface.
+- **Salmon:** glossy, translucent orange flesh with soft peach seams and a fine juicy pulp, like fruit jelly.
+- **Tuna:** ruby red jelly with faint sinew and a little iridescence.
+- **Tamago:** glossy custard layers with a browned top.
+- **Rice:** packed grains, plus plump, glossy, slightly translucent grains riding on the surface, and steam rising off the tub.
 - **Wood:** growth rings, pores, plank seams and knife scratches on the hinoki counter, cutting board, serving board, rice tub staves and walnut wall slats.
 - **Ceramics:** six glazes that pool and speckle, with raw clay feet.
 - **Noren:** the curtain's seigaiha wave print.
 
+Fish blocks and slices are rounded outlines, extruded with soft bevels and then smoothed, so nothing has a hard edge.
+
 Rice, fish, blocks and customers are all soft bodies on the same simulation as the word toy. Rice forming and fish draping over rice are shape changes the simulation wobbles through.
+
+Ticket pictures and served-plate photos come from a photo booth (`src/sushi/booth.js`) that renders small stills on the main renderer between frames.
 
 ### Squishi files
 
@@ -68,8 +87,12 @@ src/sushi/config.js    layout, camera angles, days, scoring, every tuning number
 src/sushi/game.js      flow, customers, serving, input, capture, quality
 src/sushi/stations.js  counter, rice, knife and build stations
 src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces
-src/sushi/customers.js jelly customers with faces
-src/sushi/set.js       counter, curtain, lanterns, tub, boards, bowls, knife
+src/sushi/critters.js  mochi animal guests, the sous chef, the chef's paw
+src/sushi/booth.js     ticket pictures and plate photos
+src/sushi/wall.js      the wall: posting, loading, local fallback
+src/sushi/set.js       counter, curtain, lanterns, sign, tub, boards, bowls, knife
+api/gallery.js         Vercel function for the wall
+server/gallery-core.js the wall's storage logic, shared with the dev server
 src/sushi/glsl.js      generated food and wood textures
 src/sushi/orders.js    order generation and scoring
 ```
@@ -98,7 +121,7 @@ npm run preview   # serve dist/ locally to check it
 
 `dist/` is a plain static folder with relative paths, so it works at a domain root or in a subfolder. It holds two pages: `index.html` (the bar) and `break.html` (the word toy). `vercel.json` pins the build settings, so a Vercel import needs no setup.
 
-- **Vercel:** import the repo. Framework preset Vite, build command `npm run build`, output directory `dist`.
+- **Vercel:** import the repo. Framework preset Vite, build command `npm run build`, output directory `dist`. For the shared wall, add Upstash for Redis under Storage (see The wall above). Other hosts serve the game without the wall's server part, so the wall falls back to each player's own shifts.
 - **Netlify:** build command `npm run build`, publish directory `dist`. Or drag `dist/` onto the Netlify dashboard.
 - **Anywhere else:** upload the contents of `dist/`.
 
@@ -151,5 +174,5 @@ Debug URL flags: `?fixed` turns off automatic quality changes, `?pr=1` forces a 
 ## Notes
 
 - three's `TTFLoader` imports opentype.js from a CDN. `vite.config.js` aliases that URL to the local `opentype.js` package, so it is bundled and nothing is fetched at runtime.
-- Fonts are bundled from `src/fonts/`: Titan One (the jelly), Instrument Serif (display), IBM Plex Mono (labels). All are under the SIL Open Font License; the license texts sit next to the files. The UI fonts are subset to Latin.
+- Fonts are bundled from `src/fonts/`: Titan One (the jelly), Instrument Serif (display), IBM Plex Mono (labels) and Noto Serif JP (the kanji and kana on signs, labels and speech). All are under the SIL Open Font License; the license texts sit next to the files. The UI fonts are subset to Latin, and Noto Serif JP to the 70 or so characters the bar uses, at 13 KB.
 - Browser support for recording: Chrome and Edge record MP4 (WebM on older versions), Safari records MP4, Firefox records WebM.

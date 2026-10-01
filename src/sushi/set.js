@@ -16,6 +16,8 @@ import {
   CapsuleGeometry,
   CircleGeometry,
   CanvasTexture,
+  MeshStandardMaterial,
+  SRGBColorSpace,
   Sprite,
   SpriteMaterial,
 } from 'three';
@@ -53,6 +55,7 @@ export class SushiSet {
     this.buildTray();
     this.buildBowls();
     this.buildBench();
+    this.buildSign();
     this.knife = buildKnife();
     this.group.add(this.knife);
   }
@@ -273,6 +276,46 @@ export class SushiSet {
     this.geta = grp;
     this.getaParts = [...grp.children]; // the bare board, for photo shoots
     this.group.add(grp);
+  }
+
+  // A tall wooden shop sign on the back wall: 寿司 in brushed ink and a red
+  // seal. Drawn to a canvas once the Japanese font has loaded.
+  buildSign() {
+    const g = new Group();
+    const board = shadowed(new Mesh(withFood(new RoundedBoxGeometry(2.1, 5.4, 0.22, 3, 0.06), 1, [3, 0, 0]), foodMaterial('hinoki')));
+    const cap = shadowed(new Mesh(withFood(new RoundedBoxGeometry(2.7, 0.3, 0.5, 3, 0.08)), foodMaterial('walnut')));
+    cap.position.set(0, 2.85, 0.08);
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 660;
+    const tex = new CanvasTexture(c);
+    tex.colorSpace = SRGBColorSpace;
+    tex.anisotropy = 4;
+    const face = new Mesh(new PlaneGeometry(2.1, 5.4), new MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.42, depthWrite: false }));
+    face.position.z = 0.115;
+    g.add(board, cap, face);
+    g.position.set(13, 6.6, -16.6);
+    g.rotation.y = -0.08;
+    this.group.add(g);
+    const draw = () => {
+      const x = c.getContext('2d');
+      x.clearRect(0, 0, c.width, c.height);
+      x.fillStyle = '#16100c';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.font = '600 200px "Squishi JP", serif';
+      x.fillText('寿', 128, 160);
+      x.fillText('司', 128, 380);
+      // Seal.
+      x.fillStyle = '#c23a28';
+      x.fillRect(92, 520, 72, 72);
+      x.fillStyle = '#f5ead8';
+      x.font = '600 54px "Squishi JP", serif';
+      x.fillText('屋', 128, 558);
+      tex.needsUpdate = true;
+    };
+    if (document.fonts && document.fonts.load) document.fonts.load('600 200px "Squishi JP"', '寿司屋').then(draw, draw);
+    else draw();
   }
 
   // Where the next guest waits: a low walnut bench with a cushion.

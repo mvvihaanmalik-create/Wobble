@@ -143,7 +143,7 @@ export class Game {
     this.customer = c;
     c.seated = false;
     this.sound.bell();
-    this.sousSays('Irasshaimase!', 'open', 900);
+    this.sousSays({ jp: 'いらっしゃいませ', en: 'Welcome in' }, 'open', 900);
     const seat = new Vector3(LAYOUT.customer.x, LAYOUT.customer.y, LAYOUT.customer.z);
     c.group.scale.setScalar(LAYOUT.customer.scale);
     const hops = c.group.position.distanceTo(seat) > 10 ? [new Vector3(-9, seat.y, seat.z), seat] : [seat];
@@ -335,6 +335,7 @@ export class Game {
     this.sound.voice(mood);
     if (mood >= 0.8) {
       c.celebrate();
+      this.popupAt({ jp: 'おいしい！', en: 'So good' }, c.group.position.clone().add(new Vector3(-3.2, c.body.height * LAYOUT.customer.scale * 0.8, 0)), 'say');
       this.sous.celebrate();
       setTimeout(() => this.sous.setExpression('smile'), 1600);
     } else if (mood >= 0.5) {
@@ -368,6 +369,7 @@ export class Game {
     // Guest leaves, board comes back empty.
     c.setExpression('smile');
     c.seated = false;
+    this.sousSays({ jp: 'ありがとうございました', en: 'Thank you' }, 'grin', 1200);
     const leave = c.hopTo(new Vector3(9, c.group.position.y, c.group.position.z), 0.5, 1).then(() => c.hopTo(EXIT, 0.5, 1));
     leave.then(() => {
       c.group.removeFromParent();
