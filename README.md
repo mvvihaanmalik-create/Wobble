@@ -62,6 +62,19 @@ Feedback while you play:
 - A light trail and a short slow-motion beat when the knife goes through.
 - Haptics on phones that support them.
 
+### Interface
+
+The UI is drawn like a cozy cooking game rather than a web page:
+- **Type:** Titan One for display and numbers, M PLUS Rounded for everything else, including kana.
+- **Buttons:** chunky cream or lacquer red, with brown ink outlines and a lip they press down onto.
+- **Top bar:** a walnut plaque with the day as a red seal, plates served, and a coin counter that counts up.
+- **Tickets:** the order hangs on a wooden peg. A red 済 stamp lands on each finished piece.
+- **Stations:** a hotbar with a "!" on stations that need work. Pochi gives the tips in a speech bubble.
+- **Results:** stars pop in one by one and the score counts up. Rating pops are outlined and bounce.
+- **The wall:** polaroids pinned to a cork board, with medals for the top three shifts.
+
+All icons are hand-written SVG in `src/sushi/icons.js`. Nothing is loaded from outside.
+
 ### What is generated
 
 Every texture is a shader driven by 3D coordinates baked into each piece (`src/sushi/glsl.js`), so a cut face shows the grain that was inside the block:
@@ -90,6 +103,8 @@ src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces
 src/sushi/critters.js  mochi animal guests, the sous chef, the chef's paw
 src/sushi/booth.js     ticket pictures and plate photos
 src/sushi/wall.js      the wall: posting, loading, local fallback
+src/sushi/ui.js        HUD, tickets, cards, the wall screen
+src/sushi/icons.js     the UI's SVG icons
 src/sushi/set.js       counter, curtain, lanterns, sign, tub, boards, bowls, knife
 api/gallery.js         Vercel function for the wall
 server/gallery-core.js the wall's storage logic, shared with the dev server
@@ -174,5 +189,5 @@ Debug URL flags: `?fixed` turns off automatic quality changes, `?pr=1` forces a 
 ## Notes
 
 - three's `TTFLoader` imports opentype.js from a CDN. `vite.config.js` aliases that URL to the local `opentype.js` package, so it is bundled and nothing is fetched at runtime.
-- Fonts are bundled from `src/fonts/`: Titan One (the jelly), Instrument Serif (display), IBM Plex Mono (labels) and Noto Serif JP (the kanji and kana on signs, labels and speech). All are under the SIL Open Font License; the license texts sit next to the files. The UI fonts are subset to Latin, and Noto Serif JP to the 70 or so characters the bar uses, at 13 KB.
+- Fonts are bundled from `src/fonts/`: Titan One (the jelly), Instrument Serif and IBM Plex Mono (the Break room), Noto Serif JP (the shop sign and stamps) and M PLUS Rounded 1c (the game UI). All are under the SIL Open Font License; the license texts sit next to the files. The UI fonts are subset to Latin, Noto Serif JP to the 70 or so characters the bar uses (13 KB), and M PLUS Rounded to Latin, kana and the UI's kanji (33 KB per weight).
 - Browser support for recording: Chrome and Edge record MP4 (WebM on older versions), Safari records MP4, Firefox records WebM.

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#1b120d" />
+    <meta name="theme-color" content="#2a170e" />
     <meta name="description" content="A tiny sushi bar where everything wobbles. Scoop, press, slice and plate nigiri for small soft animals." />
     <title>Squishi.</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='14' rx='7' fill='%23fbf8f0'/%3E%3Cpath d='M3 15c4-7 22-7 26 0v3H3z' fill='%23ff7a45'/%3E%3C/svg%3E" />
@@ -13,30 +13,31 @@
 
     <div id="hud" hidden>
       <header class="topbar">
-        <div class="brand">
-          <span class="logo">Squishi.</span>
-          <span class="mono" id="dayLabel">Day 1</span>
+        <div class="plaque">
+          <span class="plaque-logo">Squishi</span>
+          <span class="day-badge" id="dayBadge"><b id="dayNum">1</b><span lang="ja">日目</span></span>
         </div>
-        <div class="stats mono">
-          <span class="stat">Served <b id="servedValue">0 / 3</b></span>
-          <span class="stat">Tips <b id="tipsValue">¥0</b></span>
-          <button class="chip-btn" id="muteBtn" type="button" aria-pressed="false">Sound</button>
-          <button class="chip-btn rec" id="recBtn" type="button">Record</button>
-          <button class="chip-btn" id="shotBtn" type="button">Photo</button>
+        <div class="hud-right">
+          <div class="pill served" aria-label="Plates served"><span class="served-plates" id="servedPlates"></span></div>
+          <div class="pill coins"><span class="ico" data-icon="coin"></span><b id="tipsValue">¥0</b></div>
+          <button class="round-btn" id="muteBtn" type="button" aria-pressed="false" aria-label="Sound"><span class="ico" data-icon="soundOn"></span></button>
+          <button class="round-btn rec" id="recBtn" type="button" aria-label="Record a clip"><span class="ico" data-icon="record"></span></button>
+          <button class="round-btn" id="shotBtn" type="button" aria-label="Take a photo"><span class="ico" data-icon="camera"></span></button>
         </div>
       </header>
 
       <aside class="ticket" id="ticket" hidden>
-        <div class="ticket-head mono"><span id="ticketNo">No. 01</span><span id="ticketName">Mochi</span></div>
-        <img class="ticket-photo" id="ticketPhoto" alt="The plate this guest wants" hidden />
+        <span class="peg" aria-hidden="true"></span>
+        <div class="ticket-head"><span class="ticket-no" id="ticketNo">#01</span><span class="ticket-name" id="ticketName">Mochi</span></div>
+        <div class="ticket-frame"><img class="ticket-photo" id="ticketPhoto" alt="The plate this guest wants" hidden /></div>
         <div class="ticket-body" id="ticketLines"></div>
-        <div class="patience" aria-label="Patience"><i id="patienceBar"></i></div>
+        <div class="patience" aria-label="Patience"><span class="ico" data-icon="heart"></span><span class="patience-track"><i id="patienceBar"></i></span></div>
       </aside>
 
-      <div class="hint" id="hint" aria-live="polite"></div>
+      <div class="hint" id="hintWrap" hidden><span class="hint-face ico" data-icon="pochi"></span><p class="hint-text" id="hint" aria-live="polite"></p></div>
 
       <div class="meter" id="meter" hidden>
-        <span class="meter-label mono" id="meterLabel">Scoop</span>
+        <span class="meter-label" id="meterLabel">Scoop</span>
         <div class="meter-track"><div class="band" id="meterBand"></div><div class="fill" id="meterFill"></div></div>
         <span class="meter-dots" id="meterDots"></span>
       </div>
@@ -45,55 +46,52 @@
       <div class="actions" id="actions"></div>
 
       <nav class="stations" id="stations" aria-label="Stations">
-        <button type="button" data-station="counter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M5 5v9M9.7 5v11M14.3 5v11M19 5v9"/><path d="M3 20h18"/></svg><span class="label">Counter</span><span class="jp" lang="ja">受付</span><span class="key mono">1</span><i class="dot"></i></button>
-        <button type="button" data-station="rice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12h17a8.5 8.5 0 0 1-17 0Z"/><path d="M8 20.5h8"/><path d="M9 8c0-1.5 1.2-1.5 1.2-3M13.5 8c0-1.5 1.2-1.5 1.2-3"/></svg><span class="label">Rice</span><span class="jp" lang="ja">酢飯</span><span class="key mono">2</span><i class="dot"></i></button>
-        <button type="button" data-station="knife"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5 15.5 3c2 2.5 2.5 6 1 8.5L6 19"/><path d="M6 19l-2.6 2.6"/></svg><span class="label">Knife</span><span class="jp" lang="ja">包丁</span><span class="key mono">3</span><i class="dot"></i></button>
-        <button type="button" data-station="build"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="15" width="19" height="4" rx="1"/><path d="M6 15c0-3 2.5-5 6-5s6 2 6 5"/><path d="M7.5 11.5c2-1.6 7-1.6 9 0"/></svg><span class="label">Build</span><span class="jp" lang="ja">盛付</span><span class="key mono">4</span><i class="dot"></i></button>
+        <button type="button" data-station="counter"><span class="key">1</span><span class="ico" data-icon="counter"></span><span class="label">Counter</span><span class="jp" lang="ja">受付</span><i class="flag" aria-hidden="true"></i></button>
+        <button type="button" data-station="rice"><span class="key">2</span><span class="ico" data-icon="rice"></span><span class="label">Rice</span><span class="jp" lang="ja">酢飯</span><i class="flag" aria-hidden="true"></i></button>
+        <button type="button" data-station="knife"><span class="key">3</span><span class="ico" data-icon="knife"></span><span class="label">Knife</span><span class="jp" lang="ja">包丁</span><i class="flag" aria-hidden="true"></i></button>
+        <button type="button" data-station="build"><span class="key">4</span><span class="ico" data-icon="build"></span><span class="label">Build</span><span class="jp" lang="ja">盛付</span><i class="flag" aria-hidden="true"></i></button>
       </nav>
     </div>
 
     <section class="screen title-screen" id="title">
       <div class="title-card">
-        <p class="mono eyebrow">A very small sushi bar<span class="jp-mark" lang="ja">小さな寿司屋</span></p>
-        <h1 class="logo-big">Squishi.</h1>
+        <h1 class="logo-big" id="logoBig" aria-label="Squishi">Squishi</h1>
+        <p class="tagline"><span lang="ja">小さな寿司屋</span> A very small sushi bar</p>
         <p class="lede">Scoop the rice, press it, slice the fish, plate it. The guests are small and soft. So is everything else, a little.</p>
         <div class="days" id="dayList"></div>
         <div class="title-actions">
-          <button class="btn btn-solid" id="startBtn" type="button">Open the shop</button>
+          <button class="btn btn-solid btn-big" id="startBtn" type="button"><span>Open the shop</span><small lang="ja">開店</small></button>
           <button class="btn" id="wallBtn" type="button">The wall</button>
           <a class="btn" href="./break.html">Break room</a>
         </div>
-        <p class="mono foot">Tap, hold and swipe. Sound on.</p>
+        <p class="foot">Tap, hold and swipe. Sound on.</p>
       </div>
     </section>
 
     <section class="screen wall-screen" id="wall" hidden role="dialog" aria-modal="true" aria-labelledby="wallTitle">
       <div class="wall">
         <header class="wall-head">
-          <div>
-            <p class="mono eyebrow">The wall</p>
-            <h2 id="wallTitle">Plates from every shift</h2>
-            <p class="mono wall-note" id="wallNote"></p>
-          </div>
-          <button class="btn" id="wallClose" type="button">Close</button>
+          <div class="ribbon"><h2 id="wallTitle">The wall</h2><span lang="ja">掲示板</span></div>
+          <p class="wall-note" id="wallNote"></p>
+          <button class="round-btn close-btn" id="wallClose" type="button" aria-label="Close">&times;</button>
         </header>
         <div class="wall-body">
           <section class="board" aria-label="Best shifts">
-            <h3 class="mono">Best shifts</h3>
+            <h3>Best shifts</h3>
             <ol id="wallBoard"></ol>
           </section>
-          <section class="wall-plates" id="wallPlates" aria-label="Plates"></section>
+          <section class="cork" aria-label="Plates"><div class="wall-plates" id="wallPlates"></div></section>
         </div>
       </div>
     </section>
 
     <section class="screen card-screen" id="cardScreen" hidden>
-      <div class="menu-card" id="card"></div>
+      <div class="panel" id="card"></div>
     </section>
 
     <div class="preview" id="preview" hidden role="dialog" aria-modal="true" aria-labelledby="previewTitle">
-      <div class="preview-inner">
-        <div class="mono" id="previewTitle">Clip ready</div>
+      <div class="panel preview-inner">
+        <div class="ribbon"><h2 id="previewTitle">Clip ready</h2></div>
         <div class="preview-media" id="previewMedia"></div>
         <div class="row">
           <button class="btn btn-solid" id="previewShare" type="button">Share</button>
@@ -103,11 +101,12 @@
       </div>
     </div>
 
-    <div class="rec-frame" id="recFrame" hidden><span class="mono" id="recCount">6</span></div>
-    <div class="toast mono" id="toast" role="status" hidden></div>
+    <div class="rec-frame" id="recFrame" hidden><span class="rec-count"><i></i><b id="recCount">6</b></span></div>
+    <div class="toast" id="toast" role="status" hidden></div>
     <div class="popups" id="popups" aria-live="polite"></div>
     <div class="hold-ring" id="holdRing" hidden>
       <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="40" class="edge" />
         <circle cx="50" cy="50" r="40" class="track" />
         <circle cx="50" cy="50" r="40" class="band" id="holdBand" />
         <circle cx="50" cy="50" r="40" class="prog" id="holdProg" />

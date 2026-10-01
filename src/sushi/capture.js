@@ -1,7 +1,7 @@
 // Overlay drawn into clips and photos: the bar's name, the day and guest,
 // tips so far, the last plate's stars and the short URL.
-const SERIF = "'Instrument Serif', Georgia, serif";
-const MONO = "'Plex Mono', ui-monospace, Menlo, monospace";
+const SERIF = "'Titan One', system-ui, sans-serif";
+const MONO = "'Rounded', system-ui, sans-serif";
 const PAPER = '#f7efe2';
 
 export function composeBar(ctx, W, H, glCanvas, crop, info) {
@@ -25,29 +25,27 @@ export function composeBar(ctx, W, H, glCanvas, crop, info) {
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   ctx.font = `${m * 0.085}px ${SERIF}`;
-  ctx.fillText('Squishi.', pad, pad + m * 0.07);
-  mono(ctx, [info.day, info.guest].filter(Boolean).join('  ·  ').toUpperCase(), pad, pad + m * 0.11, m * 0.022);
+  ctx.fillText('Squishi', pad, pad + m * 0.07);
+  mono(ctx, [info.day, info.guest].filter(Boolean).join('  ·  '), pad, pad + m * 0.11, m * 0.026);
 
   const base = H - pad;
-  mono(ctx, 'TIPS TONIGHT', pad, base - m * 0.075, m * 0.022);
+  mono(ctx, 'Tips tonight', pad, base - m * 0.075, m * 0.026);
   ctx.font = `${m * 0.07}px ${SERIF}`;
   ctx.fillText(`¥${(info.tips || 0).toLocaleString('en-US')}`, pad, base);
   if (info.score != null) {
     const stars = Math.round(info.score / 20);
     ctx.font = `${m * 0.045}px ${SERIF}`;
-    ctx.fillStyle = '#ff8a6a';
+    ctx.fillStyle = '#ffc83d';
     ctx.fillText('★'.repeat(stars), pad + m * 0.32, base);
     ctx.fillStyle = 'rgba(247,239,226,0.35)';
     ctx.fillText('★'.repeat(5 - stars), pad + m * 0.32 + ctx.measureText('★'.repeat(stars)).width, base);
     ctx.fillStyle = PAPER;
   }
   ctx.textAlign = 'right';
-  mono(ctx, info.url.toUpperCase(), W - pad, base, m * 0.02);
+  mono(ctx, info.url, W - pad, base, m * 0.024);
 }
 
 function mono(ctx, text, x, y, size) {
-  ctx.font = `500 ${size}px ${MONO}`;
-  if ('letterSpacing' in ctx) ctx.letterSpacing = `${size * 0.08}px`;
+  ctx.font = `800 ${size}px ${MONO}`;
   ctx.fillText(text, x, y);
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 }

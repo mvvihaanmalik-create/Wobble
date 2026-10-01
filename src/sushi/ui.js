@@ -1,22 +1,56 @@
 import { DAYS, FISH, TOPPINGS } from './config.js';
 import { describePiece } from './orders.js';
+import { ICONS, star } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
-const yen = (n) => `¥${n.toLocaleString('en-US')}`;
+const yen = (n) => `¥${Math.round(n).toLocaleString('en-US')}`;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const TOOL_LIST = [
-  { key: 'wasabi', label: 'Wasabi', color: '#9cbf43' },
-  { key: 'fish', label: 'Fish', color: '#ff8a5a' },
-  { key: 'ikura', label: 'Ikura', color: '#ff6a1a' },
-  { key: 'sesame', label: 'Sesame', color: '#ead6a6' },
-  { key: 'scallion', label: 'Scallion', color: '#7cc34a' },
-  { key: 'sauce', label: 'Sauce', color: '#3a170a' },
+  { key: 'wasabi', label: 'Wasabi' },
+  { key: 'fish', label: 'Fish' },
+  { key: 'ikura', label: 'Ikura' },
+  { key: 'sesame', label: 'Sesame' },
+  { key: 'scallion', label: 'Scallion' },
+  { key: 'sauce', label: 'Sauce' },
 ];
+const FISH_ICON = { salmon: 'fish', tuna: 'tuna', tamago: 'tamago' };
+const JP_DAYS = ['1日目', '2日目', '3日目'];
+
+// Count a number up (or down) inside an element.
+function countTo(el, to, ms = 600, fmt = (v) => String(Math.round(v))) {
+  const from = Number(el.dataset.value || 0);
+  el.dataset.value = String(to);
+  if (reduced() || from === to) {
+    el.textContent = fmt(to);
+    return;
+  }
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / ms);
+    const e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(from + (to - from) * e);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Restart a one-shot CSS animation class.
+function bump(el, cls = 'bump') {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
 
 export class GameUI {
   constructor(handlers) {
     this.h = handlers;
     this.hud = $('hud');
+    for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = ICONS[el.dataset.icon] || '';
+    // The logo wobbles letter by letter.
+    const logo = $('logoBig');
+    logo.innerHTML = [...logo.textContent].map((c, i) => `<span style="--i:${i}" aria-hidden="true">${c}</span>`).join('');
     document.querySelectorAll('#stations button').forEach((b) => b.addEventListener('click', () => this.h.onStation(b.dataset.station)));
     $('muteBtn').addEventListener('click', () => this.h.onMute());
     $('recBtn').addEventListener('click', () => this.h.onRecord());
@@ -42,9 +76,16 @@ export class GameUI {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'day';
+      const locked = i > progress.unlocked;
       const best = progress.best[i];
-      b.innerHTML = `<span class="mono">${d.title}</span><span class="note">${d.note}</span><span class="mono">${i > progress.unlocked ? 'Locked' : best ? `Best ${yen(best)}` : 'New'}</span>`;
-      b.disabled = i > progress.unlocked;
+      const foot = locked
+        ? `<span class="day-foot locked"><span class="ico">${ICONS.lock}</span>Locked</span>`
+        : best
+          ? `<span class="day-foot"><span class="ico">${ICONS.coin}</span>Best ${yen(best)}</span>`
+          : '<span class="day-foot new">New</span>';
+      b.innerHTML = `<span class="day-num"><b>${i + 1}</b><span lang="ja">${JP_DAYS[i].slice(1)}</span></span><span class="day-note">${d.note}</span>${foot}`;
+      b.disabled = locked;
+      b.setAttribute('aria-label', `${d.title}. ${d.note}${locked ? ' Locked.' : ''}`);
       b.setAttribute('aria-pressed', String(i === this.selectedDay));
       b.addEventListener('click', () => {
         this.selectedDay = i;
@@ -62,29 +103,48 @@ export class GameUI {
   // --- HUD -------------------------------------------------------------------
 
   setDay(i, served, total, tips) {
-    $('dayLabel').textContent = DAYS[i].title;
-    $('servedValue').textContent = `${served} / ${total}`;
-    $('tipsValue').textContent = yen(tips);
+    $('dayNum').textContent = String(i + 1);
+    const plates = $('servedPlates');
+    const key = `${served}/${total}`;
+    if (plates.dataset.key !== key) {
+      const grew = plates.dataset.key && Number(plates.dataset.key.split('/')[0]) < served;
+      plates.dataset.key = key;
+      plates.innerHTML = Array.from({ length: total }, (_, k) => `<span class="ico${k < served ? ' on' : ''}${grew && k === served - 1 ? ' just' : ''}">${k < served ? ICONS.plate : ICONS.plateEmpty}</span>`).join('');
+      plates.parentElement.setAttribute('aria-label', `${served} of ${total} plates served`);
+    }
+    const t = $('tipsValue');
+    if (Number(t.dataset.value || 0) !== tips) {
+      if (tips > Number(t.dataset.value || 0)) bump(t.parentElement);
+      countTo(t, tips, 900, yen);
+    }
   }
 
   setMuted(m) {
-    $('muteBtn').setAttribute('aria-pressed', String(!m));
-    $('muteBtn').textContent = m ? 'Muted' : 'Sound';
+    const b = $('muteBtn');
+    b.setAttribute('aria-pressed', String(!m));
+    b.setAttribute('aria-label', m ? 'Sound off' : 'Sound on');
+    b.querySelector('.ico').innerHTML = m ? ICONS.soundOff : ICONS.soundOn;
   }
 
   setStation(name, status) {
     document.querySelectorAll('#stations button').forEach((b) => {
       const s = b.dataset.station;
       b.setAttribute('aria-current', String(s === name));
-      b.classList.toggle('todo', status[s] === 'todo');
-      b.classList.toggle('ready', status[s] === 'ready');
+      const st = status[s] || '';
+      if (b.dataset.status !== st) {
+        b.dataset.status = st;
+        b.querySelector('.flag').innerHTML = st === 'ready' ? ICONS.check : st === 'todo' ? '!' : '';
+      }
     });
   }
 
   hint(text) {
     if (text === this.lastHint) return;
     this.lastHint = text;
+    const wrap = $('hintWrap');
     $('hint').textContent = text || '';
+    wrap.hidden = !text;
+    if (text) bump(wrap, 'talk');
   }
 
   ticket(order, number, done) {
@@ -98,15 +158,20 @@ export class GameUI {
     if (key === this.ticketKey) return;
     const fresh = !this.ticketKey || !this.ticketKey.startsWith(`${number}|`);
     this.ticketKey = key;
-    $('ticketNo').textContent = `No. ${String(number).padStart(2, '0')}`;
+    $('ticketNo').textContent = `#${String(number).padStart(2, '0')}`;
     $('ticketName').textContent = order.look.name;
     const ph = $('ticketPhoto');
     ph.hidden = !order.photo;
+    ph.parentElement.classList.toggle('waiting', !order.photo);
     if (order.photo && ph.getAttribute('src') !== order.photo) ph.src = order.photo;
     $('ticketLines').innerHTML = order.pieces
       .map((p, i) => {
         const [main, ...sub] = describePiece(p);
-        return `<div class="piece-lines${done[i] ? ' done' : ''}"><div class="main"><span>${main}</span></div>${sub.map((s) => `<div class="sub">${s}</div>`).join('')}</div>`;
+        return `<div class="piece${done[i] ? ' done' : ''}">
+          <span class="piece-ico ico">${ICONS[FISH_ICON[p.fish]]}</span>
+          <div class="piece-text"><b>${main}</b><span class="chips">${sub.map((x) => `<span class="chip">${x}</span>`).join('')}</span></div>
+          ${done[i] ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
+        </div>`;
       })
       .join('');
     if (fresh) {
@@ -118,11 +183,14 @@ export class GameUI {
 
   patience(frac) {
     const bar = $('patienceBar');
-    bar.style.width = `${Math.max(0, frac) * 100}%`;
-    bar.parentElement.classList.toggle('low', frac < 0.3);
+    const f = Math.max(0, Math.min(1, frac));
+    bar.style.width = `${f * 100}%`;
+    const p = bar.closest('.patience');
+    p.classList.toggle('mid', f < 0.55 && f >= 0.28);
+    p.classList.toggle('low', f < 0.28);
   }
 
-  // Meter with a target band. value and band are 0..1.
+  // Meter with a target band. value and band are 0..1. dots: '●●○' presses.
   meter(label, value, band, over, dots) {
     const m = $('meter');
     if (label == null) {
@@ -135,7 +203,12 @@ export class GameUI {
     $('meterBand').style.left = `${band[0] * 100}%`;
     $('meterBand').style.width = `${(band[1] - band[0]) * 100}%`;
     m.classList.toggle('over', !!over);
-    $('meterDots').textContent = dots || '';
+    m.classList.toggle('in', value >= band[0] && value <= band[1]);
+    const d = dots || '';
+    if ($('meterDots').dataset.d !== d) {
+      $('meterDots').dataset.d = d;
+      $('meterDots').innerHTML = [...d].map((c) => `<i class="${c === '●' ? 'on' : ''}"></i>`).join('');
+    }
   }
 
   // --- Build tools -------------------------------------------------------------
@@ -148,7 +221,7 @@ export class GameUI {
       b.className = 'tool';
       b.dataset.tool = t.key;
       b.setAttribute('role', 'radio');
-      b.innerHTML = `<span class="sw" style="background:${t.color}"></span>${t.label}`;
+      b.innerHTML = `<span class="token ico">${ICONS[t.key]}</span><span class="tool-label">${t.label}</span><i class="want" aria-hidden="true">!</i>`;
       b.addEventListener('click', () => this.h.onTool(t.key));
       wrap.appendChild(b);
     }
@@ -175,8 +248,8 @@ export class GameUI {
     for (const a of list) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = `btn${a.primary ? ' btn-solid' : ''}`;
-      b.textContent = a.label;
+      b.className = `btn${a.primary ? ' btn-solid btn-go' : ''}`;
+      b.innerHTML = `<span>${esc(a.label)}</span>`;
       b.disabled = !!a.disabled;
       b.addEventListener('click', a.onClick);
       wrap.appendChild(b);
@@ -185,9 +258,10 @@ export class GameUI {
 
   // --- Cards -------------------------------------------------------------------
 
-  card(html, buttons) {
+  card(html, buttons, kind = '') {
     const screen = $('cardScreen');
     const card = $('card');
+    card.className = `panel ${kind}`;
     card.innerHTML = html;
     const row = document.createElement('div');
     row.className = 'row';
@@ -211,53 +285,58 @@ export class GameUI {
 
   dayIntroCard(i, onGo) {
     const d = DAYS[i];
-    const fish = d.fish.map((f) => FISH[f].label).join(', ');
-    const tops = d.toppings.length ? d.toppings.map((t) => TOPPINGS[t].label).join(', ') : 'None yet';
+    const fish = d.fish.map((f) => `<span class="ingredient"><span class="ico">${ICONS[FISH_ICON[f]]}</span>${FISH[f].label}</span>`).join('');
+    const tops = d.toppings.length
+      ? d.toppings.map((t) => `<span class="ingredient"><span class="ico">${ICONS[t]}</span>${TOPPINGS[t].label}</span>`).join('')
+      : '<span class="ingredient none">None yet</span>';
     this.card(
-      `<p class="mono">${d.title} · ${d.customers} guests</p>
-       <h2>${d.note}</h2>
-       <div class="breakdown">
-         <div class="line"><span class="mono">Fish</span><span>${fish}</span><span></span></div>
-         <div class="line"><span class="mono">Toppings</span><span>${tops}</span><span></span></div>
-       </div>
-       <p class="quote">Read the ticket, then work left to right: rice, knife, build, serve.</p>`,
+      `<div class="ribbon"><h2>${d.title}</h2><span lang="ja">${JP_DAYS[i]}</span></div>
+       <p class="panel-lead">${d.note}</p>
+       <div class="guests"><span class="ico">${ICONS.pochi}</span><span><b>${d.customers}</b> guests tonight</span></div>
+       <div class="shelf"><span class="shelf-label">Fish</span><div class="ingredients">${fish}</div></div>
+       <div class="shelf"><span class="shelf-label">Toppings</span><div class="ingredients">${tops}</div></div>
+       <p class="tip-line">Match the photo on each ticket. Rice, knife, build, serve.</p>`,
       [{ label: 'Open the door', primary: true, onClick: onGo }],
+      'intro',
     );
   }
 
   scoreCard(name, quote, score, tip, onNext, last) {
     const stars = Math.round(score.total / 20);
-    const starHtml = Array.from({ length: 5 }, (_, i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
-    const bar = (label, v) => `<div class="line"><span class="mono">${label}</span><span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span><span class="v">${Math.round(v * 100)}</span></div>`;
+    const starHtml = Array.from({ length: 5 }, (_, i) => `<span class="star${i < stars ? ' on' : ''}" style="--d:${0.25 + i * 0.12}s">${star(i < stars)}</span>`).join('');
+    const bar = (label, v, i) => `<div class="stat-bar"><span>${label}</span><span class="gauge"><i style="--w:${Math.round(v * 100)}%;--d:${0.5 + i * 0.1}s"></i></span><b>${Math.round(v * 100)}</b></div>`;
     this.card(
-      `<p class="mono">${name} says</p>
-       <p class="quote">${quote}</p>
-       <div class="score-big"><span class="num">${score.total}</span><span class="stars" aria-label="${stars} of 5 stars">${starHtml}</span></div>
-       <div class="breakdown">${bar('Rice', score.parts.rice)}${bar('Cut', score.parts.cut)}${bar('Build', score.parts.build)}${bar('Wait', score.parts.wait)}</div>
-       <div class="tip"><span>Tip</span><b>+${yen(tip)}</b></div>`,
+      `<div class="ribbon"><h2>${esc(name)}</h2></div>
+       <div class="stars-row" aria-label="${stars} of 5 stars">${starHtml}</div>
+       <div class="score-big"><b id="scoreNum">0</b><span>/ 100</span></div>
+       <p class="speech">${esc(quote)}</p>
+       <div class="stat-bars">${bar('Rice', score.parts.rice, 0)}${bar('Cut', score.parts.cut, 1)}${bar('Build', score.parts.build, 2)}${bar('Wait', score.parts.wait, 3)}</div>
+       <div class="tip-pill"><span class="ico">${ICONS.coin}</span><span>Tip</span><b>+${yen(tip)}</b></div>`,
       [{ label: last ? 'Close up' : 'Next guest', primary: true, onClick: onNext }],
+      'result',
     );
+    countTo($('scoreNum'), score.total, 900);
   }
 
   summaryCard(dayIndex, stats, rank, hasNext, onNext, onReplay, onTitle, post) {
     const d = DAYS[dayIndex];
     const strip = post.plates.length
-      ? `<div class="strip">${post.plates.map((p) => `<figure><img src="${p.img}" alt="Plate for ${p.guest}" /><figcaption class="mono">${p.score}</figcaption></figure>`).join('')}</div>`
+      ? `<div class="strip">${post.plates.map((p) => `<figure><img src="${p.img}" alt="Plate for ${esc(p.guest)}" /><figcaption>${p.score}</figcaption></figure>`).join('')}</div>`
       : '';
     this.card(
-      `<p class="mono">${d.title} · closed</p>
-       <h2>${yen(stats.tips)} in tips.</h2>
+      `<div class="ribbon"><h2>${d.title} done</h2><span lang="ja">閉店</span></div>
+       <div class="takings"><span class="ico">${ICONS.coin}</span><b id="takeNum">¥0</b><span>in tips</span></div>
        ${strip}
-       <div class="breakdown">
-         <div class="line"><span class="mono">Guests</span><span>${stats.served}</span><span></span></div>
-         <div class="line"><span class="mono">Average</span><span>${stats.avg} / 100</span><span></span></div>
-         <div class="line"><span class="mono">Best plate</span><span>${stats.best} / 100</span><span></span></div>
+       <div class="stat-tiles">
+         <div><b>${stats.served}</b><span>Guests</span></div>
+         <div><b>${stats.avg}</b><span>Average</span></div>
+         <div><b>${stats.best}</b><span>Best plate</span></div>
        </div>
        <div class="hanko">${rank}</div>
        ${post.plates.length ? `<form class="post" id="postForm" autocomplete="off">
-         <label class="mono" for="postName">Sign the wall</label>
+         <label for="postName">Sign the wall</label>
          <div class="post-row"><input id="postName" maxlength="16" placeholder="Your name" spellcheck="false" /><button class="btn btn-solid" type="submit" id="postBtn">Post</button></div>
-         <p class="mono post-note" id="postNote">Your best plates go up for everyone to see.</p>
+         <p class="post-note" id="postNote">Your best plates go up for everyone to see.</p>
        </form>` : ''}`,
       [
         ...(hasNext ? [{ label: `Day ${dayIndex + 2}`, primary: true, onClick: onNext }] : []),
@@ -265,7 +344,9 @@ export class GameUI {
         { label: 'The wall', onClick: post.onWall },
         { label: 'Title', onClick: onTitle },
       ],
+      'summary',
     );
+    countTo($('takeNum'), stats.tips, 1200, yen);
     const form = $('postForm');
     if (!form) return;
     $('postName').value = post.name;
@@ -289,45 +370,51 @@ export class GameUI {
     $('wallNote').textContent = data.loading
       ? 'Loading.'
       : data.shared
-        ? 'From everyone who played. Newest first.'
+        ? 'Plates from everyone who played. Newest first.'
         : 'Only your own shifts, saved on this device. The shared wall needs storage on the server.';
     const board = $('wallBoard');
     board.innerHTML = '';
-    for (const e of data.leaders || []) {
+    (data.leaders || []).forEach((e, k) => {
       const li = document.createElement('li');
-      li.className = e.id === mine ? 'mine' : '';
+      li.className = `${e.id === mine ? 'mine' : ''}${k < 3 ? ` medal m${k + 1}` : ''}`;
+      const rank = document.createElement('span');
+      rank.className = 'rank';
+      rank.textContent = String(k + 1);
       const name = document.createElement('span');
+      name.className = 'who';
       name.textContent = e.name;
       const day = document.createElement('span');
-      day.className = 'mono';
+      day.className = 'when';
       day.textContent = `Day ${e.day + 1}`;
       const tips = document.createElement('b');
       tips.textContent = yen(e.tips);
-      li.append(name, day, tips);
+      li.append(rank, name, day, tips);
       board.appendChild(li);
-    }
-    if (!data.loading && !(data.leaders || []).length) board.innerHTML = '<li class="empty mono">No shifts yet.</li>';
+    });
+    if (!data.loading && !(data.leaders || []).length) board.innerHTML = '<li class="empty">No shifts yet.</li>';
     const grid = $('wallPlates');
     grid.innerHTML = '';
     for (const p of data.plates || []) {
       if (typeof p.img !== 'string' || !p.img.startsWith('data:image/')) continue;
       const fig = document.createElement('figure');
-      fig.className = `plate-card${p.run === mine ? ' mine' : ''}`;
+      fig.className = `polaroid${p.run === mine ? ' mine' : ''}`;
       const img = document.createElement('img');
       img.src = p.img;
       img.loading = 'lazy';
       img.alt = `Plate by ${p.name} for ${p.guest}`;
       const cap = document.createElement('figcaption');
-      const who = document.createElement('span');
+      const who = document.createElement('b');
       who.textContent = p.name;
       const meta = document.createElement('span');
-      meta.className = 'mono';
-      meta.textContent = `for ${p.guest} · ${p.score}`;
-      cap.append(who, meta);
+      meta.textContent = `for ${p.guest}`;
+      const sc = document.createElement('span');
+      sc.className = 'score';
+      sc.textContent = String(p.score);
+      cap.append(who, meta, sc);
       fig.append(img, cap);
       grid.appendChild(fig);
     }
-    if (!data.loading && !grid.children.length) grid.innerHTML = '<p class="empty mono">No plates yet. Finish a shift and post yours.</p>';
+    if (!data.loading && !grid.children.length) grid.innerHTML = '<p class="empty">No plates yet. Finish a shift and post yours.</p>';
     $('wallClose').focus({ preventScroll: true });
   }
 
@@ -335,7 +422,7 @@ export class GameUI {
     $('wall').hidden = true;
   }
 
-  // Rating that floats up from a point on screen. kind: great | good | bad.
+  // Rating that pops from a point on screen. kind: great | good | bad | say.
   // text may be { jp, en } for a spoken line: Japanese with a small gloss.
   popup(text, x, y, kind = 'good') {
     const el = document.createElement('div');
@@ -377,6 +464,7 @@ export class GameUI {
     const t = $('toast');
     t.textContent = text;
     t.hidden = false;
+    bump(t, 'show');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => (t.hidden = true), ms);
   }
