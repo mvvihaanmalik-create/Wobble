@@ -28,6 +28,10 @@ function mats() {
     grainGeo,
     salmon: foodMaterial('salmon'),
     tuna: foodMaterial('tuna'),
+    // Blocks are thick and large: deep translucency there shows the counter
+    // through the fish, so they keep the gloss but stay nearly opaque.
+    salmonBlock: foodMaterial('salmon', { transmission: 0.12 }),
+    tunaBlock: foodMaterial('tuna', { transmission: 0.1 }),
     tamago: (() => {
       const t = foodMaterial('tamago');
       t.userData.uniforms.uParam.value.x = BLOCKS.tamago.H;
@@ -84,9 +88,9 @@ export class RiceMound {
         return [x * r * 0.74 * s, yy > 0 ? yy * 0.72 * s : yy * 0.45 * s, z * r * 0.62 * s];
       }),
       formed: shapeFrom(base.pos, (x, y, z) => [
-        sp(x, 0.72) * 1.08 * s,
-        y > 0 ? Math.pow(y, 0.85) * 0.74 * s : y * 0.07 * s,
-        sp(z, 0.72) * 0.5 * s,
+        sp(x, 0.84) * 1.06 * s,
+        y > 0 ? Math.pow(y, 0.9) * 0.74 * s : y * 0.1 * s,
+        sp(z, 0.84) * 0.52 * s,
       ]),
       flat: shapeFrom(base.pos, (x, y, z) => [sp(x, 0.62) * 1.3 * s, y > 0 ? Math.pow(y, 0.7) * 0.36 * s : y * 0.05 * s, sp(z, 0.62) * 0.64 * s]),
     };
@@ -259,11 +263,11 @@ export class FishBlock {
       this.group.remove(this.squishy.mesh);
       this.squishy.dispose();
     }
-    const solid = extrudedSolid(this.outline(), this.D, { bevel: 0.06, maxEdge: 0.16 });
+    const solid = extrudedSolid(this.outline(), this.D, { bevel: 0.12, bevelSegments: 4, maxEdge: 0.16, round: 0.12, smooth: 3 });
     const food = solid.pos.slice();
     const mesh = bodyMesh(solid.pos, solid.idx);
     this.shift = mesh.shift;
-    const mat = mats()[this.kind];
+    const mat = mats()[`${this.kind}Block`] || mats()[this.kind];
     this.squishy = new Squishy(mesh, mat, BLOCK_SIM, food);
     this.squishy.mesh.position.set(this.shift[0], this.shift[1], this.shift[2]);
     this.group.add(this.squishy.mesh);
@@ -294,7 +298,7 @@ export class FishSlice {
   // thickness, z across.
   constructor(kind, quad, D) {
     this.kind = kind;
-    const solid = extrudedSolid(quad, D, { bevel: 0.035, maxEdge: 0.12 });
+    const solid = extrudedSolid(quad, D, { bevel: 0.1, bevelSegments: 5, maxEdge: 0.1, round: 0.16, smooth: 5 });
     const food = solid.pos.slice();
     const [p0, , , p3] = quad;
     const d = new Vector3(p3[0] - p0[0], p3[1] - p0[1], 0).normalize();

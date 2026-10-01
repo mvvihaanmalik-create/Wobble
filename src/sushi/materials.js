@@ -4,21 +4,21 @@ import { NOISE, RECIPES } from './glsl.js';
 // Palettes (sRGB hex) and surface settings for each recipe in glsl.js.
 const KINDS = {
   salmon: {
-    colors: ['#ea5c2c', '#fb8d52', '#ffd6bf'],
-    bump: 0.45,
-    // A little transmission so thin edges glow, the way raw fish does.
-    physical: { roughness: 0.34, clearcoat: 0.7, clearcoatRoughness: 0.18, sheen: 0.35, sheenColor: '#ffb48f', sheenRoughness: 0.4, transmission: 0.16, thickness: 0.35, attenuationColor: '#ff5a1e', attenuationDistance: 0.5, ior: 1.36 },
+    colors: ['#ff5f1f', '#ff9a4d', '#ffc7a3'],
+    bump: 0.32,
+    // Deep translucency: light soaks in and glows orange, like fruit jelly.
+    physical: { roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 0.25, sheenColor: '#ffb48f', sheenRoughness: 0.35, transmission: 0.5, thickness: 0.6, attenuationColor: '#ff4a08', attenuationDistance: 0.42, ior: 1.38, specularIntensity: 1 },
   },
   tuna: {
-    colors: ['#6e0919', '#951628', '#d98a92', '#3e0510'],
-    bump: 0.4,
-    physical: { roughness: 0.38, clearcoat: 0.6, clearcoatRoughness: 0.22, iridescence: 0.35, iridescenceIOR: 1.3, iridescenceThicknessRange: [200, 500], sheen: 0.2, sheenColor: '#ff4a5a', transmission: 0.1, thickness: 0.35, attenuationColor: '#b0101e', attenuationDistance: 0.4, ior: 1.36 },
+    colors: ['#8a1426', '#b02c3c', '#e6a0a6', '#56101a'],
+    bump: 0.3,
+    physical: { roughness: 0.13, clearcoat: 1, clearcoatRoughness: 0.05, iridescence: 0.25, iridescenceIOR: 1.3, iridescenceThicknessRange: [200, 500], sheen: 0.2, sheenColor: '#ff4a5a', transmission: 0.42, thickness: 0.55, attenuationColor: '#a00a1c', attenuationDistance: 0.32, ior: 1.38, specularIntensity: 1 },
   },
   tamago: {
-    colors: ['#f9d257', '#f0b52e', '#c98a22', '#8d4f18'],
+    colors: ['#ffd84f', '#f6b92a', '#d99a2a', '#a25f1a'],
     param: [1.0, 0, 0, 0], // x: top surface height, for the browned skin
-    bump: 0.5,
-    physical: { roughness: 0.62, clearcoat: 0.15, sheen: 0.3, sheenColor: '#ffe08a' },
+    bump: 0.35,
+    physical: { roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.15, sheen: 0.4, sheenColor: '#fff0a0', transmission: 0.15, thickness: 0.5, attenuationColor: '#f0a010', attenuationDistance: 0.6 },
   },
   rice: {
     colors: ['#fffcf5', '#e6dece'],
@@ -26,9 +26,9 @@ const KINDS = {
     physical: { roughness: 0.48, clearcoat: 0.25, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: '#ffffff', sheenRoughness: 0.6 },
   },
   wasabi: {
-    colors: ['#76992a', '#a9c64c', '#4b6618'],
-    bump: 0.6,
-    physical: { roughness: 0.72, clearcoat: 0.1 },
+    colors: ['#7fa62e', '#b1cf55', '#4b6618'],
+    bump: 0.45,
+    physical: { roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.2, sheen: 0.4, sheenColor: '#e4ffb0' },
   },
   hinoki: {
     recipe: 'wood',
@@ -191,9 +191,9 @@ export function riceGrainMaterial() {
   return new MeshPhysicalMaterial({
     color: '#fffdf8',
     emissive: new Color('#3a3226'), // light scattered inside the grain
-    roughness: 0.26,
-    clearcoat: 0.8,
-    clearcoatRoughness: 0.16,
+    roughness: 0.18,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
     transmission: 0.12,
     thickness: 0.08,
     attenuationColor: new Color('#efe0c0'),
@@ -205,8 +205,8 @@ export function riceGrainMaterial() {
 
 // Grain shape: a plump rounded ellipsoid, a touch flatter on one axis.
 export function riceGrainGeometry(CapsuleGeometry) {
-  const g = new CapsuleGeometry(0.05, 0.12, 3, 10);
-  g.scale(1, 1, 0.78);
+  const g = new CapsuleGeometry(0.056, 0.075, 3, 10);
+  g.scale(1, 1, 0.82);
   return g;
 }
 

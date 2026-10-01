@@ -15,6 +15,9 @@ import {
   Vector2,
   CapsuleGeometry,
   CircleGeometry,
+  CanvasTexture,
+  Sprite,
+  SpriteMaterial,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -198,6 +201,8 @@ export class SushiSet {
     g.position.set(t.x, 0, t.z);
     this.tub = g;
     this.tubRice = rice;
+    this.steam = buildSteam(t.height + 0.1, t.radius * 0.6);
+    g.add(this.steam);
     this.group.add(g);
   }
 
@@ -318,7 +323,44 @@ export class SushiSet {
       m.geometry.computeVertexNormals();
     }
     for (const l of this.lanterns) l.rotation.z = Math.sin(t * 0.7 + l.userData.phase) * 0.025;
+    // Steam: each puff loops on its own phase, so this needs no state.
+    for (const s of this.steam.children) {
+      const d = s.userData;
+      const a = ((t + d.offset) % d.life) / d.life;
+      s.position.set(d.x + Math.sin(t * 0.6 + d.offset) * 0.3 * a + a * 0.5, d.y + a * 3.2, d.z);
+      s.scale.setScalar(d.size * (0.6 + a * 1.4));
+      s.material.opacity = Math.sin(Math.PI * a) ** 1.5 * 0.18;
+      s.material.rotation = d.spin + a * 0.8;
+    }
   }
+}
+
+// Soft wisps over the warm rice: noisy sprite puffs that rise and fade.
+function buildSteam(y, spread) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d');
+  const rand = mulberry(7);
+  for (let i = 0; i < 26; i++) {
+    const px = 64 + (rand() - 0.5) * 50;
+    const py = 64 + (rand() - 0.5) * 50;
+    const r = 14 + rand() * 30;
+    const grad = x.createRadialGradient(px, py, 0, px, py, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.22)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = grad;
+    x.fillRect(0, 0, 128, 128);
+  }
+  const tex = new CanvasTexture(c);
+  const g = new Group();
+  g.name = 'steam';
+  for (let i = 0; i < 9; i++) {
+    const s = new Sprite(new SpriteMaterial({ map: tex, color: '#fff4e6', transparent: true, depthWrite: false, opacity: 0 }));
+    s.userData = { x: (rand() - 0.5) * spread * 2, y, z: (rand() - 0.5) * spread, offset: rand() * 6, life: 5 + rand() * 2, size: 1.6 + rand() * 1.2, spin: rand() * 6 };
+    s.renderOrder = 4;
+    g.add(s);
+  }
+  return g;
 }
 
 function bowlFill(key) {

@@ -103,28 +103,27 @@ export const RECIPES = {
   // Salmon: orange flesh with pale fat lines (myosepta) that bend into
   // chevrons across the width, finer lines between, and fibers along them.
   salmon: /* glsl */ `
-  // Salmon: segments of orange muscle split by soft, pale fat seams
-  // (myosepta). Seams bend into shallow chevrons across the width, vary in
-  // width and fade in and out. Muscle between them shows fine striation.
+  // Salmon: glossy orange flesh, soft peach seams that bend into shallow
+  // chevrons, and a fine juicy pulp texture between them, like citrus
+  // vesicles. Low contrast on purpose: it should read as luscious, not marbled.
   void food(vec3 p, out vec3 col, out float h, out float r) {
-    float warp = fbm(p * vec3(0.32, 0.5, 0.45)) * 0.32 + 0.025 * sin(p.y * 3.0 + p.z * 1.7);
-    float u = (p.x * 0.8 + p.y * 0.6 + abs(p.z - 0.12) * 0.42 + warp) * 2.7;
+    float warp = fbm(p * vec3(0.32, 0.5, 0.45)) * 0.3 + 0.02 * sin(p.y * 3.0 + p.z * 1.7);
+    float u = (p.x * 0.8 + p.y * 0.6 + abs(p.z - 0.12) * 0.42 + warp) * 2.6;
     float cell = floor(u);
     float d = abs(fract(u + 0.5) - 0.5);
     float jitter = fract(sin(cell * 91.7) * 4375.85);
-    float width = 0.035 + 0.035 * (0.5 + 0.5 * snoise(vec3(p.x * 0.8, p.y * 1.2, cell))) + jitter * 0.02;
-    float seam = 1.0 - smoothstep(width * 0.3, width, d);
-    seam *= 0.6 + 0.4 * smoothstep(-0.4, 0.4, snoise(p * 0.9 + cell));
-    // Faint secondary seams inside the segments.
-    float thin = lines(u * 2.0 + 0.5 + fbm(p * 1.5) * 0.25, 0.018) * 0.14 * smoothstep(0.0, 0.6, snoise(p * 1.4 + 5.0));
-    float fiber = snoise(vec3(u * 14.0, p.y * 46.0, p.z * 46.0));
-    float tone = fbm(p * 1.3) * 0.5 + 0.5;
-    // Muscle is darker in the middle of a segment, lighter toward the seams.
-    vec3 flesh = mix(uA, uB, clamp(tone * 0.55 + d * 0.9, 0.0, 1.0));
-    flesh *= 0.95 + 0.05 * fiber;
-    col = mix(flesh, uC, clamp(seam * 0.85 + thin, 0.0, 1.0));
-    h = seam * 0.55 + thin * 0.3 + fiber * 0.05;
-    r = mix(1.0, 0.7, seam);
+    float width = 0.05 + 0.04 * (0.5 + 0.5 * snoise(vec3(p.x * 0.8, p.y * 1.2, cell))) + jitter * 0.02;
+    float seam = 1.0 - smoothstep(width * 0.2, width * 1.4, d);
+    seam *= 0.5 + 0.5 * smoothstep(-0.4, 0.4, snoise(p * 0.9 + cell));
+    // Pulp: small elongated cells running along the muscle.
+    vec2 pc = worley(vec3(u * 5.0, p.y * 16.0, p.z * 16.0));
+    float pulp = smoothstep(0.0, 0.3, pc.y - pc.x);
+    float tone = fbm(p * 1.2) * 0.5 + 0.5;
+    vec3 flesh = mix(uA, uB, clamp(tone * 0.5 + d * 0.8, 0.0, 1.0));
+    flesh = mix(flesh * 1.04, flesh * 0.95, pulp);
+    col = mix(flesh, uC, seam * 0.7);
+    h = seam * 0.35 + (1.0 - pulp) * 0.18;
+    r = mix(1.0, 0.75, seam);
   }`,
   // Tuna (akami): deep garnet with faint pale connective lines and darker
   // patches toward the blood line.
