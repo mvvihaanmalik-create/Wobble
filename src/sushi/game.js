@@ -10,6 +10,8 @@ import { BarSound } from './audio.js';
 import { Recorder, canShareFile, download, shareOrDownload } from '../record.js';
 import { composeBar } from './capture.js';
 import { Effects, haptic } from './fx.js';
+import { PhotoBooth } from './booth.js';
+import { loadWall, postRun, savedName } from './wall.js';
 
 const STATIONS = ['counter', 'rice', 'knife', 'build'];
 const ENTRANCE = new Vector3(-17, LAYOUT.customer.y, LAYOUT.customer.z);
@@ -24,6 +26,8 @@ export class Game {
     this.set = new SushiSet(this.stage.scene);
     this.sound = new BarSound();
     this.fx = new Effects(this.stage.scene);
+    this.booth = new PhotoBooth(this.stage, this.set);
+    this.stage.beforeRender = () => this.booth.flush();
     this.sous = new SousChef();
     this.stage.scene.add(this.sous.group);
     this.timeScale = 1;
@@ -50,6 +54,7 @@ export class Game {
       onPhoto: () => this.photo(),
       onStart: (day) => this.startDay(day),
       onTool: (t) => this.stations.build.setTool(t),
+      onWall: () => this.openWall(),
     });
     this.ui.setMuted(this.sound.muted);
 
@@ -101,6 +106,7 @@ export class Game {
     this.orderIndex = -1;
     this.tips = 0;
     this.scores = [];
+    this.served = [];
     this.ui.hideTitle();
     this.removeCustomers();
     this.clearWork();
@@ -120,6 +126,8 @@ export class Game {
     if (this.orderIndex >= this.orders.length) return this.endDay();
     const order = this.orders[this.orderIndex];
     order.taken = false;
+    this.photograph(order);
+    if (this.orders[this.orderIndex + 1]) this.photograph(this.orders[this.orderIndex + 1]);
     order.arrived = performance.now();
     this.order = order;
     this.goStation('counter');
@@ -149,10 +157,10 @@ export class Game {
     const next = this.orders[this.orderIndex + 1];
     if (next && !this.queue) {
       const q = new Customer(next.look, this.orderIndex + 2);
-      q.group.position.set(LAYOUT.queue.x + 6, LAYOUT.queue.y, LAYOUT.queue.z);
+      q.group.position.set(LAYOUT.queue.x + 6, LAYOUT.queue.y + 0.22, LAYOUT.queue.z);
       q.group.scale.setScalar(LAYOUT.queue.scale);
       this.stage.scene.add(q.group);
-      q.hopTo(new Vector3(LAYOUT.queue.x, LAYOUT.queue.y, LAYOUT.queue.z), 0.6, 0.8);
+      q.hopTo(new Vector3(LAYOUT.queue.x, LAYOUT.queue.y + 0.22, LAYOUT.queue.z), 0.6, 0.8);
       this.queue = q;
     }
   }
@@ -297,6 +305,8 @@ export class Game {
     const waited = (performance.now() - this.order.arrived) / 1000;
     const score = scorePlate(this.order, built, waited);
     const tip = tipFor(score.total, this.day);
+    const photo = this.booth.platePhoto(480, 300, this.pieces.length);
+    photo.then((img) => (this.served = [...(this.served || []), { img, score: score.total, tip, guest: this.order.look.name, species: this.order.look.species, day: this.day }]));
     await this.wait(350);
     this.sound.whoosh();
     // Back along the customer side of the counter, then across to the guest,
@@ -399,7 +409,32 @@ export class Game {
         this.ui.hideCard();
         this.showTitle();
       },
+      {
+        plates: this.todaysPlates(),
+        name: savedName(),
+        onWall: () => this.openWall(),
+        onPost: async (name) => {
+          const res = await postRun({ name, day: this.day, tips: this.tips, avg, plates: this.todaysPlates() });
+          this.openWall(res);
+          return res;
+        },
+      },
     );
+  }
+
+  // Up to three of today's plates, best first.
+  todaysPlates() {
+    return (this.served || [])
+      .filter((p) => p.day === this.day)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(({ img, score, guest, species }) => ({ img, score, guest, species }));
+  }
+
+  async openWall(posted) {
+    if (posted) return this.ui.showWall(posted, posted.id);
+    this.ui.showWall({ loading: true });
+    this.ui.showWall(await loadWall());
   }
 
   goStationForce(name) {
@@ -477,7 +512,7 @@ export class Game {
     for (const type of ['pointerup', 'keydown', 'touchend']) window.addEventListener(type, () => this.sound.unlock(), { passive: true });
     // Keyboard: 1-4 switch stations, space holds.
     window.addEventListener('keydown', (e) => {
-      if (this.mode !== 'play' || e.repeat) return;
+      if (this.mode !== 'play' || e.repeat || e.target.tagName === 'INPUT') return;
       const i = ['1', '2', '3', '4'].indexOf(e.key);
       if (i >= 0) this.goStation(STATIONS[i]);
       if (e.code === 'Space' && (this.station === 'rice' || this.station === 'counter')) {
@@ -655,6 +690,16 @@ export class Game {
     const v = world.clone().project(this.stage.camera);
     const r = this.canvas.getBoundingClientRect();
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  }
+
+  // The picture on the ticket: the plate as it should come out.
+  photograph(order) {
+    if (order.photoing) return;
+    order.photoing = true;
+    this.booth.orderPhoto(order).then((url) => {
+      order.photo = url;
+      this.ui.ticketKey = null;
+    });
   }
 
   // The sous chef reacts: a face for a moment, and maybe a line.

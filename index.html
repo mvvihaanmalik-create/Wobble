@@ -28,6 +28,7 @@
 
       <aside class="ticket" id="ticket" hidden>
         <div class="ticket-head mono"><span id="ticketNo">No. 01</span><span id="ticketName">Mochi</span></div>
+        <img class="ticket-photo" id="ticketPhoto" alt="The plate this guest wants" hidden />
         <div class="ticket-body" id="ticketLines"></div>
         <div class="patience" aria-label="Patience"><i id="patienceBar"></i></div>
       </aside>
@@ -59,9 +60,30 @@
         <div class="days" id="dayList"></div>
         <div class="title-actions">
           <button class="btn btn-solid" id="startBtn" type="button">Open the shop</button>
+          <button class="btn" id="wallBtn" type="button">The wall</button>
           <a class="btn" href="./break.html">Break room</a>
         </div>
         <p class="mono foot">Tap, hold and swipe. Sound on.</p>
+      </div>
+    </section>
+
+    <section class="screen wall-screen" id="wall" hidden role="dialog" aria-modal="true" aria-labelledby="wallTitle">
+      <div class="wall">
+        <header class="wall-head">
+          <div>
+            <p class="mono eyebrow">The wall</p>
+            <h2 id="wallTitle">Plates from every shift</h2>
+            <p class="mono wall-note" id="wallNote"></p>
+          </div>
+          <button class="btn" id="wallClose" type="button">Close</button>
+        </header>
+        <div class="wall-body">
+          <section class="board" aria-label="Best shifts">
+            <h3 class="mono">Best shifts</h3>
+            <ol id="wallBoard"></ol>
+          </section>
+          <section class="wall-plates" id="wallPlates" aria-label="Plates"></section>
+        </div>
       </div>
     </section>
 

@@ -279,6 +279,7 @@ export class Stage {
   }
 
   render(dt = 1 / 60) {
+    if (this.beforeRender) this.beforeRender();
     this.composer.render(dt);
   }
 }

@@ -22,6 +22,9 @@ export class GameUI {
     $('recBtn').addEventListener('click', () => this.h.onRecord());
     $('shotBtn').addEventListener('click', () => this.h.onPhoto());
     $('startBtn').addEventListener('click', () => this.h.onStart(this.selectedDay));
+    $('wallBtn').addEventListener('click', () => this.h.onWall());
+    $('wallClose').addEventListener('click', () => this.hideWall());
+    $('wall').addEventListener('keydown', (e) => e.key === 'Escape' && this.hideWall());
     this.buildTools();
     this.selectedDay = 0;
   }
@@ -91,12 +94,15 @@ export class GameUI {
       this.ticketKey = null;
       return;
     }
-    const key = `${number}|${done.join(',')}`;
+    const key = `${number}|${done.join(',')}|${order.photo ? 1 : 0}`;
     if (key === this.ticketKey) return;
     const fresh = !this.ticketKey || !this.ticketKey.startsWith(`${number}|`);
     this.ticketKey = key;
     $('ticketNo').textContent = `No. ${String(number).padStart(2, '0')}`;
     $('ticketName').textContent = order.look.name;
+    const ph = $('ticketPhoto');
+    ph.hidden = !order.photo;
+    if (order.photo && ph.getAttribute('src') !== order.photo) ph.src = order.photo;
     $('ticketLines').innerHTML = order.pieces
       .map((p, i) => {
         const [main, ...sub] = describePiece(p);
@@ -233,23 +239,100 @@ export class GameUI {
     );
   }
 
-  summaryCard(dayIndex, stats, rank, hasNext, onNext, onReplay, onTitle) {
+  summaryCard(dayIndex, stats, rank, hasNext, onNext, onReplay, onTitle, post) {
     const d = DAYS[dayIndex];
+    const strip = post.plates.length
+      ? `<div class="strip">${post.plates.map((p) => `<figure><img src="${p.img}" alt="Plate for ${p.guest}" /><figcaption class="mono">${p.score}</figcaption></figure>`).join('')}</div>`
+      : '';
     this.card(
       `<p class="mono">${d.title} · closed</p>
        <h2>${yen(stats.tips)} in tips.</h2>
+       ${strip}
        <div class="breakdown">
          <div class="line"><span class="mono">Guests</span><span>${stats.served}</span><span></span></div>
          <div class="line"><span class="mono">Average</span><span>${stats.avg} / 100</span><span></span></div>
          <div class="line"><span class="mono">Best plate</span><span>${stats.best} / 100</span><span></span></div>
        </div>
-       <div class="hanko">${rank}</div>`,
+       <div class="hanko">${rank}</div>
+       ${post.plates.length ? `<form class="post" id="postForm" autocomplete="off">
+         <label class="mono" for="postName">Sign the wall</label>
+         <div class="post-row"><input id="postName" maxlength="16" placeholder="Your name" spellcheck="false" /><button class="btn btn-solid" type="submit" id="postBtn">Post</button></div>
+         <p class="mono post-note" id="postNote">Your best plates go up for everyone to see.</p>
+       </form>` : ''}`,
       [
         ...(hasNext ? [{ label: `Day ${dayIndex + 2}`, primary: true, onClick: onNext }] : []),
         { label: 'Replay day', primary: !hasNext, onClick: onReplay },
+        { label: 'The wall', onClick: post.onWall },
         { label: 'Title', onClick: onTitle },
       ],
     );
+    const form = $('postForm');
+    if (!form) return;
+    $('postName').value = post.name;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('postBtn');
+      btn.disabled = true;
+      btn.textContent = 'Posting';
+      const res = await post.onPost($('postName').value);
+      btn.textContent = 'Posted';
+      $('postNote').textContent = res.shared
+        ? res.rank ? `Up on the wall. No. ${res.rank} on the board.` : 'Up on the wall.'
+        : 'Saved on this device. The shared wall is not set up on this server.';
+    });
+  }
+
+  // --- The wall ------------------------------------------------------------------
+
+  showWall(data, mine) {
+    $('wall').hidden = false;
+    $('wallNote').textContent = data.loading
+      ? 'Loading.'
+      : data.shared
+        ? 'From everyone who played. Newest first.'
+        : 'Only your own shifts, saved on this device. The shared wall needs storage on the server.';
+    const board = $('wallBoard');
+    board.innerHTML = '';
+    for (const e of data.leaders || []) {
+      const li = document.createElement('li');
+      li.className = e.id === mine ? 'mine' : '';
+      const name = document.createElement('span');
+      name.textContent = e.name;
+      const day = document.createElement('span');
+      day.className = 'mono';
+      day.textContent = `Day ${e.day + 1}`;
+      const tips = document.createElement('b');
+      tips.textContent = yen(e.tips);
+      li.append(name, day, tips);
+      board.appendChild(li);
+    }
+    if (!data.loading && !(data.leaders || []).length) board.innerHTML = '<li class="empty mono">No shifts yet.</li>';
+    const grid = $('wallPlates');
+    grid.innerHTML = '';
+    for (const p of data.plates || []) {
+      if (typeof p.img !== 'string' || !p.img.startsWith('data:image/')) continue;
+      const fig = document.createElement('figure');
+      fig.className = `plate-card${p.run === mine ? ' mine' : ''}`;
+      const img = document.createElement('img');
+      img.src = p.img;
+      img.loading = 'lazy';
+      img.alt = `Plate by ${p.name} for ${p.guest}`;
+      const cap = document.createElement('figcaption');
+      const who = document.createElement('span');
+      who.textContent = p.name;
+      const meta = document.createElement('span');
+      meta.className = 'mono';
+      meta.textContent = `for ${p.guest} · ${p.score}`;
+      cap.append(who, meta);
+      fig.append(img, cap);
+      grid.appendChild(fig);
+    }
+    if (!data.loading && !grid.children.length) grid.innerHTML = '<p class="empty mono">No plates yet. Finish a shift and post yours.</p>';
+    $('wallClose').focus({ preventScroll: true });
+  }
+
+  hideWall() {
+    $('wall').hidden = true;
   }
 
   // Rating that floats up from a point on screen. kind: great | good | bad.

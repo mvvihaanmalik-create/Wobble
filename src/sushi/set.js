@@ -22,6 +22,7 @@ import {
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYOUT } from './config.js';
+import { softMaterial } from './critters.js';
 import { bakeFoodCoords, foodMaterial, plain, riceGrainGeometry, riceGrainMaterial } from './materials.js';
 
 const rand = mulberry(7);
@@ -51,6 +52,7 @@ export class SushiSet {
     this.buildGeta();
     this.buildTray();
     this.buildBowls();
+    this.buildBench();
     this.knife = buildKnife();
     this.group.add(this.knife);
   }
@@ -269,7 +271,19 @@ export class SushiSet {
     grp.add(garnish);
     grp.position.set(g.x, 0, g.z);
     this.geta = grp;
+    this.getaParts = [...grp.children]; // the bare board, for photo shoots
     this.group.add(grp);
+  }
+
+  // Where the next guest waits: a low walnut bench with a cushion.
+  buildBench() {
+    const q = LAYOUT.queue;
+    const bench = new Mesh(withFood(new RoundedBoxGeometry(6.4, 4, 3.4, 3, 0.12)), foodMaterial('walnut'));
+    bench.position.set(q.x, q.y - 2, q.z);
+    bench.receiveShadow = true;
+    const cushion = shadowed(new Mesh(new RoundedBoxGeometry(4.2, 0.36, 2.8, 4, 0.16), softMaterial('#7a2a2e', { roughness: 0.8, clearcoat: 0 })));
+    cushion.position.set(q.x, q.y + 0.05, q.z);
+    this.group.add(bench, cushion);
   }
 
   buildTray() {

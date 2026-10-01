@@ -33,13 +33,13 @@ const CRITTER_SIM = {
 
 // Body shapes from a unit sphere: wide, soft and a little bottom heavy.
 const SHAPES = {
-  mochi: (x, y, z) => [x * 1.06, y > 0 ? Math.pow(y, 0.82) * 1.0 : y * 0.22, z * 0.96],
-  round: (x, y, z) => [x * 1.0, y > 0 ? Math.pow(y, 0.86) * 1.08 : y * 0.24, z * 0.96],
-  bean: (x, y, z) => [x * 0.86, y > 0 ? y * 1.16 : y * 0.36, z * 0.82],
+  mochi: (x, y, z) => [x * 1.06, y > 0 ? Math.pow(y, 0.82) * 1.24 : y * 0.22, z * 0.96],
+  round: (x, y, z) => [x * 1.0, y > 0 ? Math.pow(y, 0.86) * 1.3 : y * 0.24, z * 0.96],
+  bean: (x, y, z) => [x * 0.86, y > 0 ? y * 1.36 : y * 0.36, z * 0.82],
   drop: (x, y, z) => {
     const t = (y + 1) / 2;
     const k = 1 - 0.38 * Math.pow(t, 2.4);
-    return [x * 0.98 * k, y > 0 ? y * 1.12 : y * 0.3, z * 0.9 * k];
+    return [x * 0.98 * k, y > 0 ? y * 1.3 : y * 0.3, z * 0.9 * k];
   },
 };
 

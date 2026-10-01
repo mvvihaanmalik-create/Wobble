@@ -17,8 +17,8 @@ export const LAYOUT = {
   geta: { x: 10.8, z: 1.4, w: 6.6, d: 2.9, h: 0.55 }, // serving board
   slots: { 1: [-0.55], 2: [-1.85, 0.75] }, // nigiri positions along the geta by piece count
   slotAngle: 0.32, // nigiri sit at a slight angle, the way they are plated
-  customer: { x: 0, z: -7.4, y: -0.2, scale: 3.6 }, // seated, peeking over the counter
-  queue: { x: 9.5, z: -12.5, y: -1.9, scale: 2.4 }, // next in line
+  customer: { x: 0, z: -7.4, y: -1.1, scale: 3.4 }, // seated, peeking over the counter
+  queue: { x: 9.5, z: -12.5, y: -2.6, scale: 2.3 }, // next in line
   sous: { x: -7.9, z: -2.5, y: 0, scale: 1.6, turn: 0.35 }, // the sous chef, perched on the counter by the tub
   sousTitle: { x: 7.6, z: -6, y: -0.3, scale: 2.8, turn: -0.4 }, // on the title, next to the guest
 };
