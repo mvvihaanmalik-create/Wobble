@@ -17,6 +17,10 @@ import { cutScore, makiOf, nigiriOf, scoopScore } from './orders.js';
 import { FILLINGS, MAKI, MakiSheet } from './maki.js';
 import { Paw } from './critters.js';
 
+const _v = new Vector3();
+const _v2 = new Vector3();
+const _v3 = new Vector3();
+
 const v3 = () => new Vector3();
 
 class Station {
@@ -47,17 +51,22 @@ export class CounterStation extends Station {
     if (g.serving) {
       g.ui.hint('');
       g.ui.actions([]);
+      g.gesture(null);
       return;
     }
     if (!g.customer || !g.order) {
+      g.gesture(null);
       g.ui.hint('');
       g.ui.actions([]);
       return;
     }
+    if (g.order.taken || !g.customer.seated) g.gesture(null);
     if (!g.customer.seated) {
       g.ui.hint('Someone is coming in.');
       g.ui.actions([]);
     } else if (!g.order.taken) {
+      const c = g.customer;
+      g.gesture('tap', c.group.position.clone().add(new Vector3(0, c.body.height * c.group.scale.y * 0.55, 0)));
       g.ui.hint(`${g.order.look.name} is ready to order.`);
       g.ui.actions([{ label: 'Take order', primary: true, onClick: () => g.takeOrder() }]);
     } else if (g.plateComplete()) {
@@ -233,6 +242,11 @@ export class RiceStation extends Station {
     else if (this.state === 'roll') g.ui.hint('Swipe up across the mat to roll it.');
     else if (this.state === 'rolling') g.ui.hint('Rolling...');
     else if (this.needed <= 0 && !this.rice && !this.sheet) g.ui.hint('Rice is done. On to the knife.');
+    const taken = g.order && g.order.taken;
+    if (taken && this.state === 'idle' && this.needed > 0) g.gesture('hold', _v.set(LAYOUT.tub.x, LAYOUT.tub.height + 0.5, LAYOUT.tub.z));
+    else if (this.state === 'ready') g.gesture('hold', _v.set(LAYOUT.mat.x, 0.9, LAYOUT.mat.z));
+    else if (this.state === 'roll') g.gesture('stroke', _v.set(LAYOUT.mat.x, 0.4, LAYOUT.mat.z + 1.1), _v2.set(LAYOUT.mat.x, 0.4, LAYOUT.mat.z - 1.1));
+    else g.gesture(null);
     if (this.state === 'fill') {
       g.ui.actions(g.dayFillings().map((k) => ({ label: FILLINGS[k].label, primary: k === this.wantedFilling, onClick: () => this.fill(k) })));
     } else g.ui.actions(this.needed <= 0 && !this.rice && !this.sheet && g.order && g.order.taken ? [{ label: 'To the knife', primary: true, onClick: () => g.goStation('knife') }] : []);
@@ -289,7 +303,8 @@ export class RiceStation extends Station {
     g.sound.plop();
     g.buzz(10);
     const at = new Vector3(LAYOUT.mat.x, 1.3, LAYOUT.mat.z);
-    if (kind !== this.wantedFilling) g.popupAt('Wrong filling?', at, 'bad');
+    if (kind !== this.wantedFilling) g.grade(0.2, 'Not what the ticket says', at);
+    else g.grade(1, `${FILLINGS[kind].label}, as ordered`, at);
     this.state = 'roll';
   }
 
@@ -301,7 +316,7 @@ export class RiceStation extends Station {
     g.fx.burst('grain', new Vector3(LAYOUT.mat.x, 0.6, LAYOUT.mat.z), 10, { speed: 2, up: 2.5, life: 0.8 });
     const log = await sheet.roll();
     if (this.sheet !== sheet) return; // reset while rolling
-    g.popupAt(sheet.spreadQuality > 0.85 ? 'Tight roll' : 'Rolled', new Vector3(LAYOUT.mat.x, 1.4, LAYOUT.mat.z), sheet.spreadQuality > 0.85 ? 'great' : 'good');
+    g.grade(sheet.spreadQuality > 0.85 ? 0.95 : Math.max(0.5, sheet.spreadQuality), sheet.spreadQuality > 0.85 ? 'Tight roll' : 'Rolled up', new Vector3(LAYOUT.mat.x, 1.4, LAYOUT.mat.z));
     g.buzz(16);
     this.sheet = null;
     this.state = 'idle';
@@ -316,6 +331,10 @@ export class RiceStation extends Station {
 
   finishScoop() {
     const g = this.g;
+    if (!this.ball) {
+      this.state = 'idle';
+      return;
+    }
     if (this.sheet) return this.finishMakiScoop();
     const scoop = this.value;
     const from = this.ball.position.clone();
@@ -342,10 +361,8 @@ export class RiceStation extends Station {
         g.fx.burst('grain', at, 14, { speed: 2.2, up: 3, life: 0.9 });
         const sc = scoopScore(scoop);
         const [lo] = RICE.scoopTarget;
-        if (sc > 0.95) {
-          g.popupAt('Perfect scoop', at.clone().setY(1.6), 'great');
-          g.fx.burst('glint', at.clone().setY(1.2), 14, { speed: 2, up: 3, gravity: 6, life: 0.9 });
-        } else g.popupAt(sc > 0.6 ? 'Good scoop' : scoop < lo ? 'A bit small' : 'Too much', at.clone().setY(1.6), sc > 0.6 ? 'good' : 'bad');
+        g.grade(sc > 0.95 ? 1 : sc, sc > 0.95 ? 'Just the right scoop' : sc > 0.6 ? 'Nice scoop' : scoop < lo ? 'A bit small' : 'Too much rice', at.clone().setY(1.6));
+        if (sc > 0.95) g.fx.burst('glint', at.clone().setY(1.2), 14, { speed: 2, up: 3, gravity: 6, life: 0.9 });
         g.buzz(10);
       },
     });
@@ -377,13 +394,17 @@ export class RiceStation extends Station {
         const at = new Vector3(LAYOUT.mat.x, 0.6, LAYOUT.mat.z);
         g.fx.burst('grain', at, 14, { speed: 2.2, up: 3, life: 0.9 });
         const sc = scoopScore(scoop);
-        g.popupAt(sc > 0.95 ? 'Perfect scoop' : sc > 0.6 ? 'Good scoop' : 'Off scoop', at.clone().setY(1.6), sc > 0.95 ? 'great' : sc > 0.6 ? 'good' : 'bad');
+        g.grade(sc > 0.95 ? 1 : sc, sc > 0.95 ? 'Just the right scoop' : sc > 0.6 ? 'Nice scoop' : 'Off scoop', at.clone().setY(1.6));
       },
     });
   }
 
   finishPress() {
     const g = this.g;
+    if (!this.rice && !this.sheet) {
+      this.state = 'idle';
+      return;
+    }
     const v = this.value;
     const [a, b] = RICE.pressGood;
     let quality;
@@ -398,7 +419,7 @@ export class RiceStation extends Station {
       this.sheet.spread(quality, over);
       g.sound.squelch(0.4 + v * 0.5);
       const at = new Vector3(LAYOUT.mat.x, 1.3, LAYOUT.mat.z);
-      g.popupAt(over > 0.5 ? 'Squashed' : v < a ? 'Patchy' : quality > 0.85 ? 'Even spread' : 'Spread', at, over > 0.5 || v < a ? 'bad' : quality > 0.85 ? 'great' : 'good');
+      g.grade(over > 0.5 ? 0.2 : quality > 0.85 ? 0.95 : quality, over > 0.5 ? 'Squashed' : v < a ? 'Patchy' : quality > 0.85 ? 'Even spread' : 'Spread', at);
       g.fx.burst('grain', at.clone().setY(0.5), 6, { speed: 1.8, up: 1.6, life: 0.6 });
       this.state = 'fill';
       return;
@@ -407,12 +428,11 @@ export class RiceStation extends Station {
     this.rice.press(quality, over);
     g.sound.squelch(0.5 + v * 0.6);
     const at = new Vector3(LAYOUT.mat.x, 1.5, LAYOUT.mat.z);
-    if (over > 0.5) g.popupAt('Too hard', at, 'bad');
-    else if (v < a) g.popupAt('Too soft', at, 'bad');
-    else if (quality > 0.85) {
-      g.popupAt('Perfect', at, 'great');
-      g.fx.burst('glint', at.clone().setY(1), 10, { speed: 2, up: 2.5, gravity: 6, life: 0.8 });
-    } else g.popupAt('Good', at, 'good');
+    g.grade(over > 0.5 ? 0.2 : quality > 0.85 ? 0.95 : quality, over > 0.5 ? 'Too hard' : v < a ? 'Too soft' : quality > 0.85 ? 'Firm and neat' : 'Nicely pressed', at);
+    if (over > 0.5) {
+      const rice = this.rice;
+      g.rescue(() => rice.fix(), at.clone().setY(0.8));
+    } else if (quality > 0.85) g.fx.burst('glint', at.clone().setY(1), 10, { speed: 2, up: 2.5, gravity: 6, life: 0.8 });
     g.fx.burst('grain', at.clone().setY(0.5), 5, { speed: 1.6, up: 1.8, life: 0.6 });
     g.buzz(over > 0.5 ? 30 : 14);
     this.state = 'ready';
@@ -438,6 +458,13 @@ export class RiceStation extends Station {
     this.sheet = null;
     this.rice = null;
     this.cancelScoop();
+    // Drop any hold in progress, so a reset mid-press never finishes a
+    // press on rice that is gone.
+    this.state = 'idle';
+    this.value = 0;
+    this.rollFrom = null;
+    this.g.ui.meter(null);
+    this.g.ui.holdRing(null);
   }
 }
 
@@ -568,6 +595,14 @@ export class KnifeStation extends Station {
       this.placeRollGuides(roll);
       g.ui.actions([]);
       g.ui.hint(this.stroke ? 'Straight down through the roll.' : `Cut the roll on each dashed line. (${roll.cuts.length} of ${MAKI.pieces - 1})`);
+      const done = new Set(roll.cuts.map((c) => c.index));
+      const i = roll.guides.findIndex((_, k) => !done.has(k));
+      if (i >= 0 && !this.stroke) {
+        const x = roll.group.position.x + roll.guides[i];
+        const y = roll.group.position.y;
+        const z = roll.group.position.z + MAKI.radius;
+        g.gesture('stroke', _v.set(x, y + MAKI.radius * 2.4, z), _v2.set(x, y - MAKI.radius * 0.6, z));
+      } else g.gesture(null);
     } else if (g.station === 'knife') {
       const kinds = g.dayFish();
       g.ui.actions([
@@ -579,6 +614,10 @@ export class KnifeStation extends Station {
       else if (!need.byKind[this.kind]) g.ui.hint(`No ${FISH[this.kind].label.toLowerCase()} on this ticket. Switch fish.`);
       else if (this.stroke) g.ui.hint('Pull all the way through.');
       else g.ui.hint(`Swipe down through the ${FISH[this.kind].label.toLowerCase()} along the dashes.`);
+      if (g.order && g.order.taken && need.byKind[this.kind] && !this.stroke && this.guide.visible) {
+        this.guide.updateWorldMatrix(true, false);
+        g.gesture('stroke', this.guide.localToWorld(_v.set(0, 0.6, 0)), this.guide.localToWorld(_v2.set(0, -0.6, 0)));
+      } else g.gesture(null);
     }
   }
 
@@ -628,7 +667,7 @@ export class KnifeStation extends Station {
     g.buzz(14);
     const at = roll.group.position.clone().add(new Vector3(roll.guides[best], MAKI.radius + 0.4, MAKI.radius));
     if (score > 0.8) g.fx.burst('glint', at, 8, { speed: 1.8, up: 2, gravity: 5, life: 0.7 });
-    g.popupAt(score > 0.8 ? 'Clean' : score > 0.5 ? 'OK' : 'Wobbly', at.clone().setY(at.y + 0.6), score > 0.8 ? 'great' : score > 0.5 ? 'good' : 'bad');
+    g.grade(score, score > 0.9 ? 'On the line' : score > 0.7 ? 'Clean cut' : score > 0.45 ? 'A little off the line' : 'Wobbly cut', at.clone().setY(at.y + 0.6));
     if (roll.cutDone) {
       const session = g.session;
       setTimeout(() => g.session === session && g.plateRoll(roll), 550);
@@ -750,7 +789,7 @@ export class KnifeStation extends Station {
         slice.body.kickAll(0, 2, 0);
         slice.body.impulse(0, slice.thickness, 0, 0, -1, 0, 1.2, 0.5);
         const verdict = score.total > 0.85 ? 'Clean cut' : score.angle < 0.5 ? 'Watch the angle' : score.thickness < 0.5 ? (thickness > BLOCKS[this.kind].thickness ? 'A bit thick' : 'A bit thin') : 'Nice cut';
-        g.popupAt(verdict, landing.clone().setY(1.4), score.total > 0.85 ? 'great' : score.total > 0.55 ? 'good' : 'bad');
+        g.grade(score.total, verdict, landing.clone().setY(1.4));
         const session = g.session;
         setTimeout(() => g.session === session && g.toTray(slice), 450);
       },
@@ -895,6 +934,33 @@ export class BuildStation extends Station {
       nori: 'Tap the fish to wrap a nori belt round it.',
     };
     g.ui.hint(complete ? 'Looks ready. Serve it.' : hints[this.tool]);
+    this.showGesture(complete);
+  }
+
+  // Act out the current tool on the piece that needs it.
+  showGesture(complete) {
+    const g = this.g;
+    if (complete || !g.order) return g.gesture(null);
+    const wants = nigiriOf(g.order);
+    const i = g.pieces.findIndex((p, k) => {
+      const want = wants[k];
+      if (!want) return false;
+      if (this.tool === 'fish') return !p.slice;
+      if (this.tool === 'wasabi') return !p.slice && p.wasabi.length < (want.wasabi || 0);
+      const v = want.toppings[this.tool];
+      if (!p.slice || !v) return false;
+      return this.tool === 'ikura' ? (p.tops.ikura || 0) < v : !p.tops[this.tool];
+    });
+    const piece = g.pieces[i];
+    if (!piece) return g.gesture(null);
+    const at = piece.group.getWorldPosition(_v).add(_v3.set(0, 0.5, 0));
+    if (this.tool === 'fish') {
+      const slice = g.tray[0];
+      if (!slice) return g.gesture(null);
+      return g.gesture('drag', slice.group.getWorldPosition(_v2).add(_v3.set(0, 0.2, 0)), at);
+    }
+    if (this.tool === 'sauce') return g.gesture('stroke', _v2.copy(at).add(_v3.set(-0.6, 0, 0)), at.add(_v3.set(0.6, 0, 0)));
+    g.gesture('tap', at);
   }
 
   // Everything the pointer could touch here.
@@ -1060,10 +1126,9 @@ export class BuildStation extends Station {
         g.sound.squelch(0.6);
         g.buzz(14);
         const at = piece.group.getWorldPosition(new Vector3()).add(new Vector3(0, 1.4, 0));
-        if (Math.abs(dx) < 0.15) {
-          g.popupAt('Neat', at, 'great');
-          g.fx.burst('glint', at.clone().setY(1.1), 10, { speed: 1.8, up: 2.2, gravity: 5, life: 0.8 });
-        } else if (Math.abs(dx) > 0.45) g.popupAt('Off center', at, 'bad');
+        const off = Math.abs(dx);
+        g.grade(off < 0.15 ? 1 : off > 0.45 ? 0.3 : 0.75, off < 0.15 ? 'Right in the middle' : off > 0.45 ? 'Off center' : 'Nearly centered', at);
+        if (off < 0.15) g.fx.burst('glint', at.clone().setY(1.1), 10, { speed: 1.8, up: 2.2, gravity: 5, life: 0.8 });
         this.tool = this.suggestTool();
         g.layoutTray();
       },

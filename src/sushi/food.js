@@ -155,7 +155,7 @@ export class RiceMound {
       const mo = this.morph;
       mo.t = Math.min(1, mo.t + dt / mo.len);
       const k = 1 - Math.pow(1 - mo.t, 3);
-      const cur = new Float32Array(mo.from.length);
+      const cur = (mo.cur ||= new Float32Array(mo.from.length));
       for (let i = 0; i < cur.length; i++) cur[i] = mo.from[i] + (mo.to[i] - mo.from[i]) * k;
       this.body.setRest(cur, mo.t === 1);
       if (mo.t === 1) {
@@ -193,10 +193,21 @@ export class RiceMound {
     return this.body.width / 2;
   }
 
+  // Pochi reshapes a squashed mound: back to a decent shape, though not a
+  // perfect one, and the score remembers.
+  fix() {
+    const from = this.targetShape(this.formed, this.over);
+    this.over *= 0.2;
+    this.formed = Math.max(this.formed, 0.7);
+    this.rescued = (this.rescued || 0) + 1;
+    this.morph = { from, to: this.targetShape(this.formed, this.over), t: 0, len: 0.35 };
+    this.body.kickAll(0, 2.6, 0);
+  }
+
   // 0..1: shape (well formed, not squashed) and press timing.
   shapeScore() {
     const timing = this.presses.length ? this.presses.reduce((s, p) => s + p.quality, 0) / this.presses.length : 0;
-    return Math.max(0, Math.min(1, this.formed * 0.55 + timing * 0.45 - this.over * 0.7));
+    return Math.max(0, Math.min(1, this.formed * 0.55 + timing * 0.45 - this.over * 0.7 - (this.rescued || 0) * 0.15));
   }
 
   dispose() {
@@ -372,7 +383,7 @@ export class FishSlice {
       const mo = this.morph;
       mo.t = Math.min(1, mo.t + dt / mo.len);
       const k = 1 - Math.pow(1 - mo.t, 3);
-      const cur = new Float32Array(mo.from.length);
+      const cur = (mo.cur ||= new Float32Array(mo.from.length));
       for (let i = 0; i < cur.length; i++) cur[i] = mo.from[i] + (mo.to[i] - mo.from[i]) * k;
       this.body.setRest(cur, mo.t === 1);
       if (mo.t === 1) {

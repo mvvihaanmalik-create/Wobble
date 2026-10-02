@@ -25,7 +25,6 @@ const SHOWCASE = {
   unagi: { name: 'Unagi nigiri', jp: '鰻', pieces: [{ fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } }] },
 };
 const ENTRANCE = new Vector3(-17, LAYOUT.customer.y, LAYOUT.customer.z);
-const EXIT = new Vector3(17, LAYOUT.customer.y, LAYOUT.customer.z);
 
 export class Game {
   constructor(canvas) {
@@ -58,6 +57,7 @@ export class Game {
     this.stage.scene.add(this.sous.group);
     // The guest leans on the far edge of the counter: a soft shade there
     // grounds them, since their own shadow falls behind it.
+    this.leavers = [];
     this.counterShade = contactShadow();
     this.counterShade.position.set(0, 0.008, LAYOUT.counter.zCustomer + 0.45);
     this.stage.scene.add(this.counterShade);
@@ -247,9 +247,10 @@ export class Game {
       this.stage.addShake(0.05);
     }
     const seat = new Vector3(LAYOUT.customer.x, LAYOUT.customer.y, LAYOUT.customer.z);
-    c.group.scale.setScalar(LAYOUT.customer.scale);
-    const hops = c.group.position.distanceTo(seat) > 10 ? [new Vector3(-9, seat.y, seat.z), seat] : [seat];
-    hops.reduce((p, target) => p.then(() => c.hopTo(target, 0.5, 0.9)), Promise.resolve()).then(() => {
+    // From the door: two hops along the counter. From the line: one hop over.
+    const hops = c.group.position.x < -12 ? [new Vector3(-9, seat.y, seat.z), seat] : [seat];
+    hops.reduce((p, target) => p.then(() => !c.leaving && c.hopTo(target, 0.5, 0.9, LAYOUT.customer.scale)), Promise.resolve()).then(() => {
+      if (c.leaving || this.customer !== c) return;
       c.seated = true;
       c.setExpression('smile');
       c.poke(0.6);
@@ -447,6 +448,8 @@ export class Game {
 
   // Six cut pieces stand up on the serving board, cut face up.
   plateRoll(roll) {
+    // The guest may have walked out while the last cut landed.
+    if (!this.order || !this.rolls.includes(roll)) return;
     const layout = plateLayout(this.order);
     const spots = makiSpots(layout.maki ?? 0);
     const up = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), Math.PI / 2);
@@ -613,7 +616,7 @@ export class Game {
     this.ui.setDay(this.day, this.scores.length, this.orders.length, this.tips);
     await this.wait(500);
     const last = this.orderIndex >= this.orders.length - 1;
-    this.ui.scoreCard(c.look.name, quoteFor(score), score, tip, () => this.afterServe(home), last, bonuses);
+    this.ui.scoreCard(c.look.name, quoteFor(score), score, tip, () => this.afterServe(home), last, bonuses, (this.order && this.order.steps) || []);
   }
 
   async afterServe(home) {
@@ -625,11 +628,7 @@ export class Game {
     c.setExpression('smile');
     c.seated = false;
     this.sousSays({ jp: 'ありがとうございました', en: 'Thank you' }, 'grin', 1200);
-    const leave = c.hopTo(new Vector3(9, c.group.position.y, c.group.position.z), 0.5, 1).then(() => c.hopTo(EXIT, 0.5, 1));
-    leave.then(() => {
-      c.group.removeFromParent();
-      c.dispose();
-    });
+    this.sendOff(c, [new Vector3(-9, c.group.position.y, c.group.position.z), ENTRANCE], 0.5);
     this.clearWork();
     const lane = this.set.geta.position.z;
     await this.tweenP({ obj: this.set.geta, to: new Vector3(home.x, 0, lane), duration: 0.5, arc: 0.15 });
@@ -640,6 +639,7 @@ export class Game {
 
   endDay() {
     this.mode = 'summary';
+    this.ui.gesture(null);
     this.order = null;
     this.ui.ticket(null);
     const avg = Math.round(this.scores.reduce((a, b) => a + b, 0) / Math.max(1, this.scores.length));
@@ -768,10 +768,7 @@ export class Game {
     this.order = null;
     this.ui.ticket(null);
     c.seated = false;
-    c.hopTo(new Vector3(-17, c.group.position.y, c.group.position.z), 0.6, 1).then(() => {
-      c.group.removeFromParent();
-      c.dispose();
-    });
+    this.sendOff(c, [new Vector3(-9, c.group.position.y, c.group.position.z), ENTRANCE], 0.5);
     this.clearWork();
     this.serving = false;
     this.nextCustomer();
@@ -808,14 +805,34 @@ export class Game {
     return c;
   }
 
+  // A guest on the way out. They keep animating (and stay out of the next
+  // guest's way) until they are off screen, then they are freed.
+  sendOff(c, path, duration) {
+    if (this.customer === c) this.customer = null;
+    c.leaving = true;
+    c.seated = false;
+    c.impatience = 0;
+    this.leavers.push(c);
+    path.reduce((p, target) => p.then(() => c.hopTo(target, duration, 1)), Promise.resolve()).then(() => this.dropLeaver(c));
+  }
+
+  dropLeaver(c) {
+    const i = this.leavers.indexOf(c);
+    if (i < 0) return;
+    this.leavers.splice(i, 1);
+    c.group.removeFromParent();
+    c.dispose();
+  }
+
   removeCustomers() {
-    for (const c of [this.customer, this.queue]) {
+    for (const c of [this.customer, this.queue, ...this.leavers]) {
       if (!c) continue;
       c.group.removeFromParent();
       c.dispose();
     }
     this.customer = null;
     this.queue = null;
+    this.leavers = [];
   }
 
   // --- Input -------------------------------------------------------------------
@@ -824,6 +841,8 @@ export class Game {
     const c = this.canvas;
     c.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      this.lastInput = performance.now();
+      this.ui.gesture(null);
       this.pointerPos = { x: e.clientX, y: e.clientY };
       if (e.pointerType === 'mouse') this.sound.unlock();
       if (this.activePointer != null) return;
@@ -867,6 +886,7 @@ export class Game {
     for (const type of ['pointerup', 'keydown', 'touchend']) window.addEventListener(type, () => this.sound.unlock(), { passive: true });
     // Keyboard: 1-4 switch stations, space holds.
     window.addEventListener('keydown', (e) => {
+      this.lastInput = performance.now();
       if (e.key === 'Escape' && !e.repeat) {
         if (this.mode === 'paused') return this.closePause();
         if (this.mode === 'play') return this.openPause();
@@ -1047,6 +1067,48 @@ export class Game {
     this.slowFor = seconds;
   }
 
+  // A graded step, the Cooking Mama way: one word for how it went, a few
+  // for why, and a sound for each grade. score is 0..1.
+  grade(score, detail, world) {
+    const tier = score >= 0.9 ? 'perfect' : score >= 0.7 ? 'great' : score >= 0.45 ? 'ok' : 'oops';
+    const p = this.screenOf(world);
+    this.ui.grade(tier, detail, p.x, p.y);
+    this.sound.grade(tier);
+    if (this.order) (this.order.steps ||= []).push(tier);
+    // Pochi cheers a run of perfect steps and steadies you after a slip.
+    this.perfectRun = tier === 'perfect' ? (this.perfectRun || 0) + 1 : 0;
+    if (this.perfectRun === 3) this.sousSays({ jp: 'すごい！', en: 'Amazing!' }, 'grin', 1000);
+    else if (tier === 'perfect') this.sousSays(null, 'grin', 700);
+    else if (tier === 'oops') this.sousSays(null, 'frown', 800);
+    return tier;
+  }
+
+  // Cooking Mama's "Don't worry, Mama will fix it!": Pochi rescues a botched
+  // step. The plate looks fine again; the score keeps the slip.
+  rescue(fix, world) {
+    const at = world.clone();
+    setTimeout(() => {
+      if (this.mode !== 'play') return;
+      this.sousSays({ jp: 'だいじょうぶ！', en: "Don't worry, I'll fix it!" }, 'open', 1400);
+      this.sous.poke(0.8);
+    }, 450);
+    setTimeout(() => {
+      if (this.mode !== 'play') return;
+      fix();
+      this.sound.squelch(0.5);
+      this.fx.burst('glint', at, 10, { speed: 1.6, up: 2, gravity: 5, life: 0.7 });
+    }, 1100);
+  }
+
+  // The paw that shows what to do, once the player has been still a moment.
+  gesture(kind, from, to = null) {
+    const idle = performance.now() - (this.lastInput || 0) > 1600 && this.activePointer == null && this.mode === 'play' && !this.serving;
+    if (!kind || !idle || !from) return this.ui.gesture(null);
+    const a = this.screenOf(from);
+    const b = to ? this.screenOf(to) : a;
+    this.ui.gesture(kind, a.x, a.y, b.x - a.x, b.y - a.y);
+  }
+
   // World point to screen pixels, for pop-ups.
   screenOf(world) {
     const v = world.clone().project(this.stage.camera);
@@ -1071,6 +1133,7 @@ export class Game {
     this.activePointer = null;
     this.ui.holdRing(null);
     this.mode = 'paused';
+    this.ui.gesture(null);
     this.pause();
     this.stage.render(0);
     this.ui.pauseCard(
@@ -1116,7 +1179,7 @@ export class Game {
     if (text && (this.station === 'counter' || this.mode !== 'play')) {
       const head = s.group.position.clone().add(new Vector3(0, s.body.height * LAYOUT.sous.scale + 0.9, 0));
       this.popupAt(text, head, 'say');
-    }
+    } else if (text) this.ui.say(text, Math.max(1200, ms));
   }
 
   popupAt(text, world, kind = 'good') {
@@ -1161,6 +1224,7 @@ export class Game {
       this.customer.update(dt);
     }
     if (this.queue) this.queue.update(dt);
+    for (const l of this.leavers) l.update(dt);
     const c = this.customer;
     const shade = this.counterShade;
     if (c && c.group.parent) {

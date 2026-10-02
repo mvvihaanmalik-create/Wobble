@@ -15,7 +15,15 @@ The game runs in the browser. The only server part is the wall: one small functi
 
 The guest eats it in three bites and reacts. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
 
-### The cast
+### Grades, the Cooking Mama way
+
+Every step gets a grade stamped where the work happened: **Perfect!**, **Great!**, **OK** or **Oops!**, with a few words on why ("Too hard", "Right in the middle"). Each grade has its own sound.
+- **Pochi cheers you on:** he grins at a perfect step and calls out after three in a row.
+- **Pochi fixes slips:** press the rice too hard and he steps in with "Don't worry, I'll fix it!". The mound is reshaped, but the step still scores low.
+- **Gesture hints:** stay still on a step for a moment and a cat paw acts out the move: hold over the tub, stroke down the dashed line, drag the slice onto the rice.
+- **Medals:** each plate earns a gold, silver or bronze medal, plus a tally of its step grades. A 96 or better gets "Even better than Pochi!".
+
+
 
 The guests are mochi animals: a calico cat, a shiba, a bunny, a bear, a panda and a fox. Each is a soft body with fur markings drawn in the shader. Ears, eyes, blush, nose, whiskers and mouth are pinned to the surface and follow every squash. Ears droop when a guest waits too long, and eyes close into happy arcs at a great plate.
 

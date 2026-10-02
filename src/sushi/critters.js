@@ -317,6 +317,8 @@ const _n = new Vector3();
 const _rn = new Vector3();
 const _m = new Matrix4();
 const UP = new Vector3(0, 1, 0);
+const AX_X = new Vector3(1, 0, 0);
+const AX_Z = new Vector3(0, 0, 1);
 
 function frame(normal, axis = 'z') {
   // Rest orientation: the part's +z (face parts) or +y (ears, hats) follows
@@ -532,9 +534,11 @@ export class Critter {
     this.earFlick = 1;
   }
 
-  hopTo(target, duration = 0.55, height = 1.2) {
+  hopTo(target, duration = 0.55, height = 1.2, scale = null) {
+    // A new hop replaces one in flight; the old one counts as done.
+    if (this.hop) this.hop.resolve();
     return new Promise((resolve) => {
-      this.hop = { from: this.group.position.clone(), to: target.clone(), t: 0, duration, height, resolve };
+      this.hop = { from: this.group.position.clone(), to: target.clone(), s0: this.group.scale.x, s1: scale ?? this.group.scale.x, t: 0, duration, height, resolve };
       this.body.kickAll(0, -1.6, 0);
     });
   }
@@ -564,7 +568,10 @@ export class Critter {
       const h = this.hop;
       h.t = Math.min(1, h.t + dt / h.duration);
       const k = h.t;
-      this.group.position.lerpVectors(h.from, h.to, k);
+      // Ease the travel so take-off and landing read; the arc stays a sine.
+      const e = k * k * (3 - 2 * k);
+      this.group.position.lerpVectors(h.from, h.to, e);
+      if (h.s0 !== h.s1) this.group.scale.setScalar(h.s0 + (h.s1 - h.s0) * e);
       this.inner.position.y = Math.sin(Math.PI * k) * h.height;
       if (k === 1) {
         this.hop = null;
@@ -595,9 +602,9 @@ export class Critter {
       p.obj.quaternion.multiplyQuaternions(_q, p.restQ);
       if (p.ear) {
         // Droop outward and back; flick on hops and pokes.
-        p.extra.setFromAxisAngle(new Vector3(0, 0, 1), -p.side * (droop * 0.9 + flick));
+        p.extra.setFromAxisAngle(AX_Z, -p.side * (droop * 0.9 + flick));
         p.obj.quaternion.multiply(p.extra);
-        p.extra.setFromAxisAngle(new Vector3(1, 0, 0), -droop * 0.5);
+        p.extra.setFromAxisAngle(AX_X, -droop * 0.5);
         p.obj.quaternion.multiply(p.extra);
       }
     }
@@ -631,6 +638,7 @@ export class Critter {
   dispose() {
     this.squishy.dispose();
     this.squishy.mesh.material.dispose();
+    this.blob.material.dispose();
   }
 }
 

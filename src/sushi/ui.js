@@ -161,12 +161,70 @@ export class GameUI {
   }
 
   hint(text) {
+    this.pendingHint = text;
+    if (this.sayUntil > performance.now()) return;
     if (text === this.lastHint) return;
     this.lastHint = text;
     const wrap = $('hintWrap');
     $('hint').textContent = text || '';
     wrap.hidden = !text;
     if (text) bump(wrap, 'talk');
+  }
+
+  // Pochi speaks up in the hint bubble for a moment, then the hint returns.
+  say(text, ms = 1600) {
+    const wrap = $('hintWrap');
+    const line = typeof text === 'object' ? `${text.jp}  ${text.en}` : text;
+    $('hint').textContent = line;
+    wrap.hidden = false;
+    wrap.classList.add('shout');
+    bump(wrap, 'talk');
+    this.sayUntil = performance.now() + ms;
+    clearTimeout(this.sayTimer);
+    this.sayTimer = setTimeout(() => {
+      wrap.classList.remove('shout');
+      this.sayUntil = 0;
+      this.lastHint = undefined;
+      this.hint(this.pendingHint);
+    }, ms);
+  }
+
+  // A step's grade, stamped where the work happened.
+  grade(tier, detail, x, y) {
+    const el = document.createElement('div');
+    el.className = `popup grade ${tier}`;
+    const word = document.createElement('b');
+    word.textContent = { perfect: 'Perfect!', great: 'Great!', ok: 'OK', oops: 'Oops!' }[tier];
+    el.append(word);
+    if (detail) {
+      const d = document.createElement('small');
+      d.textContent = detail;
+      el.append(d);
+    }
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    $('popups').appendChild(el);
+    setTimeout(() => el.remove(), 1400);
+  }
+
+  // The chef's paw acting out the next move: press, tap, or a stroke from
+  // (x, y) by (dx, dy). null hides it.
+  gesture(kind, x, y, dx = 0, dy = 0) {
+    const el = $('gesture');
+    if (!kind) {
+      if (!el.hidden) el.hidden = true;
+      this.gestureKey = null;
+      return;
+    }
+    const key = `${kind}|${Math.round(x / 4)}|${Math.round(y / 4)}|${Math.round(dx / 4)}|${Math.round(dy / 4)}`;
+    if (key === this.gestureKey) return;
+    this.gestureKey = key;
+    el.dataset.kind = kind;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.style.setProperty('--dx', `${dx}px`);
+    el.style.setProperty('--dy', `${dy}px`);
+    el.hidden = false;
   }
 
   // progress[i]: how far the i-th piece on the board has come, so each
@@ -372,15 +430,26 @@ export class GameUI {
     );
   }
 
-  scoreCard(name, quote, score, tip, onNext, last, bonuses = []) {
+  scoreCard(name, quote, score, tip, onNext, last, bonuses = [], steps = []) {
     const stars = Math.round(score.total / 20);
+    const medal = score.total >= 90 ? 'gold' : score.total >= 75 ? 'silver' : score.total >= 55 ? 'bronze' : null;
+    const medalHtml = medal
+      ? `<div class="medal-stamp ${medal}" aria-label="${medal} medal"><span>${{ gold: '金', silver: '銀', bronze: '銅' }[medal]}</span></div>${score.total >= 96 ? '<p class="better">Even better than Pochi!</p>' : ''}`
+      : '';
+    const tally = ['perfect', 'great', 'ok', 'oops']
+      .map((t) => [t, steps.filter((x) => x === t).length])
+      .filter(([, n]) => n)
+      .map(([t, n], i) => `<span class="tally ${t}" style="--d:${0.9 + i * 0.1}s">${{ perfect: 'Perfect', great: 'Great', ok: 'OK', oops: 'Oops' }[t]} <b>×${n}</b></span>`)
+      .join('');
     const starHtml = Array.from({ length: 5 }, (_, i) => `<span class="star${i < stars ? ' on' : ''}" style="--d:${0.25 + i * 0.12}s">${star(i < stars)}</span>`).join('');
     const bar = (label, v, i) => `<div class="stat-bar"><span>${label}</span><span class="gauge"><i style="--w:${Math.round(v * 100)}%;--d:${0.5 + i * 0.1}s"></i></span><b>${Math.round(v * 100)}</b></div>`;
     this.card(
       `<div class="ribbon"><h2>${esc(name)}</h2></div>
+       ${medalHtml}
        <div class="stars-row" aria-label="${stars} of 5 stars">${starHtml}</div>
        <div class="score-big"><b id="scoreNum">0</b><span>/ 100</span></div>
        <p class="speech">${esc(quote)}</p>
+       ${tally ? `<div class="tallies">${tally}</div>` : ''}
        <div class="stat-bars">${bar('Rice', score.parts.rice, 0)}${bar('Cut', score.parts.cut, 1)}${bar('Build', score.parts.build, 2)}${bar('Wait', score.parts.wait, 3)}</div>
        <div class="tip-pill"><span class="ico">${ICONS.coin}</span><span>Tip</span><b>+${yen(tip)}</b></div>
        ${bonuses.length ? `<div class="bonuses">${bonuses.map((b, i) => `<span class="bonus" style="--d:${1.2 + i * 0.15}s">${b.label.startsWith('Combo') ? `<span class="ico">${ICONS.flame}</span>` : ''}${esc(b.label)} <b>${esc(b.value)}</b></span>`).join('')}</div>` : ''}`,

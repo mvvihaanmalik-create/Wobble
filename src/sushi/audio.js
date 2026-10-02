@@ -80,6 +80,27 @@ export class BarSound extends Sound {
     }
   }
 
+  // One sound per step grade: a sparkly run up for perfect, a bright ding
+  // for great, a soft tick for OK, and a sagging boing for a slip.
+  grade(tier) {
+    if (!this.ready()) return;
+    const t = this.ctx.currentTime + 0.01;
+    if (tier === 'perfect') {
+      [1046.5, 1318.5, 1568, 2093].forEach((f, i) => {
+        this.tone(t + i * 0.055, 'sine', f, f, 0.22, 0.11, 0.002);
+        this.tone(t + i * 0.055, 'triangle', f * 2, f * 2, 0.08, 0.025, 0.002);
+      });
+    } else if (tier === 'great') {
+      this.tone(t, 'sine', 1174.7, 1174.7, 0.18, 0.11, 0.002);
+      this.tone(t + 0.07, 'sine', 1568, 1568, 0.26, 0.1, 0.002);
+    } else if (tier === 'ok') {
+      this.tone(t, 'triangle', 880, 880, 0.12, 0.08, 0.002);
+    } else {
+      this.tone(t, 'sine', 420, 190, 0.32, 0.13);
+      this.tone(t + 0.02, 'triangle', 300, 150, 0.3, 0.05);
+    }
+  }
+
   whoosh() {
     if (!this.ready()) return;
     const t = this.ctx.currentTime + 0.005;

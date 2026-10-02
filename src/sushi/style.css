@@ -943,6 +943,185 @@ body {
     transform: translate(-50%, -150%) scale(0.95);
   }
 }
+/* Step grades: one big word, a small reason under it. */
+.popup.grade {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+.popup.grade b {
+  font: 400 46px/1 var(--display);
+  -webkit-text-stroke: 7px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 5px 0 var(--ink);
+}
+.popup.grade small {
+  font: 800 14px/1 var(--body);
+  color: var(--cream);
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 5px 11px 6px;
+}
+.popup.grade.perfect b {
+  font-size: 58px;
+  color: var(--gold);
+}
+.popup.grade.great b {
+  color: #bff08f;
+}
+.popup.grade.ok b {
+  font-size: 40px;
+  color: #fff6e0;
+}
+.popup.grade.oops b {
+  font-size: 42px;
+  color: #ff9a8a;
+}
+.popup.grade.oops {
+  animation-name: rate-oops;
+}
+@keyframes rate-oops {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.1) rotate(-6deg);
+  }
+  25% {
+    transform: translate(-50%, -60%) rotate(5deg);
+  }
+  35% {
+    transform: translate(-50%, -60%) rotate(-3deg);
+  }
+  45% {
+    transform: translate(-50%, -60%) rotate(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.95);
+  }
+}
+
+/* The chef's paw acting out the next move. */
+.gesture {
+  position: fixed;
+  z-index: 19;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  animation: gesture-in 0.3s ease-out;
+}
+.gesture-paw {
+  position: absolute;
+  left: -38px;
+  top: -18px;
+  width: 76px;
+  height: 76px;
+  filter: drop-shadow(0 5px 0 rgba(20, 8, 2, 0.35));
+}
+.gesture-ring {
+  position: absolute;
+  left: -42px;
+  top: -42px;
+  width: 84px;
+  height: 84px;
+  border: 4px solid #fff6ec;
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow: 0 0 0 3px rgba(59, 36, 23, 0.5);
+}
+.gesture[data-kind='hold'] .gesture-paw {
+  animation: paw-hold 1.6s ease-in-out infinite;
+}
+.gesture[data-kind='hold'] .gesture-ring {
+  animation: paw-ring 1.6s ease-out infinite;
+}
+.gesture[data-kind='tap'] .gesture-paw {
+  animation: paw-tap 1.1s ease-in-out infinite;
+}
+.gesture[data-kind='tap'] .gesture-ring {
+  animation: paw-ring 1.1s ease-out infinite;
+}
+.gesture[data-kind='stroke'] .gesture-paw {
+  animation: paw-stroke 1.5s cubic-bezier(0.5, 0, 0.3, 1) infinite;
+}
+.gesture[data-kind='drag'] .gesture-paw {
+  animation: paw-stroke 2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+@keyframes gesture-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes paw-hold {
+  0%,
+  100% {
+    transform: translateY(-14px) scale(1);
+  }
+  20%,
+  75% {
+    transform: translateY(0) scale(0.9, 0.84);
+  }
+}
+@keyframes paw-tap {
+  0%,
+  100% {
+    transform: translateY(-14px);
+  }
+  25% {
+    transform: translateY(0) scale(0.92, 0.86);
+  }
+  45% {
+    transform: translateY(-10px);
+  }
+}
+@keyframes paw-ring {
+  0%,
+  18% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  30% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+@keyframes paw-stroke {
+  0% {
+    opacity: 0;
+    transform: translate(0, -10px);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(0, 0) scale(0.92);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy)) scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(1);
+  }
+}
+
+/* Pochi speaking up over the hint. */
+.hint.shout .hint-text {
+  background: #fff3c4;
+  color: var(--shu);
+}
+
 /* A spoken line: speech bubble, Japanese over a small gloss. */
 .popup.say {
   font: 800 15px/1.1 var(--body);
@@ -2204,6 +2383,75 @@ body {
   margin-bottom: 8px;
 }
 
+/* Plate medals and the step tally, Cooking Mama style. */
+.medal-stamp {
+  position: absolute;
+  top: -18px;
+  right: -14px;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border: 4px solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 5px 0 var(--ink), inset 0 -6px 0 rgba(0, 0, 0, 0.15), inset 0 6px 0 rgba(255, 255, 255, 0.45);
+  transform: rotate(-12deg);
+  animation: stamp-in 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) 1s backwards;
+  z-index: 2;
+}
+.medal-stamp span {
+  font: 800 30px/1 var(--body);
+  color: #fff;
+  -webkit-text-stroke: 5px var(--ink);
+  paint-order: stroke fill;
+}
+.medal-stamp.gold {
+  background: radial-gradient(circle at 35% 30%, #fff4b8, #ffc83d 55%, #d68a10);
+}
+.medal-stamp.silver {
+  background: radial-gradient(circle at 35% 30%, #ffffff, #cfd6e0 55%, #8e99aa);
+}
+.medal-stamp.bronze {
+  background: radial-gradient(circle at 35% 30%, #ffd9b0, #d98b4e 55%, #9a5427);
+}
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: rotate(-30deg) scale(2.2);
+  }
+}
+.better {
+  margin: -4px 0 0;
+  font: 400 20px/1.1 var(--display);
+  color: var(--shu);
+  text-align: center;
+  animation: pop-in 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) 1.3s backwards;
+}
+.tallies {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.tally {
+  padding: 4px 10px 5px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  font: 800 12px/1 var(--body);
+  background: var(--cream-2);
+  color: var(--ink);
+  animation: pop-in 0.35s cubic-bezier(0.3, 1.5, 0.5, 1) var(--d, 0.9s) backwards;
+}
+.tally.perfect {
+  background: #fff3c4;
+}
+.tally.great {
+  background: #dff7c8;
+}
+.tally.oops {
+  background: #ffd9d2;
+}
+
 /* --- Sushi book ---------------------------------------------------------------- */
 
 .tabs {
@@ -2609,6 +2857,8 @@ body {
   /* Things that animate out would end invisible: just show them. They are
      removed on a timer anyway. */
   .popup,
+  .gesture-paw,
+  .gesture-ring,
   .banner.show,
   .banner-text {
     animation: none !important;
