@@ -1,9 +1,4 @@
-import { APP, RECORD } from './config.js';
-
-const INK = '#1c1915';
-const MUTED = 'rgba(28,25,21,0.16)';
-const SERIF = "'Instrument Serif', Georgia, serif";
-const MONO = "'Plex Mono', ui-monospace, Menlo, monospace";
+import { RECORD } from './config.js';
 
 const VIDEO_TYPES = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
 // With sound, only take mp4 when the audio is AAC. Chrome's plain video/mp4
@@ -63,63 +58,10 @@ export function cropRect(canvasW, canvasH, aspect) {
   return { x: (canvasW - w) / 2, y: (canvasH - h) / 2, w, h };
 }
 
-// Draws one frame of the clip: the WebGL crop, the word, the stress counter
-// and the watermark. Also used for screenshots.
-export function composite(ctx, W, H, glCanvas, crop, info) {
+// The plain frame: just the WebGL crop. The bar swaps in its own overlay.
+function composite(ctx, W, H, glCanvas, crop) {
   const sx = glCanvas.width / glCanvas.clientWidth;
   ctx.drawImage(glCanvas, crop.x * sx, crop.y * sx, crop.w * sx, crop.h * sx, 0, 0, W, H);
-
-  const m = Math.min(W, H);
-  const pad = m * 0.055;
-  ctx.fillStyle = INK;
-  ctx.textBaseline = 'alphabetic';
-
-  // Top left: what is being squished.
-  ctx.textAlign = 'left';
-  mono(ctx, 'NOW SQUISHING', pad, pad + m * 0.022, m * 0.022);
-  ctx.font = `italic ${m * 0.075}px ${SERIF}`;
-  ctx.fillText(`“${info.word}”`, pad, pad + m * 0.022 + m * 0.085);
-
-  // Bottom left: the counter.
-  const barY = H - pad;
-  const valueBase = barY - m * 0.035;
-  const big = m * 0.16;
-  ctx.font = `${big}px ${SERIF}`;
-  const num = String(info.percent);
-  ctx.fillText(num, pad, valueBase);
-  const nw = ctx.measureText(num).width;
-  ctx.font = `${big * 0.5}px ${SERIF}`;
-  ctx.fillText('%', pad + nw + big * 0.04, valueBase - big * 0.36);
-  if (info.done) {
-    ctx.font = `italic ${m * 0.042}px ${SERIF}`;
-    ctx.fillText('Fully decompressed.', pad, valueBase - big * 0.86);
-  } else {
-    mono(ctx, 'STRESS RELEASED', pad, valueBase - big * 0.86, m * 0.022);
-  }
-
-  // Bottom right: watermark.
-  ctx.textAlign = 'right';
-  ctx.font = `${m * 0.05}px ${SERIF}`;
-  ctx.fillText(APP.watermark, W - pad, valueBase - m * 0.03);
-  mono(ctx, APP.url.toUpperCase(), W - pad, valueBase, m * 0.019);
-
-  // Hairline progress bar.
-  ctx.fillStyle = MUTED;
-  const lw = Math.max(1, m / 720);
-  ctx.fillRect(pad, barY, W - pad * 2, lw);
-  ctx.fillStyle = INK;
-  ctx.fillRect(pad, barY - lw, (W - pad * 2) * info.fraction, lw * 3);
-}
-
-function mono(ctx, text, x, y, size) {
-  ctx.font = `500 ${size}px ${MONO}`;
-  if ('letterSpacing' in ctx) {
-    ctx.letterSpacing = `${size * 0.08}px`;
-    ctx.fillText(text, x, y);
-    ctx.letterSpacing = '0px';
-  } else {
-    ctx.fillText(text, x, y);
-  }
 }
 
 export class Recorder {

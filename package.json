@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "n8ao": "^2.0.1",
-    "opentype.js": "^1.3.4",
     "postprocessing": "^6.39.5",
     "three": "^0.186.1"
   },

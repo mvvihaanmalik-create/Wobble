@@ -84,7 +84,7 @@
         <div class="title-actions">
           <button class="btn btn-solid btn-big" id="startBtn" type="button"><span>Open the shop</span><small lang="ja">開店</small></button>
           <button class="btn" id="wallBtn" type="button">The wall</button>
-          <a class="btn" href="./break.html">Break room</a>
+          <button class="btn" id="bookBtn" type="button">Sushi book</button>
         </div>
         <p class="foot">Tap, hold and swipe. Sound on.</p>
       </div>
@@ -104,6 +104,21 @@
           </section>
           <section class="cork" aria-label="Plates"><div class="wall-plates" id="wallPlates"></div></section>
         </div>
+      </div>
+    </section>
+
+    <section class="screen wall-screen book-screen" id="book" hidden role="dialog" aria-modal="true" aria-labelledby="bookTitle">
+      <div class="wall">
+        <header class="wall-head">
+          <div class="ribbon"><h2 id="bookTitle">Sushi book</h2><span lang="ja">図鑑</span></div>
+          <p class="wall-note" id="bookNote"></p>
+          <div class="tabs" role="tablist" aria-label="Book pages">
+            <button type="button" role="tab" aria-selected="true" data-tab="dishes" id="tabDishes">Dishes</button>
+            <button type="button" role="tab" aria-selected="false" data-tab="guests" id="tabGuests">Regulars</button>
+          </div>
+          <button class="round-btn close-btn" id="bookClose" type="button" aria-label="Close">&times;</button>
+        </header>
+        <div class="wall-body book-body"><div class="book-grid" id="bookGrid"></div></div>
       </div>
     </section>
 

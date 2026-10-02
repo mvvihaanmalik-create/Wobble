@@ -1,6 +1,6 @@
 import { Sound } from '../audio.js';
 
-// The word toy's synth plus sounds for the bar. Everything is generated.
+// The shared synth plus sounds for the bar. Everything is generated.
 export class BarSound extends Sound {
   // Door bell for a new guest.
   bell() {

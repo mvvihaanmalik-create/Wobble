@@ -17,7 +17,7 @@ export const LAYOUT = {
   geta: { x: 10.8, z: 1.4, w: 6.6, d: 2.9, h: 0.55 }, // serving board
   slots: { 1: [-0.55], 2: [-1.85, 0.75] }, // nigiri positions along the geta by piece count
   slotAngle: 0.32, // nigiri sit at a slight angle, the way they are plated
-  customer: { x: 0, z: -7.4, y: -1.1, scale: 3.4 }, // seated, peeking over the counter
+  customer: { x: 0, z: -7.4, y: -2.05, scale: 3.85 }, // seated, peeking over the counter
   queue: { x: 9.5, z: -12.5, y: -2.6, scale: 2.3 }, // next in line
   sous: { x: -7.9, z: -2.5, y: 0, scale: 1.6, turn: 0.35 }, // the sous chef, perched on the counter by the tub
   sousTitle: { x: 7.6, z: -6, y: -0.3, scale: 2.8, turn: -0.4 }, // on the title, next to the guest
@@ -103,6 +103,8 @@ export const RUSH = {
   comboMax: 2, // up to x2
   speedy: 0.4, // served within this share of patience: speed bonus
   speedyTip: 0.2,
+  favouriteTip: 0.25, // a regular's favourite, done well
+  favouriteAt: 85,
   stars: [0.4, 0.62, 0.82], // share of a perfect day's tips for one, two, three stars
 };
 
@@ -114,14 +116,28 @@ export const SCORE = {
 };
 
 export const CUSTOMER_LOOKS = [
-  // species picks the animal in critters.js.
-  { name: 'Mochi', species: 'cat' },
-  { name: 'Kinako', species: 'shiba' },
-  { name: 'Ume', species: 'bunny' },
-  { name: 'Azuki', species: 'bear' },
-  { name: 'Sasa', species: 'panda' },
-  { name: 'Yuzu', species: 'fox' },
+  // species picks the animal in critters.js. fav: the dish they love; nail
+  // it and they tip more, and the Sushi book notes it.
+  { name: 'Mochi', species: 'cat', kind: 'Calico cat', fav: 'n:salmon' },
+  { name: 'Kinako', species: 'shiba', kind: 'Shiba', fav: 'n:tamago' },
+  { name: 'Ume', species: 'bunny', kind: 'Bunny', fav: 'm:kappa' },
+  { name: 'Azuki', species: 'bear', kind: 'Bear', fav: 'n:unagi' },
+  { name: 'Sasa', species: 'panda', kind: 'Panda', fav: 'm:tekka' },
+  { name: 'Yuzu', species: 'fox', kind: 'Fox', fav: 'n:tuna' },
 ];
+
+// Every dish in the Sushi book. key: n:<fish> for nigiri, m:<filling> for
+// rolls. day: the day it first appears. piece: how the book photographs it.
+export const DISHES = [
+  { key: 'n:salmon', name: 'Salmon nigiri', jp: '鮭', day: 0, piece: { fish: 'salmon', wasabi: 1, toppings: {} } },
+  { key: 'n:tuna', name: 'Tuna nigiri', jp: '鮪', day: 1, piece: { fish: 'tuna', wasabi: 1, toppings: {} } },
+  { key: 'n:tamago', name: 'Tamago nigiri', jp: '玉子', day: 2, piece: { fish: 'tamago', wasabi: 0, toppings: { nori: true } } },
+  { key: 'm:kappa', name: 'Cucumber roll', jp: '河童巻き', day: 3, piece: { maki: 'kappa', wasabi: 0, toppings: {} } },
+  { key: 'm:tekka', name: 'Tuna roll', jp: '鉄火巻き', day: 3, piece: { maki: 'tekka', wasabi: 0, toppings: {} } },
+  { key: 'n:unagi', name: 'Unagi nigiri', jp: '鰻', day: 4, piece: { fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } } },
+  { key: 'm:sake', name: 'Salmon roll', jp: '鮭巻き', day: 4, piece: { maki: 'sake', wasabi: 0, toppings: {} } },
+];
+export const dishKey = (p) => (p.maki ? `m:${p.maki}` : `n:${p.fish}`);
 
 export const PERF = {
   slowFrameMs: 22, // average frame time that counts as slow

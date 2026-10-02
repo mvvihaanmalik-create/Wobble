@@ -1,4 +1,4 @@
-import { BUILD, CUSTOMER_LOOKS, DAYS, FISH, KNIFE, RICE, RUSH, SCORE, TOPPINGS } from './config.js';
+import { BUILD, CUSTOMER_LOOKS, DAYS, FISH, KNIFE, RICE, RUSH, SCORE, TOPPINGS, dishKey } from './config.js';
 import { FILLINGS } from './maki.js';
 import { mulberry } from './set.js';
 
@@ -12,6 +12,23 @@ export function makeOrders(dayIndex, seed = Date.now()) {
   const looks = [...CUSTOMER_LOOKS].sort(() => rand() - 0.5);
   const orders = [];
   const [r0, r1] = day.rush || [-1, -2];
+  // One nigiri with the wasabi and toppings that suit its fish.
+  const nigiri = (fish) => {
+    const piece = { fish, wasabi: fish === 'tamago' || fish === 'unagi' ? 0 : pick([0, 1, 1, 2, 2, 3]), toppings: {} };
+    const has = (t) => day.toppings.includes(t);
+    if (fish === 'tamago' && has('nori')) piece.toppings.nori = true;
+    if (fish === 'unagi') {
+      if (has('sauce')) piece.toppings.sauce = true;
+      if (has('nori')) piece.toppings.nori = true;
+      if (has('sesame') && rand() < 0.5) piece.toppings.sesame = true;
+      return piece;
+    }
+    const fits = { salmon: ['ikura', 'sesame', 'scallion'], tuna: ['scallion', 'sesame', 'sauce'], tamago: ['sauce', 'sesame'] }[fish];
+    const options = day.toppings.filter((t) => fits.includes(t));
+    if (options.length && rand() < 0.6) piece.toppings[pick(options)] = true;
+    if (piece.toppings.ikura) piece.toppings.ikura = BUILD.ikuraTarget;
+    return piece;
+  };
   for (let c = 0; c < day.customers; c++) {
     let count = day.pieces[0] + Math.floor(rand() * (day.pieces[1] - day.pieces[0] + 1));
     const pieces = [];
@@ -19,28 +36,19 @@ export function makeOrders(dayIndex, seed = Date.now()) {
       pieces.push({ maki: pick(day.maki), wasabi: 0, toppings: {} });
       count = Math.min(count, 1) - (c === 0 && dayIndex === 3 ? 1 : 0); // the first roll of Day 4 comes alone
     }
-    for (let k = 0; k < count; k++) {
-      const fish = pick(day.fish);
-      const piece = { fish, wasabi: fish === 'tamago' || fish === 'unagi' ? 0 : pick([0, 1, 1, 2, 2, 3]), toppings: {} };
-      const has = (t) => day.toppings.includes(t);
-      if (fish === 'tamago' && has('nori')) piece.toppings.nori = true;
-      if (fish === 'unagi') {
-        if (has('sauce')) piece.toppings.sauce = true;
-        if (has('nori')) piece.toppings.nori = true;
-        if (has('sesame') && rand() < 0.5) piece.toppings.sesame = true;
-      } else {
-        // Toppings that suit each fish.
-        const fits = { salmon: ['ikura', 'sesame', 'scallion'], tuna: ['scallion', 'sesame', 'sauce'], tamago: ['sauce', 'sesame'] }[fish];
-        const options = day.toppings.filter((t) => fits.includes(t));
-        if (options.length && rand() < 0.6) piece.toppings[pick(options)] = true;
-        if (piece.toppings.ikura) piece.toppings.ikura = BUILD.ikuraTarget;
-      }
-      pieces.push(piece);
+    for (let k = 0; k < count; k++) pieces.push(nigiri(pick(day.fish)));
+    // Regulars often ask for their favourite, when the day has it.
+    const look = looks[c % looks.length];
+    const [kind, what] = look.fav.split(':');
+    const can = kind === 'm' ? (day.maki || []).includes(what) : day.fish.includes(what);
+    if (can && rand() < 0.45 && !pieces.some((p) => dishKey(p) === look.fav)) {
+      const i = pieces.findIndex((p) => !!p.maki === (kind === 'm'));
+      if (i >= 0) pieces[i] = kind === 'm' ? { maki: what, wasabi: 0, toppings: {} } : nigiri(what);
     }
     // Nigiri first on the ticket, the roll last: the order you make them.
     pieces.sort((a, b) => (a.maki ? 1 : 0) - (b.maki ? 1 : 0));
     const rush = c >= r0 && c <= r1;
-    orders.push({ look: looks[c % looks.length], pieces, patience: day.patience * (rush ? RUSH.patience : 1), rush });
+    orders.push({ look, pieces, patience: day.patience * (rush ? RUSH.patience : 1), rush });
   }
   return orders;
 }

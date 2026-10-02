@@ -1,10 +1,6 @@
 import { defineConfig } from 'vite';
 import { handle, memoryStore, storeFromEnv } from './server/gallery-core.js';
 
-// three's TTFLoader imports opentype.js from a CDN. Point that import at the
-// local npm copy so nothing is fetched from a third party at runtime.
-const OPENTYPE_CDN = 'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/+esm';
-
 // The shared wall in dev and preview: same handler as the Vercel function,
 // backed by the real store when its env vars are set, else by memory.
 function galleryApi() {
@@ -37,20 +33,11 @@ function galleryApi() {
 export default defineConfig({
   base: './',
   plugins: [galleryApi()],
-  resolve: {
-    alias: [{ find: OPENTYPE_CDN, replacement: 'opentype.js' }],
-  },
-  optimizeDeps: {
-    // Pre-bundling would keep the CDN URL as an external import in dev.
-    exclude: ['three'],
-    include: ['opentype.js'],
-  },
   build: {
     target: 'es2020',
     rollupOptions: {
       input: {
-        main: 'index.html', // Squishi, the sushi bar
-        break: 'break.html', // the word toy
+        main: 'index.html',
       },
     },
     assetsInlineLimit: 0,

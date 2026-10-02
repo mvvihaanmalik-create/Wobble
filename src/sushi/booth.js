@@ -18,6 +18,7 @@ import { bakeFoodCoords, foodMaterial } from './materials.js';
 import { LAYOUT } from './config.js';
 import { makiOf, nigiriOf, plateLayout } from './orders.js';
 import { platedMaki } from './maki.js';
+import { Customer } from './critters.js';
 
 // Photo booth: small still renders made on the main renderer between frames.
 // Used for the picture on each ticket (what the plate should look like) and
@@ -87,6 +88,25 @@ export class PhotoBooth {
       this.aim(count, layout);
     }, null, this.scene, () => this.scene.remove(holder));
     for (const p of pieces) p.dispose();
+    return url;
+  }
+
+  // A portrait of a regular for the Sushi book.
+  async critterPhoto(look, w = 280, h = 280) {
+    const c = new Customer(look, 3);
+    c.setExpression('smile');
+    for (let k = 0; k < 20; k++) c.update(1 / 30);
+    const H = c.body.height;
+    const url = await this.shoot(w, h, () => {
+      this.board.visible = false;
+      this.scene.add(c.group);
+      this.camera.position.set(0.9, H * 0.75, 4.3);
+      this.camera.lookAt(0, H * 0.52, 0);
+    }, null, this.scene, () => {
+      this.scene.remove(c.group);
+      this.board.visible = true;
+    });
+    c.dispose();
     return url;
   }
 

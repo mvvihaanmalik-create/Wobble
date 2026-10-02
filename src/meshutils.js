@@ -1,7 +1,6 @@
 import { GEOMETRY } from './config.js';
 
-// Mesh helpers shared by the word toy and the sushi bar. Kept apart from
-// geometry.js so the bar does not pull in the font loader.
+// Mesh helpers for the soft bodies.
 
 // Red-green style refinement: every edge longer than maxEdge is split at its
 // midpoint, and each triangle is re-cut according to how many of its edges

@@ -1,4 +1,5 @@
 import {
+  PlaneGeometry,
   BufferAttribute,
   CanvasTexture,
   CapsuleGeometry,
@@ -184,14 +185,15 @@ float critPatch(vec3 p, vec3 c, vec3 r, float tilt) {
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
-totalEmissiveRadiance += diffuseColor.rgb * 0.045;`,
+totalEmissiveRadiance += diffuseColor.rgb * 0.045;
+${RIM_GLSL}`,
       );
   };
   return m;
 }
 
 export function softMaterial(color, opts = {}) {
-  return new MeshPhysicalMaterial({
+  const m = new MeshPhysicalMaterial({
     color: new Color(color),
     roughness: 0.48,
     sheen: 1,
@@ -203,7 +205,27 @@ export function softMaterial(color, opts = {}) {
     specularIntensity: 0.6,
     ...opts,
   });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${RIM_GLSL}`);
+  };
+  m.customProgramCacheKey = () => 'critter-soft';
+  return m;
 }
+
+// A soft rim of light around every critter, brighter at the top, and a
+// faint warm glow through the body: the plush, lit-from-everywhere look of
+// a console mascot. Cheap: a few lines in the fragment shader.
+const RIM_GLSL = /* glsl */ `
+{
+  vec3 vdir = normalize(vViewPosition);
+  float facing = clamp(dot(normal, vdir), 0.0, 1.0);
+  float rim = pow(1.0 - facing, 2.6);
+  float up = clamp(normal.y * 0.5 + 0.6, 0.0, 1.0);
+  // Pale fur is already bright: give it less rim so it never blows out.
+  float pale = smoothstep(0.55, 0.9, dot(diffuseColor.rgb, vec3(0.333)));
+  totalEmissiveRadiance += (vec3(1.0, 0.95, 0.88) * mix(0.32, 0.12, pale) * up + diffuseColor.rgb * 0.14) * rim;
+  totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.6, 0.45) * 0.05 * (1.0 - facing);
+}`;
 
 // Lines for the mouth, drawn as thin tubes. Filled shapes for open mouths.
 const MOUTHS = {
@@ -336,6 +358,15 @@ export class Critter {
     this.inner = new Group(); // hop offsets live here
     this.inner.add(this.squishy.mesh);
     this.group.add(this.inner);
+    // Contact shadow: a soft dark pool on whatever the critter sits on. It
+    // stays put and fades as the critter hops.
+    this.blob = new Mesh(blobGeometry(), blobMaterial());
+    this.blob.rotation.x = -Math.PI / 2;
+    this.blob.position.y = 0.012;
+    this.blob.scale.set(this.body.width * 0.62, this.body.depth * 0.62, 1);
+    this.blob.renderOrder = 1;
+    this.blobBase = this.blob.scale.clone();
+    this.group.add(this.blob);
     this.parts = [];
     this.buildFace();
     this.buildEars();
@@ -544,6 +575,10 @@ export class Critter {
       }
     }
     this.squishy.step(dt);
+    const lift = Math.max(0, this.inner.position.y);
+    const k = 1 / (1 + lift * 0.9);
+    this.blob.scale.set(this.blobBase.x * (0.7 + 0.3 * k), this.blobBase.y * (0.7 + 0.3 * k), 1);
+    this.blob.material.opacity = 0.55 * k;
 
     this.earFlick = Math.max(0, (this.earFlick || 0) - dt * 2.5);
     const flick = Math.sin(this.time * 26) * this.earFlick * 0.18;
@@ -664,6 +699,37 @@ export class Paw {
     });
     this.group.visible = false;
   }
+}
+
+let BLOB = null;
+function blobGeometry() {
+  return (BLOB ||= new PlaneGeometry(1, 1));
+}
+
+// Each critter gets its own material so its shadow can fade on its own.
+let BLOB_TEX = null;
+function blobMaterial() {
+  if (!BLOB_TEX) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(0,0,0,0.85)');
+    g.addColorStop(0.45, 'rgba(0,0,0,0.5)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 128, 128);
+    BLOB_TEX = new CanvasTexture(c);
+  }
+  return new MeshBasicMaterial({ map: BLOB_TEX, color: '#3a1c0c', transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, toneMapped: false });
+}
+
+// A loose contact shadow, for places a critter touches that are not under it.
+export function contactShadow() {
+  const m = new Mesh(blobGeometry(), blobMaterial());
+  m.rotation.x = -Math.PI / 2;
+  m.renderOrder = 1;
+  return m;
 }
 
 function softDot() {

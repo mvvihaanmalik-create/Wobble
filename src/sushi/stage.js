@@ -29,7 +29,6 @@ import {
   EffectComposer,
   EffectPass,
   HueSaturationEffect,
-  NoiseEffect,
   RenderPass,
   SMAAEffect,
   ToneMappingEffect,
@@ -89,7 +88,7 @@ export class Stage {
     const pmrem = new PMREMGenerator(r);
     const env = restaurantEnvironment();
     scene.environment = pmrem.fromScene(env, 0.02).texture;
-    scene.environmentIntensity = 0.75;
+    scene.environmentIntensity = 0.95;
     pmrem.dispose();
 
     this.buildLights();
@@ -112,8 +111,8 @@ export class Stage {
   buildLights() {
     const scene = this.scene;
     // Key: a soft warm overhead light, like a pin spot over the counter.
-    const key = (this.key = new DirectionalLight('#ffe2bd', 1.7));
-    key.position.set(-5, 20, 8);
+    const key = (this.key = new DirectionalLight('#fff0d8', 1.9));
+    key.position.set(-6, 22, 12);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     const sc = key.shadow.camera;
@@ -133,10 +132,15 @@ export class Stage {
       this.spots.push(s);
     }
     // Cool rim from behind the guests separates them from the wall.
-    const rim = new DirectionalLight('#bcd2ff', 1.1);
+    const rim = new DirectionalLight('#c4d8ff', 1.4);
     rim.position.set(6, 9, -18);
     scene.add(rim);
-    scene.add(new HemisphereLight('#ffe9cc', '#2a1810', 0.25));
+    // Bright, warm sky fill: shadows stay soft and readable, never murky.
+    scene.add(new HemisphereLight('#fff3e0', '#8a5a3a', 0.62));
+    // A soft fill from the camera side, so faces are always lit.
+    const fill = new DirectionalLight('#ffe6cc', 0.55);
+    fill.position.set(0, 7, 22);
+    scene.add(fill);
     this.lanternLights = [new PointLight('#ff9f45', 26, 20, 1.7), new PointLight('#ff9f45', 26, 20, 1.7)];
     this.lanternLights[0].position.set(-9, 7.2, -10.5);
     this.lanternLights[1].position.set(9, 7.2, -10.5);
@@ -152,7 +156,7 @@ export class Stage {
     Object.assign(this.ao.configuration, {
       aoRadius: 1.4,
       distanceFalloff: 0.8,
-      intensity: 1.8,
+      intensity: 1.25,
       gammaCorrection: false,
       color: new Color('#1a0d06'),
       aoSamples: 12,
@@ -167,14 +171,14 @@ export class Stage {
     this.dofPass = new EffectPass(this.camera, this.dof);
     this.composer.addPass(this.dofPass);
 
-    this.bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: 0.82, luminanceSmoothing: 0.3, intensity: 0.85, radius: 0.72 });
-    const tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
-    const sat = new HueSaturationEffect({ saturation: 0.06 });
-    const contrast = new BrightnessContrastEffect({ contrast: 0.06, brightness: 0 });
-    const vignette = new VignetteEffect({ offset: 0.28, darkness: 0.62 });
-    const grain = new NoiseEffect({ premultiply: true });
-    grain.blendMode.opacity.value = 0.1;
-    this.gradePass = new EffectPass(this.camera, this.bloom, tone, sat, contrast, vignette, grain);
+    this.bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: 0.86, luminanceSmoothing: 0.3, intensity: 0.7, radius: 0.7 });
+    // A clean, bright console look: neutral tone mapping keeps colors vivid,
+    // a touch more saturation and contrast, a light vignette, no grain.
+    const tone = new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL });
+    const sat = new HueSaturationEffect({ saturation: 0.12 });
+    const contrast = new BrightnessContrastEffect({ contrast: 0.1, brightness: 0.02 });
+    const vignette = new VignetteEffect({ offset: 0.38, darkness: 0.32 });
+    this.gradePass = new EffectPass(this.camera, this.bloom, tone, sat, contrast, vignette);
     this.composer.addPass(this.gradePass);
 
     this.smaaPass = new EffectPass(this.camera, new SMAAEffect());
@@ -316,7 +320,8 @@ export class Stage {
     const f = r.to && r.to.focus ? this._v.fromArray(r.to.focus) : r.target;
     this.focus.lerp(f, 1 - Math.exp(-dt * 6));
     this.dof.cocMaterial.focusRange = Math.max(2.2, dist * 0.32);
-    this.dof.bokehScale = r.to && r.to.bokeh != null ? r.to.bokeh : 3.2;
+    // Gentle depth of field: the background softens, it does not smear.
+    this.dof.bokehScale = (r.to && r.to.bokeh != null ? r.to.bokeh : 3.2) * 0.55;
   }
 
   render(dt = 1 / 60) {

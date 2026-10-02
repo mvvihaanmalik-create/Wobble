@@ -60,6 +60,16 @@ export class GameUI {
     $('pauseBtn').addEventListener('click', () => this.h.onPause());
     $('startBtn').addEventListener('click', () => this.h.onStart(this.selectedDay));
     $('wallBtn').addEventListener('click', () => this.h.onWall());
+    $('bookBtn').addEventListener('click', () => this.h.onBook());
+    $('bookClose').addEventListener('click', () => ($('book').hidden = true));
+    $('book').addEventListener('keydown', (e) => e.key === 'Escape' && ($('book').hidden = true));
+    this.bookTab = 'dishes';
+    for (const t of document.querySelectorAll('#book [role=tab]')) {
+      t.addEventListener('click', () => {
+        this.bookTab = t.dataset.tab;
+        this.renderBook();
+      });
+    }
     $('wallClose').addEventListener('click', () => this.hideWall());
     $('wall').addEventListener('keydown', (e) => e.key === 'Escape' && this.hideWall());
     this.buildTools();
@@ -182,7 +192,8 @@ export class GameUI {
     $('ticketLines').innerHTML = order.pieces
       .map((p, i) => {
         const [main] = describePiece(p);
-        if (p.maki) return makiLine(p, progress[i] || {}, main);
+        const fav = order.look.fav === (p.maki ? `m:${p.maki}` : `n:${p.fish}`) ? `<span class="fav-heart ico" title="${esc(order.look.name)}'s favourite">${ICONS.heart}</span>` : '';
+        if (p.maki) return makiLine(p, progress[i] || {}, main + fav);
         const pr = progress[i] || { rice: false, fish: false, wasabi: 0, tops: {} };
         const chips = [];
         const chip = (text, state) => chips.push(`<span class="chip${state ? ` ${state}` : ''}">${state === 'ok' ? '✓ ' : ''}${text}</span>`);
@@ -204,7 +215,7 @@ export class GameUI {
         const steps = `<span class="steps" aria-hidden="true"><i class="${pr.rice ? 'on' : ''}"></i><i class="${pr.fish ? 'on' : ''}"></i></span>`;
         return `<div class="piece${done ? ' done' : ''}">
           <span class="piece-ico ico">${ICONS[FISH_ICON[p.fish]]}</span>
-          <div class="piece-text"><b>${main}${steps}</b><span class="chips">${chips.join('')}</span></div>
+          <div class="piece-text"><b>${main}${fav}${steps}</b><span class="chips">${chips.join('')}</span></div>
           ${done ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
         </div>`;
       })
@@ -454,6 +465,53 @@ export class GameUI {
     el.classList.add('show');
     clearTimeout(this.bannerTimer);
     this.bannerTimer = setTimeout(() => (el.hidden = true), 2400);
+  }
+
+  // --- The Sushi book -----------------------------------------------------------
+
+  showBook(data, refresh = false) {
+    this.book = data;
+    if (refresh && $('book').hidden) return;
+    $('book').hidden = false;
+    this.renderBook();
+    if (!refresh) $('bookClose').focus({ preventScroll: true });
+  }
+
+  renderBook() {
+    const data = this.book;
+    if (!data) return;
+    const dishes = this.bookTab === 'dishes';
+    for (const t of document.querySelectorAll('#book [role=tab]')) t.setAttribute('aria-selected', String(t.dataset.tab === this.bookTab));
+    const found = data.dishes.filter((d) => d.state === 'found').length;
+    const favs = data.guests.filter((g) => g.favFound).length;
+    $('bookNote').textContent = dishes ? `${found} of ${data.dishes.length} dishes served.` : `${favs} of ${data.guests.length} favourites found. Serve a regular their favourite well to fill it in.`;
+    const photo = (url, cls) => (url ? `<img src="${url}" alt="" class="${cls}" />` : `<span class="book-wait"></span>`);
+    $('bookGrid').className = `book-grid ${dishes ? 'book-dishes' : 'book-guests'}`;
+    $('bookGrid').innerHTML = dishes
+      ? data.dishes
+          .map(
+            (d, i) => `<figure class="book-card ${d.state}">
+              <span class="book-no">No. ${String(i + 1).padStart(2, '0')}</span>
+              <div class="book-photo">${photo(d.photo, d.state === 'found' ? '' : 'shadowed')}${d.state === 'locked' ? '<span class="book-q">?</span>' : ''}</div>
+              <figcaption>
+                <b>${d.state === 'locked' ? '???' : esc(d.name)}</b><span lang="ja">${d.state === 'locked' ? '' : esc(d.jp)}</span>
+                <span class="book-meta">${d.state === 'found' ? `Served ${d.served} · Best ${d.best}` : d.state === 'seen' ? 'Not made yet' : `Day ${d.day + 1}`}</span>
+              </figcaption>
+            </figure>`,
+          )
+          .join('')
+      : data.guests
+          .map(
+            (g) => `<figure class="book-card guest ${g.met ? 'found' : 'locked'}">
+              <div class="book-photo round">${photo(g.photo, g.met ? '' : 'shadowed')}${g.met ? '' : '<span class="book-q">?</span>'}</div>
+              <figcaption>
+                <b>${g.met ? esc(g.name) : '???'}</b><span>${g.met ? esc(g.kind) : ''}</span>
+                <span class="book-meta">${g.met ? `Served ${g.served}` : 'Not met yet'}</span>
+                <span class="book-fav${g.favFound ? ' found' : ''}"><span class="ico">${ICONS.heart}</span>${g.favFound ? `Loves ${esc(g.favName.toLowerCase())}` : 'Favourite: ?'}</span>
+              </figcaption>
+            </figure>`,
+          )
+          .join('');
   }
 
   // --- The wall ------------------------------------------------------------------

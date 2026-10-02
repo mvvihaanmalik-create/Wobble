@@ -1,8 +1,8 @@
 import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
-import { DAYS, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS } from './config.js';
+import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, dishKey } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
-import { Customer, Paw, SousChef } from './critters.js';
+import { contactShadow, Customer, Paw, SousChef } from './critters.js';
 import { makeOrders, makiOf, nigiriOf, orderSize, perfectDay, plateLayout, rankFor, scorePlate, starsFor, tipFor } from './orders.js';
 import { MAKI, makiSpots, MakiSheet, platedMaki } from './maki.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
@@ -56,6 +56,11 @@ export class Game {
     this.stage.beforeRender = () => this.booth.flush();
     this.sous = new SousChef();
     this.stage.scene.add(this.sous.group);
+    // The guest leans on the far edge of the counter: a soft shade there
+    // grounds them, since their own shadow falls behind it.
+    this.counterShade = contactShadow();
+    this.counterShade.position.set(0, 0.008, LAYOUT.counter.zCustomer + 0.45);
+    this.stage.scene.add(this.counterShade);
     this.timeScale = 1;
     this.slowFor = 0;
     this.pointerPos = { x: 0, y: 0 };
@@ -82,6 +87,7 @@ export class Game {
       onStart: (day) => this.startDay(day),
       onTool: (t) => this.stations.build.setTool(t),
       onWall: () => this.openWall(),
+      onBook: () => this.openBook(),
       onPause: () => this.openPause(),
     });
     this.ui.setMuted(this.sound.muted);
@@ -530,6 +536,12 @@ export class Game {
       mult *= c;
       bonuses.push({ label: `Combo ${this.combo}`, value: `×${c.toFixed(2).replace(/0$/, '').replace(/\.0$/, '')}` });
     }
+    const look = this.order.look;
+    const favDone = this.order.pieces.some((p) => dishKey(p) === look.fav) && score.total >= RUSH.favouriteAt;
+    if (favDone) {
+      mult *= 1 + RUSH.favouriteTip;
+      bonuses.push({ label: 'Favourite', value: `+${Math.round(RUSH.favouriteTip * 100)}%` });
+    }
     if ((this.order.waited || 0) < this.order.patience * RUSH.speedy && score.total >= 60) {
       mult *= 1 + RUSH.speedyTip;
       bonuses.push({ label: 'Speedy', value: `+${Math.round(RUSH.speedyTip * 100)}%` });
@@ -590,6 +602,7 @@ export class Game {
     }
     this.tips += tip;
     this.scores.push(score.total);
+    this.recordInBook(built, score.total, favDone);
     this.lastScore = score.total;
     await this.wait(400);
     this.sound.coins(Math.max(1, Math.round(mood * 5)));
@@ -668,6 +681,63 @@ export class Game {
         },
       },
     );
+  }
+
+  // The Sushi book: every dish served and every regular met, saved with
+  // progress. New entries get a toast.
+  recordInBook(built, total, favDone) {
+    const book = this.progress.book;
+    const news = [];
+    for (const b of built) {
+      const key = b.maki ? `m:${b.maki}` : `n:${b.fish}`;
+      const d = (book.dishes[key] ||= { served: 0, best: 0 });
+      if (!d.served) news.push(DISHES.find((x) => x.key === key)?.name);
+      d.served++;
+      d.best = Math.max(d.best, total);
+    }
+    const look = this.order.look;
+    const gst = (book.guests[look.name] ||= { served: 0, fav: false });
+    if (!gst.served) news.push(look.name);
+    gst.served++;
+    if (favDone && !gst.fav) {
+      gst.fav = true;
+      const dish = DISHES.find((x) => x.key === look.fav);
+      setTimeout(() => this.ui.toast(`Sushi book: ${look.name} loves ${dish.name.toLowerCase()}!`, 3000), 1600);
+    } else if (news.filter(Boolean).length) setTimeout(() => this.ui.toast(`New in the Sushi book: ${news.filter(Boolean).join(', ')}`, 2600), 1600);
+    saveProgress(this.progress);
+  }
+
+  // Everything the book shows, from progress. Photos are added as they render.
+  bookData() {
+    const book = this.progress.book;
+    const unlocked = this.progress.unlocked;
+    const dishes = DISHES.map((d) => {
+      const rec = book.dishes[d.key];
+      return { ...d, state: rec ? 'found' : d.day <= unlocked ? 'seen' : 'locked', served: rec ? rec.served : 0, best: rec ? rec.best : 0, photo: this.bookPhotos[d.key] };
+    });
+    const guests = CUSTOMER_LOOKS.map((g) => {
+      const rec = book.guests[g.name];
+      const fav = DISHES.find((x) => x.key === g.fav);
+      return { ...g, met: !!rec, served: rec ? rec.served : 0, favFound: !!(rec && rec.fav), favName: fav.name, photo: this.bookPhotos[`g:${g.name}`] };
+    });
+    return { dishes, guests };
+  }
+
+  async openBook() {
+    this.bookPhotos ||= {};
+    this.ui.showBook(this.bookData());
+    // Shoot the missing photos one at a time so the frame never stalls long.
+    for (const d of DISHES) {
+      if (this.bookPhotos[d.key]) continue;
+      this.bookPhotos[d.key] = await this.booth.orderPhoto({ pieces: [d.piece] }, 360, 240);
+      this.ui.showBook(this.bookData(), true);
+    }
+    for (const g of CUSTOMER_LOOKS) {
+      const k = `g:${g.name}`;
+      if (this.bookPhotos[k]) continue;
+      this.bookPhotos[k] = await this.booth.critterPhoto(g, 280, 280);
+      this.ui.showBook(this.bookData(), true);
+    }
   }
 
   goals() {
@@ -1091,6 +1161,14 @@ export class Game {
       this.customer.update(dt);
     }
     if (this.queue) this.queue.update(dt);
+    const c = this.customer;
+    const shade = this.counterShade;
+    if (c && c.group.parent) {
+      const near = Math.max(0, 1 - Math.abs(c.group.position.z - LAYOUT.customer.z) / 3);
+      shade.position.x = c.group.position.x;
+      shade.scale.set(c.body.width * c.group.scale.x * 0.7, 2.2, 1);
+      shade.material.opacity = 0.75 * near / (1 + Math.max(0, c.inner.position.y) * 1.5);
+    } else shade.material.opacity = 0;
     if (Math.random() < dt * 0.12) this.sous.poke(0.3);
     this.sous.update(dt);
 
@@ -1178,11 +1256,11 @@ function saveTier(t) {
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(`${GAME.storageKey}.progress`));
-    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, best: p.best || [], stars: p.stars || [] };
+    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, best: p.best || [], stars: p.stars || [], book: { dishes: {}, guests: {}, ...(p.book || {}) } };
   } catch {
     // No saved progress.
   }
-  return { unlocked: 0, best: [], stars: [] };
+  return { unlocked: 0, best: [], stars: [], book: { dishes: {}, guests: {} } };
 }
 
 function saveProgress(p) {

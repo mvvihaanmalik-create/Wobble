@@ -32,7 +32,7 @@ const KINDS = {
     physical: { roughness: 0.55, sheen: 0.6, sheenColor: '#6f8a4a', sheenRoughness: 0.4, clearcoat: 0.15, clearcoatRoughness: 0.5 },
   },
   rice: {
-    colors: ['#fffcf5', '#e6dece'],
+    colors: ['#fdfbf6', '#e4e0d6'],
     bump: 0.9,
     physical: { roughness: 0.48, clearcoat: 0.25, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: '#ffffff', sheenRoughness: 0.6 },
   },
