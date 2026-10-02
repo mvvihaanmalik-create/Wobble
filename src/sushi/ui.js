@@ -55,6 +55,8 @@ export class GameUI {
     logo.innerHTML = [...logo.textContent].map((c, i) => `<span style="--i:${i}" aria-hidden="true">${c}</span>`).join('');
     document.querySelectorAll('#stations button').forEach((b) => b.addEventListener('click', () => this.h.onStation(b.dataset.station)));
     $('muteBtn').addEventListener('click', () => this.h.onMute());
+    $('musicBtn').addEventListener('click', () => this.h.onMusic());
+    $('titleMusicBtn').addEventListener('click', () => this.h.onMusic());
     $('recBtn').addEventListener('click', () => this.h.onRecord());
     $('shotBtn').addEventListener('click', () => this.h.onPhoto());
     $('pauseBtn').addEventListener('click', () => this.h.onPause());
@@ -136,6 +138,17 @@ export class GameUI {
       if (tips > Number(t.dataset.value || 0)) bump(t.parentElement);
       countTo(t, tips, 900, yen);
     }
+  }
+
+  setMusic(on) {
+    const b = $('musicBtn');
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', on ? 'Music on' : 'Music off');
+    b.querySelector('.ico').innerHTML = on ? ICONS.music : ICONS.musicOff;
+    const t = $('titleMusicBtn');
+    t.setAttribute('aria-pressed', String(on));
+    t.querySelector('.ico').innerHTML = on ? ICONS.music : ICONS.musicOff;
+    $('titleMusicLabel').textContent = on ? 'Music on' : 'Music off';
   }
 
   setMuted(m) {

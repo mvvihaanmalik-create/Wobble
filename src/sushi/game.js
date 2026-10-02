@@ -8,6 +8,7 @@ import { MAKI, makiSpots, MakiSheet, platedMaki } from './maki.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
 import { GameUI } from './ui.js';
 import { BarSound } from './audio.js';
+import { LofiMusic } from './music.js';
 import { Recorder, canShareFile, download, shareOrDownload } from '../record.js';
 import { composeBar } from './capture.js';
 import { Effects, haptic } from './fx.js';
@@ -50,6 +51,9 @@ export class Game {
     });
     this.set = new SushiSet(this.stage.scene);
     this.sound = new BarSound();
+    this.music = new LofiMusic(this.sound);
+    // The band starts with the first tap or key (browsers need a gesture).
+    this.sound.onUnlock = () => this.music.sync();
     this.fx = new Effects(this.stage.scene);
     this.booth = new PhotoBooth(this.stage, this.set);
     this.stage.beforeRender = () => this.booth.flush();
@@ -81,6 +85,12 @@ export class Game {
         this.sound.unlock();
         this.sound.setMuted(!this.sound.muted);
         this.ui.setMuted(this.sound.muted);
+        this.music.sync();
+      },
+      onMusic: () => {
+        this.sound.unlock();
+        this.music.setOn(!this.music.on);
+        this.ui.setMusic(this.music.on);
       },
       onRecord: () => this.record(),
       onPhoto: () => this.photo(),
@@ -91,6 +101,7 @@ export class Game {
       onPause: () => this.openPause(),
     });
     this.ui.setMuted(this.sound.muted);
+    this.ui.setMusic(this.music.on);
 
     this.stations = {
       counter: new CounterStation(this),
@@ -106,7 +117,11 @@ export class Game {
     this.showTitle();
     this.last = performance.now();
     this.running = false;
-    document.addEventListener('visibilitychange', () => (document.hidden ? this.pause() : this.mode !== 'paused' && this.resume()));
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.pause();
+      else if (this.mode !== 'paused') this.resume();
+      this.music.sync();
+    });
     this.resume();
   }
 
@@ -158,6 +173,8 @@ export class Game {
   showTitle() {
     this.session = (this.session || 0) + 1;
     this.mode = 'title';
+    this.music.setMood('chill');
+    this.music.setDucked(false);
     this.clearWork();
     this.removeCustomers();
     this.stage.goTo('title', true);
@@ -189,6 +206,8 @@ export class Game {
     this.combo = 0;
     this.walkouts = 0;
     this.perfect = perfectDay(this.orders, dayIndex);
+    this.music.setMood('groove');
+    this.music.setDucked(false);
     this.ui.hideTitle();
     this.removeCustomers();
     this.clearWork();
@@ -240,6 +259,7 @@ export class Game {
     this.sound.bell();
     this.sousSays({ jp: 'いらっしゃいませ', en: 'Welcome in' }, 'open', 900);
     const prev = this.orders[this.orderIndex - 1];
+    this.music.setMood(order.rush ? 'rush' : 'groove');
     if (order.rush && !(prev && prev.rush)) {
       this.ui.banner('Rush hour!', 'ラッシュ', 'rush');
       this.sound.bell();
@@ -640,6 +660,7 @@ export class Game {
   endDay() {
     this.mode = 'summary';
     this.ui.gesture(null);
+    this.music.setMood('chill');
     this.order = null;
     this.ui.ticket(null);
     const avg = Math.round(this.scores.reduce((a, b) => a + b, 0) / Math.max(1, this.scores.length));
@@ -1134,6 +1155,7 @@ export class Game {
     this.ui.holdRing(null);
     this.mode = 'paused';
     this.ui.gesture(null);
+    this.music.setDucked(true);
     this.pause();
     this.stage.render(0);
     this.ui.pauseCard(
@@ -1154,6 +1176,7 @@ export class Game {
 
   closePause() {
     if (this.mode !== 'paused') return;
+    this.music.setDucked(false);
     this.ui.hideCard();
     this.mode = 'play';
     this.resume();

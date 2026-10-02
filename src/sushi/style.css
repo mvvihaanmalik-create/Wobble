@@ -1491,6 +1491,29 @@ body {
   font: 700 12px/1 var(--body);
   color: rgba(255, 246, 228, 0.6);
 }
+.music-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 3px 10px 3px 4px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+  font: 800 12px/1 var(--body);
+  vertical-align: middle;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.music-pill .ico {
+  width: 22px;
+  height: 22px;
+}
+.music-pill[aria-pressed='false'] {
+  opacity: 0.7;
+}
 
 /* --- Panels: day intro, results, end of shift --------------------------------- */
 

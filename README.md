@@ -110,6 +110,14 @@ Feedback while you play:
 - A light trail and a short slow-motion beat when the knife goes through.
 - Haptics on phones that support them.
 
+### Music
+
+The bar has its own lofi band, written live in Web Audio (`src/sushi/music.js`). No track is downloaded, so there is nothing to license and nothing to fetch.
+- **Sound:** a warm electric piano plays jazzy four-chord loops over a round bass. A music box hums little pentatonic tunes on top. A dusty, swung beat and some vinyl crackle sit behind it.
+- **Never the same twice:** every eight bars it picks a new progression and makes up a new tune.
+- **Follows the game:** it is mellow on the title screen and the end-of-day card, grooves during a shift, and speeds up with extra hats in rush hour. Pausing muffles it, like a radio in the next room.
+- **Controls:** the note button in the top bar (or the "Music on" pill on the title screen) turns the music off and remembers the choice. The speaker button mutes everything. Clips you record include the music.
+
 ### Loading
 
 A loading screen shows straight away, before any script arrives. Behind it the game builds one of every dish and tool, compiles every shader and runs one frame through the post chain. That way the first minutes of play never stall on a shader compiling.

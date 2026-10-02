@@ -31,6 +31,7 @@ export class Sound {
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    if (this.onUnlock) this.onUnlock();
   }
 
   setMuted(m) {

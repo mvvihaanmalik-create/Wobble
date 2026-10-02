@@ -46,6 +46,8 @@ export const ICONS = {
   plateEmpty: svg(`<ellipse cx="24" cy="30" rx="19" ry="9" fill="#ead9bb" stroke="#b89a7a" stroke-width="2.6"/><ellipse cx="24" cy="28.5" rx="11" ry="5" fill="none" stroke="#d2bb96" stroke-width="2"/>`),
 
   soundOn: svg(`<path d="M9 19 h7 l9 -8 v26 l-9 -8 h-7Z" fill="#fff8ea" ${o}/><path d="M31 18 q4 6 0 12 M35.5 14 q7 10 0 20" fill="none" ${o}/>`),
+  music: svg(`<path d="M19 33 V12 l18 -4 v21" fill="none" ${o} stroke-width="3.4"/><path d="M19 15 l18 -4" ${o} stroke-width="5"/><ellipse cx="14.5" cy="33.5" rx="5.5" ry="4.5" fill="#fff8ea" ${o}/><ellipse cx="32.5" cy="29.5" rx="5.5" ry="4.5" fill="#fff8ea" ${o}/>`),
+  musicOff: svg(`<path d="M19 33 V12 l18 -4 v21" fill="none" ${o} stroke-width="3.4"/><ellipse cx="14.5" cy="33.5" rx="5.5" ry="4.5" fill="#fff8ea" ${o}/><ellipse cx="32.5" cy="29.5" rx="5.5" ry="4.5" fill="#fff8ea" ${o}/><path d="M8 8 L40 40" stroke="#e2483a" stroke-width="4.6" stroke-linecap="round"/>`),
   soundOff: svg(`<path d="M9 19 h7 l9 -8 v26 l-9 -8 h-7Z" fill="#fff8ea" ${o}/><path d="M31 19 l9 10 M40 19 l-9 10" fill="none" ${o}/>`),
   pause: svg(`<rect x="13" y="11" width="8" height="26" rx="3" fill="#fff8ea" ${o}/><rect x="27" y="11" width="8" height="26" rx="3" fill="#fff8ea" ${o}/>`),
   record: svg(`<circle cx="24" cy="24" r="15" fill="#fff8ea" ${o}/><circle cx="24" cy="24" r="8.5" fill="#e2483a" ${o}/>`),
