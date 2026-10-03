@@ -215,7 +215,6 @@ export const PERF = {
   slowRatio: 1.18, // average frame time over the 60 fps budget by this much is slow
   scaleWindow: 0.6, // seconds of slow frames before trimming resolution
   scaleStep: 0.12, // how much resolution each trim takes
-  minScale: 0.64, // lowest resolution scale before an effect tier goes
   recoverAfter: 6, // seconds of smooth frames before taking resolution back
   window: 1.5, // seconds of slow frames at the lowest scale before stepping down a tier
   settle: 2, // seconds to ignore after loading or a tier change

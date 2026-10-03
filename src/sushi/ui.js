@@ -470,7 +470,7 @@ export class GameUI {
        <p class="tip-line">Esc to resume. 1 to ${usesStove(DAYS[dayIndex]) ? 5 : 4} switch stations. Hold Space to scoop and press.</p>`,
       [
         { label: 'Resume', primary: true, onClick: onResume },
-        { label: 'Restart day', onClick: onRestart },
+        { label: 'Restart stage', onClick: onRestart },
         { label: 'Quit to title', onClick: onQuit },
       ],
       'pause',
@@ -527,15 +527,15 @@ export class GameUI {
        </div>
        ${stats.walkouts ? `<p class="tip-line">${stats.walkouts} guest${stats.walkouts > 1 ? 's' : ''} walked out.</p>` : ''}
        <div class="hanko">${rank}</div>
-       ${!hasNext && dayIndex + 1 < DAYS.length ? `<p class="tip-line">Earn one star to unlock Day ${dayIndex + 2}.</p>` : ''}
+       ${!hasNext && dayIndex + 1 < DAYS.length ? `<p class="tip-line">Earn one star to unlock Stage ${dayIndex + 2}.</p>` : ''}
        ${post.plates.length ? `<form class="post" id="postForm" autocomplete="off">
          <label for="postName">Sign the wall</label>
          <div class="post-row"><input id="postName" maxlength="16" placeholder="Your name" spellcheck="false" /><button class="btn btn-solid" type="submit" id="postBtn">Post</button></div>
          <p class="post-note" id="postNote">Your best plates go up for everyone to see.</p>
        </form>` : ''}`,
       [
-        ...(hasNext ? [{ label: `Day ${dayIndex + 2}`, primary: true, onClick: onNext }] : []),
-        { label: 'Replay day', primary: !hasNext, onClick: onReplay },
+        ...(hasNext ? [{ label: `Stage ${dayIndex + 2}`, primary: true, onClick: onNext }] : []),
+        { label: 'Replay stage', primary: !hasNext, onClick: onReplay },
         { label: 'The wall', onClick: post.onWall },
         { label: 'Title', onClick: onTitle },
       ],
@@ -612,7 +612,7 @@ export class GameUI {
               <div class="book-photo">${photo(d.photo, d.state === 'found' ? '' : 'shadowed')}${d.state === 'locked' ? '<span class="book-q">?</span>' : ''}</div>
               <figcaption>
                 <b>${d.state === 'locked' ? '???' : esc(d.name)}</b><span lang="ja">${d.state === 'locked' ? '' : esc(d.jp)}</span>
-                <span class="book-meta">${d.state === 'found' ? `Served ${d.served} · Best ${d.best}` : d.state === 'seen' ? 'Not made yet' : `Day ${d.day + 1}`}</span>
+                <span class="book-meta">${d.state === 'found' ? `Served ${d.served} · Best ${d.best}` : d.state === 'seen' ? 'Not made yet' : `Stage ${d.day + 1}`}</span>
               </figcaption>
             </figure>`,
           )
@@ -653,7 +653,7 @@ export class GameUI {
       name.textContent = e.name;
       const day = document.createElement('span');
       day.className = 'when';
-      day.textContent = `Day ${e.day + 1}`;
+      day.textContent = `Stage ${e.day + 1}`;
       const tips = document.createElement('b');
       tips.textContent = yen(e.tips);
       li.append(rank, name, day, tips);

@@ -44,11 +44,13 @@ const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 // down on its own if frames run slow.
 // pixelRatio is a cap; below 1 renders under native resolution and lets the
 // browser scale it up. glass: false turns off see-through food and garnish.
+// phoneRatio: the cap on phones. Their screens are small, so even 1.6x is
+// few pixels, and anything under 1x reads as blocky on a retina display.
 export const TIERS = {
-  high: { pixelRatio: 1.75, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6, glass: true },
-  medium: { pixelRatio: 1.25, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.45, glass: true },
-  low: { pixelRatio: 1, ao: false, aoHalf: true, dof: false, bloom: true, smaa: true, shadow: 1024, transmission: 0.35, glass: true },
-  minimal: { pixelRatio: 0.75, ao: false, aoHalf: true, dof: false, bloom: false, smaa: false, shadow: 1024, transmission: 0.25, glass: false },
+  high: { pixelRatio: 1.75, phoneRatio: 2, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6, glass: true },
+  medium: { pixelRatio: 1.25, phoneRatio: 2, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.45, glass: true },
+  low: { pixelRatio: 1, phoneRatio: 1.6, ao: false, aoHalf: true, dof: false, bloom: true, smaa: true, shadow: 1024, transmission: 0.35, glass: true },
+  minimal: { pixelRatio: 0.75, phoneRatio: 1.25, ao: false, aoHalf: true, dof: false, bloom: false, smaa: false, shadow: 1024, transmission: 0.25, glass: false },
 };
 
 // Pick a starting tier from the GPU's name. Integrated and mobile GPUs start
@@ -189,7 +191,8 @@ export class Stage {
     const t = TIERS[name] || TIERS.medium;
     this.tierName = name;
     this.tier = t;
-    this.pixelRatio = Math.min(window.devicePixelRatio || 1, t.pixelRatio);
+    const phone = Math.min(screen.width, screen.height) < 600 && window.matchMedia('(pointer: coarse)').matches;
+    this.pixelRatio = Math.min(window.devicePixelRatio || 1, phone ? t.phoneRatio : t.pixelRatio);
     this.renderScale = 1;
     this.renderer.setPixelRatio(this.pixelRatio);
     this.glass = t.glass;
@@ -260,9 +263,18 @@ export class Stage {
     return new Promise((res) => (r.done = res));
   }
 
+  // Rotating a phone changes the canvas size in steps (and Safari reports the
+  // new size late), so this runs every frame and only resizes on a change.
+  ensureSize() {
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    if (w && h && (w !== this.width || h !== this.height)) this.resize();
+  }
+
   resize() {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
+    if (!w || !h) return;
     this.renderer.setSize(w, h, false);
     this.composer.setSize(w, h, false);
     const wasPortrait = this.width && this.width / this.height < 0.8;
@@ -274,8 +286,15 @@ export class Stage {
 
   // Dynamic resolution: render a little under the tier's pixel ratio when
   // frames run long, and climb back when there is room. Effects stay on.
+  // Never below one rendered pixel per CSS pixel (where the screen has that
+  // many): under that, a retina phone shows visible blocks.
+  get minScale() {
+    const floor = Math.min(1, window.devicePixelRatio || 1) / this.pixelRatio;
+    return Math.min(1, Math.max(0.6, floor));
+  }
+
   setRenderScale(s) {
-    s = Math.max(0.6, Math.min(1, s));
+    s = Math.max(this.minScale, Math.min(1, s));
     if (Math.abs(s - this.renderScale) < 0.04) return false;
     this.renderScale = s;
     this.renderer.setPixelRatio(this.pixelRatio * s);

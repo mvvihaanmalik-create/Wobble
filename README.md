@@ -181,6 +181,14 @@ Behind it the game compiles only what the title camera can see, a dozen meshes a
 
 While the title is showing, the stations off camera and one of every dish compile in the background, a few at a time so the title never freezes. If you press start before that is done, the button fills up as a progress bar ("Warming the plates 60%") and the stage opens by itself when it is ready.
 
+### Phones
+
+The game is built to be played sideways on a phone:
+- **Landscape layout:** on a short, wide screen (under 500 px tall) the top bar slims down, the ticket shrinks to three quarters on the left, the station bar becomes a compact row of icons at the bottom, actions stack down the right edge and Pochi's tips sit between them. The title puts the logo and buttons on the left and the stages on the right. Cards scroll, with their buttons stuck to the bottom. Notches are kept clear with the safe areas.
+- **Upright:** still playable. Starting a stage upright suggests turning the phone sideways.
+- **Rotation:** the canvas is re-measured every frame and again as the rotation settles, so the picture never stays stretched.
+- **Sharp on retina:** phones render at up to 1.6x to 2x, and the automatic resolution never drops below one rendered pixel per point, so the picture never turns blocky.
+
 ### Interface
 
 The UI is drawn like a cozy cooking game rather than a web page:

@@ -2937,3 +2937,440 @@ body {
 #startBtn.warming small {
   display: none;
 }
+
+/* --- Cards never clip their top ------------------------------------------------
+   A centered flex child taller than the screen loses its top edge, out of
+   reach of scrolling. Auto margins center it when it fits and let it scroll
+   from the top when it does not. */
+.card-screen {
+  align-items: flex-start;
+  padding-top: calc(var(--pad) + 30px + env(safe-area-inset-top));
+}
+#card.panel {
+  margin: auto;
+}
+
+/* --- Phones held sideways --------------------------------------------------------
+   A landscape phone is wide but only about 330 to 400 px tall once the
+   browser bars are in. Everything shrinks to leave the kitchen in view: a
+   slim top bar, a small ticket on the left, a compact station bar at the
+   bottom, actions down the right edge, and cards that scroll with their
+   buttons always in reach. Notches are kept clear with the safe areas. */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --pad: 8px;
+  }
+  .topbar {
+    top: calc(6px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+    right: calc(8px + env(safe-area-inset-right));
+  }
+  .plaque {
+    padding: 3px 4px 3px 10px;
+    gap: 6px;
+    border-width: 2.5px;
+    border-radius: 12px;
+    box-shadow: 0 3px 0 var(--ink), inset 0 2px 0 rgba(255, 210, 160, 0.35);
+  }
+  .plaque-logo {
+    font-size: 16px;
+  }
+  .day-badge {
+    padding: 3px 6px 4px;
+    font-size: 10px;
+    border-width: 2px;
+    border-radius: 8px;
+  }
+  .day-badge b {
+    font-size: 14px;
+  }
+  .hud-right {
+    gap: 6px;
+  }
+  .pill {
+    height: 34px;
+    padding: 0 9px 0 5px;
+    border-width: 2.5px;
+    box-shadow: 0 3px 0 var(--ink), inset 0 2px 0 #fff;
+  }
+  .pill.served {
+    display: flex;
+    padding: 0 8px;
+  }
+  .served-plates .ico {
+    width: 20px;
+    height: 20px;
+  }
+  .pill.coins .ico {
+    width: 22px;
+    height: 22px;
+  }
+  .pill.coins b {
+    font-size: 16px;
+  }
+  .round-btn {
+    width: 34px;
+    height: 34px;
+    border-width: 2.5px;
+    box-shadow: 0 3px 0 var(--ink), inset 0 2px 0 #fff;
+  }
+  .round-btn .ico {
+    width: 22px;
+    height: 22px;
+  }
+  #shotBtn {
+    display: grid;
+  }
+
+  /* The ticket: the same slip, three quarters the size, never taller than
+     the space above the station bar. */
+  .ticket {
+    top: calc(50px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+    width: 236px;
+    padding: 14px 14px 12px;
+    zoom: 0.72;
+    max-height: calc((100dvh - 50px - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 0.72);
+    overflow: hidden;
+  }
+  .ticket-no {
+    font-size: 20px;
+  }
+  .ticket-name {
+    font-size: 13px;
+  }
+  .piece-ico {
+    width: 30px;
+    height: 30px;
+  }
+  .piece-text b {
+    font-size: 16px;
+  }
+  .chip {
+    font-size: 12px;
+  }
+
+  /* Station bar: icons and names only, centered at the bottom. */
+  .stations {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: calc(6px + env(safe-area-inset-bottom));
+    padding: 4px;
+    gap: 4px;
+    border-width: 2.5px;
+    border-radius: 16px;
+    box-shadow: 0 3px 0 var(--ink), inset 0 2px 0 rgba(255, 210, 160, 0.35);
+  }
+  .stations button {
+    flex: none;
+    width: 60px;
+    height: 46px;
+    padding: 3px 2px 4px;
+    grid-template-rows: 1fr auto;
+    border-width: 2.5px;
+    border-radius: 11px;
+    box-shadow: 0 3px 0 var(--ink), inset 0 2px 0 #fff;
+  }
+  .stations .ico {
+    width: 22px;
+    height: 22px;
+  }
+  .stations .label {
+    font-size: 11px;
+  }
+  .stations .jp,
+  .stations .key {
+    display: none;
+  }
+  .stations button[aria-current='true'] {
+    transform: translateY(-3px);
+  }
+
+  /* Actions: a short column at the bottom right, clear of the station bar. */
+  .actions {
+    left: auto;
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: calc(6px + env(safe-area-inset-bottom));
+    width: 132px;
+    flex-direction: column-reverse;
+    gap: 7px;
+  }
+  .actions .btn {
+    flex: none;
+    font-size: 14px;
+    padding: 9px 10px 10px;
+    border-width: 2.5px;
+    border-radius: 12px;
+  }
+
+  /* Pochi's tips sit just above the station bar, between ticket and actions. */
+  .hint,
+  .actions:not(:empty) ~ .hint,
+  .hint:has(~ .actions:not(:empty)) {
+    left: 50%;
+    right: auto;
+    width: auto;
+    transform: translateX(-50%);
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    max-width: min(440px, calc(100vw - 2 * 150px));
+  }
+  .hint-face {
+    width: 34px;
+    height: 34px;
+  }
+  .hint-text {
+    font-size: 12.5px;
+    padding: 6px 10px 7px;
+    border-width: 2.5px;
+    border-radius: 12px;
+    box-shadow: 0 3px 0 var(--ink);
+  }
+  .meter,
+  .tools {
+    bottom: calc(108px + env(safe-area-inset-bottom));
+  }
+  .meter {
+    width: min(360px, calc(100vw - 2 * 150px));
+    padding: 5px 9px;
+    gap: 7px;
+    border-width: 2.5px;
+    border-radius: 14px;
+  }
+  .meter-label {
+    font-size: 14px;
+  }
+  .meter-track {
+    height: 16px;
+    border-width: 2.5px;
+  }
+  .meter-dots i {
+    width: 12px;
+    height: 11px;
+    border-width: 2px;
+  }
+  .tools {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    gap: 6px;
+    padding: 6px 8px 4px;
+    border-width: 2.5px;
+    border-radius: 16px;
+  }
+  .token {
+    width: 40px;
+    height: 40px;
+    padding: 5px;
+    border-width: 2.5px;
+  }
+  .tool {
+    font-size: 10px;
+  }
+  .popup {
+    font-size: 28px;
+    -webkit-text-stroke-width: 6px;
+  }
+  .popup.great {
+    font-size: 34px;
+  }
+  .banner-text {
+    -webkit-text-stroke-width: 6px;
+  }
+  .rec-count {
+    top: calc(50px + env(safe-area-inset-top));
+  }
+
+  /* Screens keep clear of the notch on either side. */
+  .screen {
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-right: calc(10px + env(safe-area-inset-right));
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  /* Title: logo and buttons on the left, the stages on the right. */
+  .title-screen {
+    align-items: center;
+    background: linear-gradient(90deg, rgba(36, 20, 12, 0.94) 0%, rgba(36, 20, 12, 0.78) 45%, rgba(36, 20, 12, 0.35) 100%);
+  }
+  .title-card {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.15fr);
+    grid-template-areas:
+      'logo days'
+      'tag days'
+      'acts days'
+      'foot days';
+    align-content: center;
+    align-items: center;
+    column-gap: 18px;
+    row-gap: 8px;
+  }
+  .logo-big {
+    grid-area: logo;
+    font-size: clamp(44px, 13dvh, 60px);
+    -webkit-text-stroke-width: 8px;
+    text-shadow: 0 6px 0 var(--ink), 0 10px 18px rgba(0, 0, 0, 0.45);
+  }
+  .tagline {
+    grid-area: tag;
+    margin: 0;
+    font-size: 12px;
+  }
+  .tagline span {
+    font-size: 11px;
+    padding: 4px 8px 5px;
+  }
+  .lede {
+    display: none;
+  }
+  .days {
+    grid-area: days;
+    align-self: center;
+    margin: 0;
+    padding: 6px 4px 12px;
+  }
+  .days .day,
+  .day {
+    flex-basis: 124px;
+    min-height: 0;
+    padding: 7px 8px;
+    gap: 4px;
+  }
+  .day-num b {
+    font-size: 28px;
+  }
+  .day-note {
+    font-size: 11px;
+  }
+  .day-tag {
+    padding: 2px 5px 3px;
+    font-size: 9px;
+  }
+  .title-actions {
+    grid-area: acts;
+    margin: 0;
+    gap: 8px;
+  }
+  .title-actions .btn {
+    font-size: 14px;
+    padding: 9px 10px 10px;
+  }
+  .btn-big,
+  .title-actions .btn-big {
+    font-size: 19px;
+    padding: 10px 14px 12px;
+    border-radius: 16px;
+  }
+  .foot {
+    grid-area: foot;
+    font-size: 11px;
+  }
+
+  /* Cards: compact, scrolling, with their buttons stuck to the bottom. */
+  .card-screen {
+    padding-top: calc(30px + env(safe-area-inset-top));
+  }
+  .panel,
+  #card.panel {
+    width: min(600px, 100%);
+    gap: 8px;
+    padding: 26px 16px 0;
+    margin-top: 0;
+  }
+  #card .row {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 2px -16px 0;
+    padding: 8px 12px 10px;
+    background: linear-gradient(rgba(255, 246, 228, 0), var(--cream) 30%);
+    border-radius: 0 0 22px 22px;
+  }
+  #card .row .btn {
+    font-size: 15px;
+    padding: 10px 18px 11px;
+  }
+  .ribbon {
+    top: -24px;
+    padding: 6px 22px 8px;
+    border-width: 3px;
+  }
+  .ribbon h2 {
+    font-size: 19px;
+  }
+  .ribbon span {
+    font-size: 12px;
+  }
+  .panel-lead {
+    font-size: 13px;
+  }
+  .tip-line {
+    font-size: 12px;
+  }
+  /* The stage intro: the new dish on the left, the menu on the right. */
+  #card.intro {
+    width: min(760px, 100%);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 16px;
+    align-items: start;
+  }
+  #card.intro > * {
+    grid-column: 2;
+  }
+  #card.intro > .panel-lead,
+  #card.intro > .showcase {
+    grid-column: 1;
+  }
+  #card.intro > .showcase {
+    grid-row: 2 / span 8;
+  }
+  #card.intro > .row {
+    grid-column: 1 / -1;
+  }
+  .shelf-label {
+    font-size: 12px;
+  }
+  .ingredient {
+    font-size: 12px;
+    padding: 4px 9px 4px 4px;
+  }
+  .ingredient .ico {
+    width: 20px;
+    height: 20px;
+  }
+  .guests {
+    font-size: 13px;
+  }
+  .wall {
+    max-height: 100%;
+  }
+}
+
+/* Narrow upright phones: the top bar keeps pause in reach by dropping the
+   record button and shrinking the rest. */
+@media (max-width: 440px) and (orientation: portrait) {
+  #recBtn {
+    display: none;
+  }
+  .hud-right {
+    gap: 5px;
+  }
+  .round-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .round-btn .ico {
+    width: 23px;
+    height: 23px;
+  }
+  .pill {
+    height: 36px;
+  }
+  .plaque-logo {
+    font-size: 17px;
+  }
+}

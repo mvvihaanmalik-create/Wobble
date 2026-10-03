@@ -126,6 +126,11 @@ export class Game {
     this.bindInput();
     this.stage.resize();
     window.addEventListener('resize', () => this.stage.resize());
+    // Phones rotate in stages: check again once the browser has settled.
+    const settle = () => [60, 250, 600].forEach((ms) => setTimeout(() => this.stage.ensureSize(), ms));
+    window.addEventListener('orientationchange', settle);
+    window.visualViewport?.addEventListener('resize', settle);
+    if (window.ResizeObserver) new ResizeObserver(() => this.stage.ensureSize()).observe(canvas);
 
     this.showTitle();
     this.last = performance.now();
@@ -309,6 +314,10 @@ export class Game {
       this.mode = 'play';
       this.nextCustomer();
     };
+    // Upright phones still play, but the kitchen is built for sideways.
+    if (window.matchMedia('(orientation: portrait) and (pointer: coarse) and (max-width: 600px)').matches) {
+      this.ui.toast('Turn your phone sideways for a bigger kitchen', 3200);
+    }
     const dish = DAYS[dayIndex].dish && SHOWCASE[DAYS[dayIndex].dish];
     this.ui.dayIntroCard(dayIndex, go, { goals: this.goals() });
     // A glamour shot of the day's new dish, dropped in once it is rendered.
@@ -1320,6 +1329,7 @@ export class Game {
     const clamped = Math.min(0.1, Math.max(0, raw));
     this.smoothDt = this.smoothDt == null || Math.abs(clamped - this.smoothDt) > 0.03 ? clamped : this.smoothDt + (clamped - this.smoothDt) * 0.3;
     const dt = this.smoothDt;
+    this.stage.ensureSize();
     this.watchPerformance(raw);
     this.tick(dt);
     this.stage.render(dt);
@@ -1535,7 +1545,9 @@ export class Game {
 
   watchPerformance(raw) {
     const q = this.quality;
-    if (q.fixed || this.recorder.busy || raw > 3) return; // > 3 s: the tab was asleep
+    // Skip while dishes compile in the background (those hitches say nothing
+    // about how fast the game runs) and after the tab slept (> 3 s).
+    if (q.fixed || this.recorder.busy || this.warming || this.loading || raw > 3) return;
     // Give shaders a moment to compile after loading or a tier change.
     q.settle = (q.settle ?? PERF.settle) - raw;
     if (q.settle > 0) return;
@@ -1552,8 +1564,8 @@ export class Game {
       q.fastFor += raw;
     }
     // First trade a little resolution, which nobody notices in motion.
-    if (q.slowFor >= PERF.scaleWindow && stage.renderScale > PERF.minScale + 0.01) {
-      q.maxScale = Math.max(PERF.minScale, stage.renderScale - 0.05);
+    if (q.slowFor >= PERF.scaleWindow && stage.renderScale > stage.minScale + 0.01) {
+      q.maxScale = Math.max(stage.minScale, stage.renderScale - 0.05);
       stage.setRenderScale(stage.renderScale - PERF.scaleStep);
       q.slowFor = 0;
       q.avg = budget;
@@ -1614,7 +1626,9 @@ function stamp() {
 }
 
 // The lowest tier this browser needed, so the next visit starts there.
-const TIER_KEY = `${GAME.storageKey}.tier`;
+// v2: tiers saved before dynamic resolution (often stuck on the lowest after
+// one slow load) are ignored.
+const TIER_KEY = `${GAME.storageKey}.tier2`;
 function loadTier() {
   try {
     const t = localStorage.getItem(TIER_KEY);
