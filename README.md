@@ -146,9 +146,16 @@ Lighting aims for a bright, toy-like look:
 The animals carry a shader rim light: a soft cream glow along the edges that face the sky, toned down on white fur so the panda and bunny do not blow out. Each one sits on a soft contact shadow that shrinks and fades as it hops. The guest at the counter casts a soft one onto the ledge where their paws rest.
 
 Quality tiers (`high`, `medium`, `low`, `minimal`):
-- Phones start on `medium`, desktops on `high`.
-- If frames stay slow for a few seconds, the game steps down a tier on its own.
+- The starting tier comes from the GPU's name: integrated and mobile GPUs start on `low`, unknown ones on `medium`, big desktop GPUs on `high`.
+- If frames run over the 60 fps budget, the game first renders at a slightly lower resolution, in steps down to 64%, and keeps every effect. Only if that is not enough does it step down a tier. When frames are smooth again for a while, the resolution climbs back.
 - `?tier=low` forces a tier.
+
+Keeping it smooth:
+- **Even frames on fast screens:** on 120 Hz and faster displays the game draws every second refresh, a steady 60 fps, instead of stumbling between 120 and 60. 60 and 90 Hz screens draw every refresh.
+- **Smoothed time step:** motion uses a lightly smoothed frame time, so a millisecond of timer jitter never shows as judder.
+- **Light rice:** the thousands of instanced rice grains use a lighter capsule (half the triangles) and do not cast their own shadows; the mound does. The scene draws about half the triangles it used to.
+- **Curtains on the GPU:** the noren sway in the vertex shader instead of rebuilding their mesh on the CPU every frame.
+- **Quiet UI:** the station bar and the patience bar only touch the page when something on them changed.
 
 Feedback while you play:
 - Rating pop-ups and glints on good moves.

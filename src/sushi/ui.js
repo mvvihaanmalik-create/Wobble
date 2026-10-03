@@ -18,6 +18,7 @@ const TOOL_LIST = [
   { key: 'nori', label: 'Nori' },
 ];
 const FISH_ICON = { salmon: 'fish', tuna: 'tuna', tamago: 'tamago', unagi: 'unagi' };
+const STATION_KEYS = ['counter', 'rice', 'knife', 'build', 'stove'];
 const JP_DAYS = DAYS.map((_, i) => `${i + 1}日目`);
 
 // Count a number up (or down) inside an element.
@@ -171,6 +172,11 @@ export class GameUI {
   }
 
   setStation(name, status) {
+    // Called every frame: touch the DOM only when something changed, so the
+    // browser never has to restyle the page for nothing.
+    const key = `${name}|${STATION_KEYS.map((s) => status[s] || '').join(',')}`;
+    if (key === this.stationKey) return;
+    this.stationKey = key;
     // The photo matters at the counter and while building; elsewhere it
     // would cover the tub and the block.
     $('ticket').classList.toggle('compact', name === 'rice' || name === 'knife' || name === 'stove');
@@ -313,8 +319,11 @@ export class GameUI {
   }
 
   patience(frac) {
-    const bar = $('patienceBar');
     const f = Math.max(0, Math.min(1, frac));
+    // A 0.2% step is under a pixel: skip the write.
+    if (this.lastPatience != null && Math.abs(f - this.lastPatience) < 0.002) return;
+    this.lastPatience = f;
+    const bar = $('patienceBar');
     bar.style.width = `${f * 100}%`;
     const p = bar.closest('.patience');
     p.classList.toggle('mid', f < 0.55 && f >= 0.28);

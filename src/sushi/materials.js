@@ -217,7 +217,9 @@ export function riceGrainMaterial() {
 
 // Grain shape: a plump rounded ellipsoid, a touch flatter on one axis.
 export function riceGrainGeometry(CapsuleGeometry) {
-  const g = new CapsuleGeometry(0.056, 0.075, 3, 10);
+  // Grains are a few pixels across: two cap rings and eight sides read just
+  // as round as more, at half the triangles. There are thousands of them.
+  const g = new CapsuleGeometry(0.056, 0.075, 2, 8);
   g.scale(1, 1, 0.82);
   return g;
 }

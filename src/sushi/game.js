@@ -88,7 +88,8 @@ export class Game {
     this.rolls = [];
     this.onigiri = [];
     this.progress = loadProgress();
-    this.quality = { slowFor: 0, avg: 16, fixed: new URLSearchParams(location.search).has('fixed') || new URLSearchParams(location.search).has('tier') };
+    this.pace = { gaps: [], every: 1, count: 0 };
+    this.quality = { slowFor: 0, fastFor: 0, avg: 16, maxScale: 1, fixed: new URLSearchParams(location.search).has('fixed') || new URLSearchParams(location.search).has('tier') };
 
     this.ui = new GameUI({
       onStation: (s) => this.goStation(s),
@@ -1246,9 +1247,31 @@ export class Game {
   frame(now) {
     if (!this.running) return;
     this.raf = requestAnimationFrame((t) => this.frame(t));
+    // On 120 Hz and faster screens, draw every second (or third) refresh so
+    // frames land at an even ~60 per second instead of stumbling between
+    // 120 and 60. A cozy game gains nothing from more, and the GPU gets
+    // twice the time per frame.
+    const pace = this.pace;
+    const gap = now - (pace.prev ?? now);
+    pace.prev = now;
+    if (gap > 0 && gap < 100) {
+      pace.gaps.push(gap);
+      if (pace.gaps.length >= 40) {
+        const sorted = pace.gaps.sort((a, b) => a - b);
+        const refresh = sorted[Math.floor(sorted.length * 0.25)];
+        pace.every = refresh < 12.5 ? Math.max(1, Math.floor(16.67 / refresh + 0.1)) : 1;
+        pace.gaps = [];
+      }
+    }
+    if (++pace.count < pace.every) return;
+    pace.count = 0;
     const raw = (now - this.last) / 1000;
     this.last = now;
-    const dt = Math.min(0.1, Math.max(0, raw));
+    // Smooth the step a little: rAF timing jitters by a millisecond or two,
+    // and feeding that straight into motion reads as judder.
+    const clamped = Math.min(0.1, Math.max(0, raw));
+    this.smoothDt = this.smoothDt == null || Math.abs(clamped - this.smoothDt) > 0.03 ? clamped : this.smoothDt + (clamped - this.smoothDt) * 0.3;
+    const dt = this.smoothDt;
     this.watchPerformance(raw);
     this.tick(dt);
     this.stage.render(dt);
@@ -1470,9 +1493,35 @@ export class Game {
     if (q.settle > 0) return;
     const ms = Math.min(raw, 0.5) * 1000;
     q.avg += (ms - q.avg) * 0.1;
-    if (q.avg > PERF.slowFrameMs) q.slowFor += Math.min(raw, 0.5);
-    else q.slowFor = Math.max(0, q.slowFor - raw * 0.5);
-    if (q.slowFor >= PERF.window) this.stepDown();
+    // The frame we aim for: one refresh at 60 Hz, or two at 120 Hz.
+    const budget = Math.max(16.7, (this.pace.every * 1000) / 120);
+    const stage = this.stage;
+    if (q.avg > budget * PERF.slowRatio) {
+      q.slowFor += Math.min(raw, 0.5);
+      q.fastFor = 0;
+    } else {
+      q.slowFor = Math.max(0, q.slowFor - raw * 0.5);
+      q.fastFor += raw;
+    }
+    // First trade a little resolution, which nobody notices in motion.
+    if (q.slowFor >= PERF.scaleWindow && stage.renderScale > PERF.minScale + 0.01) {
+      q.maxScale = Math.max(PERF.minScale, stage.renderScale - 0.05);
+      stage.setRenderScale(stage.renderScale - PERF.scaleStep);
+      q.slowFor = 0;
+      q.avg = budget;
+      q.settle = 0.75;
+      return;
+    }
+    // Only when resolution is already down, give up an effect tier.
+    if (q.slowFor >= PERF.window) return this.stepDown();
+    // Smooth for a good while: win some sharpness back, never past the
+    // level that was too slow last time (that ceiling heals slowly).
+    q.maxScale = Math.min(1, q.maxScale + raw * 0.004);
+    if (q.fastFor >= PERF.recoverAfter && stage.renderScale < q.maxScale - 0.04) {
+      stage.setRenderScale(Math.min(q.maxScale, stage.renderScale + 0.1));
+      q.fastFor = 0;
+      q.settle = 0.75;
+    }
   }
 
   stepDown() {
@@ -1483,6 +1532,10 @@ export class Game {
     const next = TIER_ORDER[TIER_ORDER.indexOf(this.stage.tierName) + 1];
     if (!next) return;
     this.stage.setTier(next);
+    // The new tier is cheaper: start it at a middle resolution and let the
+    // scaler find the level.
+    this.stage.setRenderScale(0.85);
+    q.maxScale = 1;
     saveTier(next);
   }
 }

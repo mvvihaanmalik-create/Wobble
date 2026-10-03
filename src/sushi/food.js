@@ -125,7 +125,9 @@ export class RiceMound {
     for (let i = 0; i < this.body.N; i++) if (start[i * 3 + 1] > this.body.height * 0.1) cand.push(i);
     const n = 420;
     this.grains = new InstancedMesh(m.grainGeo, m.grain, n);
-    this.grains.castShadow = true;
+    // The mound casts the shadow; each grain's own is a texel at most.
+    this.grains.castShadow = false;
+    this.grains.receiveShadow = true;
     this.grainVerts = new Int32Array(n);
     this.grainDirs = new Float32Array(n * 3);
     for (let k = 0; k < n; k++) {

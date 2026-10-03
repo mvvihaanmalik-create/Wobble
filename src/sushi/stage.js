@@ -45,7 +45,7 @@ const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 // pixelRatio is a cap; below 1 renders under native resolution and lets the
 // browser scale it up. glass: false turns off see-through food and garnish.
 export const TIERS = {
-  high: { pixelRatio: 1.75, ao: true, aoHalf: false, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6, glass: true },
+  high: { pixelRatio: 1.75, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.6, glass: true },
   medium: { pixelRatio: 1.25, ao: true, aoHalf: true, dof: true, bloom: true, smaa: true, shadow: 2048, transmission: 0.45, glass: true },
   low: { pixelRatio: 1, ao: false, aoHalf: true, dof: false, bloom: true, smaa: true, shadow: 1024, transmission: 0.35, glass: true },
   minimal: { pixelRatio: 0.75, ao: false, aoHalf: true, dof: false, bloom: false, smaa: false, shadow: 1024, transmission: 0.25, glass: false },
@@ -190,6 +190,7 @@ export class Stage {
     this.tierName = name;
     this.tier = t;
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, t.pixelRatio);
+    this.renderScale = 1;
     this.renderer.setPixelRatio(this.pixelRatio);
     this.glass = t.glass;
     if (!t.glass) this.dropGlass();
@@ -269,6 +270,17 @@ export class Stage {
     this.height = h;
     this.camera.aspect = w / h;
     if (this.viewName && wasPortrait !== w / h < 0.8) this.goTo(this.viewName, true);
+  }
+
+  // Dynamic resolution: render a little under the tier's pixel ratio when
+  // frames run long, and climb back when there is room. Effects stay on.
+  setRenderScale(s) {
+    s = Math.max(0.6, Math.min(1, s));
+    if (Math.abs(s - this.renderScale) < 0.04) return false;
+    this.renderScale = s;
+    this.renderer.setPixelRatio(this.pixelRatio * s);
+    if (this.width) this.resize();
+    return true;
   }
 
   addShake(a) {

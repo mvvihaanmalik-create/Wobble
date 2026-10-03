@@ -132,6 +132,39 @@ export class SushiSet {
     // Three noren panels with slits between, swaying slightly.
     this.noren = [];
     const mat = foodMaterial('noren');
+    // The sway runs in the vertex shader: no per-frame vertex work or
+    // re-upload on the CPU. Each panel gets its own phase from where it hangs.
+    this.norenTime = { value: 0 };
+    const foodCompile = mat.onBeforeCompile;
+    mat.onBeforeCompile = (shader, r) => {
+      foodCompile(shader, r);
+      shader.uniforms.uSway = this.norenTime;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+uniform float uSway;
+float norenPhase() { return modelMatrix[3][0] * 0.215; }`)
+        .replace(
+          '#include <beginnormal_vertex>',
+          `#include <beginnormal_vertex>
+{
+  float hang = (3.25 - position.y) / 6.5;
+  float A = uSway * 0.9 + norenPhase() + position.x * 0.5;
+  float B = uSway * 2.1 + position.x * 2.0;
+  float dx = hang * hang * (0.11 * cos(A) + 0.12 * cos(B)) + 0.2 * cos(position.x * 4.0);
+  float dy = -2.0 * hang / 6.5 * (0.22 * sin(A) + 0.06 * sin(B));
+  objectNormal = normalize(vec3(-dx, -dy, 1.0));
+}`,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+{
+  float hang = (3.25 - position.y) / 6.5;
+  transformed.z += hang * hang * (0.22 * sin(uSway * 0.9 + norenPhase() + position.x * 0.5) + 0.06 * sin(uSway * 2.1 + position.x * 2.0)) + 0.05 * sin(position.x * 4.0);
+}`,
+        );
+    };
+    mat.customProgramCacheKey = () => 'food-noren-sway';
     for (let i = 0; i < 3; i++) {
       const geo = new PlaneGeometry(5.9, 6.5, 40, 24);
       const x = (i - 1) * 6.05;
@@ -139,8 +172,6 @@ export class SushiSet {
       const m = new Mesh(geo, mat);
       m.position.set(x, 7.6, -16.2);
       m.receiveShadow = true;
-      m.userData.rest = geo.attributes.position.array.slice();
-      m.userData.phase = i * 1.3;
       this.noren.push(m);
       this.group.add(m);
     }
@@ -372,18 +403,7 @@ export class SushiSet {
   }
 
   update(t) {
-    for (const m of this.noren) {
-      const pos = m.geometry.attributes.position.array;
-      const rest = m.userData.rest;
-      const ph = m.userData.phase;
-      for (let i = 0; i < pos.length; i += 3) {
-        const y = rest[i + 1];
-        const hang = (3.25 - y) / 6.5; // 0 at the rod, 1 at the hem
-        pos[i + 2] = rest[i + 2] + hang * hang * (0.22 * Math.sin(t * 0.9 + ph + rest[i] * 0.5) + 0.06 * Math.sin(t * 2.1 + rest[i] * 2.0)) + 0.05 * Math.sin(rest[i] * 4.0);
-      }
-      m.geometry.attributes.position.needsUpdate = true;
-      m.geometry.computeVertexNormals();
-    }
+    this.norenTime.value = t;
     for (const l of this.lanterns) l.rotation.z = Math.sin(t * 0.7 + l.userData.phase) * 0.025;
     // Steam: each puff loops on its own phase, so this needs no state.
     for (const s of this.steam.children) {
@@ -523,7 +543,9 @@ function scatterGrains(surfaceMesh, n, radius, heightAt) {
     o.updateMatrix();
     inst.setMatrixAt(i, o.matrix);
   }
-  inst.castShadow = true;
+  // Loose grains lie on the rice: their shadows would be a texel or two.
+  inst.castShadow = false;
+  inst.receiveShadow = true;
   return inst;
 }
 

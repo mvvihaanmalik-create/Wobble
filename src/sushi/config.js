@@ -212,8 +212,12 @@ export const DISHES = [
 export const dishKey = (p) => (p.udon ? `u:${p.udon}` : p.ramen ? `r:${p.ramen}` : p.gyoza ? 'g:gyoza' : p.takoyaki ? 't:takoyaki' : p.onigiri ? `o:${p.onigiri}` : p.maki ? `m:${p.maki}` : `n:${p.fish}`);
 
 export const PERF = {
-  slowFrameMs: 22, // average frame time that counts as slow
-  window: 1.5, // seconds of slow frames before stepping down a tier
+  slowRatio: 1.18, // average frame time over the 60 fps budget by this much is slow
+  scaleWindow: 0.6, // seconds of slow frames before trimming resolution
+  scaleStep: 0.12, // how much resolution each trim takes
+  minScale: 0.64, // lowest resolution scale before an effect tier goes
+  recoverAfter: 6, // seconds of smooth frames before taking resolution back
+  window: 1.5, // seconds of slow frames at the lowest scale before stepping down a tier
   settle: 2, // seconds to ignore after loading or a tier change
   pixelRatioSteps: [2, 1.5, 1.25, 1],
 };
