@@ -69,7 +69,8 @@ export class Game {
     // grounds them, since their own shadow falls behind it.
     this.leavers = [];
     this.counterShade = contactShadow();
-    this.counterShade.position.set(0, 0.008, LAYOUT.counter.zCustomer + 0.45);
+    // On the ledge, where the guest's paws rest.
+    this.counterShade.position.set(0, -0.69, LAYOUT.counter.zCustomer - 1.75);
     this.stage.scene.add(this.counterShade);
     this.timeScale = 1;
     this.slowFor = 0;
@@ -283,6 +284,7 @@ export class Game {
       c.seated = true;
       c.setExpression('smile');
       c.poke(0.6);
+      c.emote(order.rush ? 'surprise' : 'note', 1200);
       this.sound.voice(0.8);
     });
     // Next guest waits in line.
@@ -619,7 +621,9 @@ export class Game {
     await this.tweenP({ obj: g, to: new Vector3(home.x, 0, lane), duration: 0.35, arc: 0.4 });
     await this.tweenP({ obj: g, to: new Vector3(0, 0, lane), duration: 0.6, arc: 0.15 });
     const c = this.customer;
-    c.setExpression('open');
+    c.setExpression('wow');
+    c.emote('surprise', 700);
+    c.setPose('eat', 6);
     c.body.userMode[2] = 0.18;
     await this.wait(400);
     // Eat each piece in three bites.
@@ -671,11 +675,12 @@ export class Game {
       await this.wait(180);
     }
     c.body.userMode[2] = 0;
+    c.setPose('rest', 0);
     const mood = score.total / 100;
     this.sound.voice(mood);
     if (mood >= 0.8) {
       c.celebrate();
-      this.popupAt({ jp: 'おいしい！', en: 'So good' }, c.group.position.clone().add(new Vector3(-3.2, c.body.height * LAYOUT.customer.scale * 0.8, 0)), 'say');
+      this.popupAt({ jp: 'おいしい！', en: 'So good' }, c.group.position.clone().add(new Vector3(-3.2, c.height * LAYOUT.customer.scale * 0.8, 0)), 'say');
       this.sous.celebrate();
       setTimeout(() => this.sous.setExpression('smile'), 1600);
     } else if (mood >= 0.5) {
@@ -683,8 +688,10 @@ export class Game {
       c.poke(0.8);
     } else {
       c.setExpression('frown');
+      c.emote('gloom', 2200);
       c.body.kickAll(0, -0.8, 0);
       this.sousSays(null, 'frown', 1600);
+      this.sous.emote('sweat', 1600);
     }
     this.tips += tip;
     this.scores.push(score.total);
@@ -692,7 +699,8 @@ export class Game {
     this.lastScore = score.total;
     await this.wait(400);
     this.sound.coins(Math.max(1, Math.round(mood * 5)));
-    const head = c.group.position.clone().add(new Vector3(0, c.body.height * LAYOUT.customer.scale + 0.4, 0));
+    // Beside the guest, so it never lands on the score card.
+    const head = c.group.position.clone().add(new Vector3(3.6, c.height * LAYOUT.customer.scale * 0.72, 0));
     this.popupAt(`+¥${tip.toLocaleString('en-US')}`, head, mood >= 0.8 ? 'great' : mood >= 0.5 ? 'good' : 'bad');
     if (mood >= 0.8) this.fx.burst('glint', head, 26, { speed: 3, up: 4, gravity: 5, life: 1.2, size: 1.6 });
     this.buzz(mood >= 0.8 ? 30 : 12);
@@ -839,10 +847,11 @@ export class Game {
     this.combo = 0;
     this.ui.combo(0);
     this.goStationForce('counter');
-    c.setExpression('frown');
+    c.setExpression('angry');
+    c.emote('anger', 2400);
     c.body.kickAll(0, -1.2, 0);
     this.sound.voice(0.05);
-    const head = c.group.position.clone().add(new Vector3(-3, c.body.height * LAYOUT.customer.scale * 0.8, 0));
+    const head = c.group.position.clone().add(new Vector3(-3, c.height * LAYOUT.customer.scale * 0.8, 0));
     this.popupAt({ jp: 'もういい！', en: 'Forget it!' }, head, 'say');
     this.ui.toast(`${order.look.name} gave up and left.`, 2600);
     this.sousSays(null, 'frown', 1800);
@@ -937,7 +946,7 @@ export class Game {
         // Synthetic pointers cannot be captured.
       }
       if (this.mode === 'title') {
-        if (this.customer && this.hitObject(e, this.customer.squishy.mesh)) {
+        if (this.customer && this.hitObject(e, this.customer.inner)) {
           this.customer.poke(1);
           this.sound.squelch(0.7);
         }
@@ -1166,9 +1175,15 @@ export class Game {
     if (this.order) (this.order.steps ||= []).push(tier);
     // Pochi cheers a run of perfect steps and steadies you after a slip.
     this.perfectRun = tier === 'perfect' ? (this.perfectRun || 0) + 1 : 0;
-    if (this.perfectRun === 3) this.sousSays({ jp: 'すごい！', en: 'Amazing!' }, 'grin', 1000);
-    else if (tier === 'perfect') this.sousSays(null, 'grin', 700);
-    else if (tier === 'oops') this.sousSays(null, 'frown', 800);
+    if (this.perfectRun === 3) {
+      this.sousSays({ jp: 'すごい！', en: 'Amazing!' }, 'grin', 1000);
+      this.sous.emote('sparkle', 1200);
+      this.sous.setPose('banzai', 1);
+    } else if (tier === 'perfect') this.sousSays(null, 'grin', 700);
+    else if (tier === 'oops') {
+      this.sousSays(null, 'frown', 800);
+      this.sous.emote('sweat', 1200);
+    }
     return tier;
   }
 
@@ -1268,7 +1283,7 @@ export class Game {
     clearTimeout(this.sousTimer);
     this.sousTimer = setTimeout(() => s.setExpression('smile'), ms);
     if (text && (this.station === 'counter' || this.mode !== 'play')) {
-      const head = s.group.position.clone().add(new Vector3(0, s.body.height * LAYOUT.sous.scale + 0.9, 0));
+      const head = s.group.position.clone().add(new Vector3(0, s.height * LAYOUT.sous.scale + 0.9, 0));
       this.popupAt(text, head, 'say');
     } else if (text) this.ui.say(text, Math.max(1200, ms));
   }
@@ -1307,8 +1322,14 @@ export class Game {
         this.ui.patience(1 - waited / this.order.patience);
         if (this.customer.impatience > 0.7 && this.customer.expression === 'smile') this.customer.setExpression('flat');
         if (waited >= this.order.patience && this.order.taken !== undefined && this.mode === 'play' && !this.order.walked) this.walkout();
+        if (this.customer.impatience > 0.88 && !this.order.fumed && !this.order.walked) {
+          this.order.fumed = true;
+          this.customer.setExpression('angry');
+          this.customer.emote('anger', 2600);
+        }
         if (this.customer.impatience > 0.6 && !this.order.warned && !this.order.walked) {
           this.order.warned = true;
+          this.customer.emote('sweat', 2400);
           this.ui.toast(`${this.order.look.name} is getting hungry. Speed up.`, 2600);
           this.sousSays({ jp: '急いで！', en: 'Hurry!' }, 'open', 900);
         }
@@ -1323,7 +1344,7 @@ export class Game {
     if (c && c.group.parent) {
       const near = Math.max(0, 1 - Math.abs(c.group.position.z - LAYOUT.customer.z) / 3);
       shade.position.x = c.group.position.x;
-      shade.scale.set(c.body.width * c.group.scale.x * 0.7, 2.2, 1);
+      shade.scale.set(c.width * c.group.scale.x * 0.62, 1.5, 1);
       shade.material.opacity = 0.75 * near / (1 + Math.max(0, c.inner.position.y) * 1.5);
     } else shade.material.opacity = 0;
     if (Math.random() < dt * 0.12) this.sous.poke(0.3);

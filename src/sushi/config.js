@@ -17,10 +17,10 @@ export const LAYOUT = {
   geta: { x: 10.8, z: 1.4, w: 6.6, d: 2.9, h: 0.55 }, // serving board
   slots: { 1: [-0.55], 2: [-1.85, 0.75] }, // nigiri positions along the geta by piece count
   slotAngle: 0.32, // nigiri sit at a slight angle, the way they are plated
-  customer: { x: 0, z: -7.4, y: -2.05, scale: 3.85 }, // seated, peeking over the counter
-  queue: { x: 9.5, z: -12.5, y: -2.6, scale: 2.3 }, // next in line
-  sous: { x: -7.9, z: -2.5, y: 0, scale: 1.6, turn: 0.35 }, // the sous chef, perched on the counter by the tub
-  sousTitle: { x: 7.6, z: -6, y: -0.3, scale: 2.8, turn: -0.4 }, // on the title, next to the guest
+  customer: { x: 0, z: -6.4, y: -1.7, scale: 2.5 }, // seated, paws on the ledge, head over the counter
+  queue: { x: 9.5, z: -12.5, y: -2.6, scale: 1.5 }, // next in line
+  sous: { x: -7.9, z: -2.5, y: 0, scale: 1.05, turn: 0.35 }, // the sous chef, perched on the counter by the tub
+  sousTitle: { x: 7.6, z: -5.6, y: -0.3, scale: 1.7, turn: -0.4 }, // on the title, next to the guest
   // The stove at the far left of the counter: a pot for udon, a pan for gyoza,
   // the udon bowl in front of the pot and the gyoza board in front of the pan.
   stove: { x: -19.5, z: 0.6, top: 0.5, pot: [-21.4, 0.6], pan: [-17.6, 0.6], bowl: [-21.4, 3.2], prep: [-17.6, 3.2] },

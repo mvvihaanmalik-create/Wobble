@@ -66,7 +66,7 @@ export class CounterStation extends Station {
       g.ui.actions([]);
     } else if (!g.order.taken) {
       const c = g.customer;
-      g.gesture('tap', c.group.position.clone().add(new Vector3(0, c.body.height * c.group.scale.y * 0.55, 0)));
+      g.gesture('tap', c.group.position.clone().add(new Vector3(c.width * c.group.scale.x * 0.3, c.height * c.group.scale.y * 0.3, 1)));
       g.ui.hint(`${g.order.look.name} is ready to order.`);
       g.ui.actions([{ label: 'Take order', primary: true, onClick: () => g.takeOrder() }]);
     } else if (g.plateComplete()) {
@@ -83,7 +83,7 @@ export class CounterStation extends Station {
 
   down(e) {
     const c = this.g.customer;
-    if (c && this.g.hitObject(e, c.squishy.mesh)) {
+    if (c && this.g.hitObject(e, c.inner)) {
       c.poke(1);
       c.setExpression('open');
       clearTimeout(this.faceTimer);

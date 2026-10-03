@@ -26,9 +26,25 @@ Every step gets a grade stamped where the work happened: **Perfect!**, **Great!*
 
 
 
-The guests are mochi animals: a calico cat, a shiba, a bunny, a bear, a panda and a fox. Each is a soft body with fur markings drawn in the shader. Ears, eyes, blush, nose, whiskers and mouth are pinned to the surface and follow every squash. Ears droop when a guest waits too long, and eyes close into happy arcs at a great plate.
+### The cast
 
-Pochi, the shiba sous chef, sits on the counter in a chef's toque. He greets each guest, cheers good plates and frets over bad ones. The chef is a cat: a paw cups the rice when you scoop and presses it on the mat.
+The guests are chibi mochi animals in the style of 2000s Japanese handheld and console games:
+- **Mochi**, a calico cat with a bell collar.
+- **Kinako**, a shiba in a blue bandana.
+- **Ume**, a bunny with a pink bow.
+- **Azuki**, a bear in a green scarf.
+- **Sasa**, a panda with a bamboo leaf.
+- **Yuzu**, a fox with a yuzu hair pin.
+
+Each one has a big, round soft-body head that squashes and wobbles, on a small round body with a tummy, stubby arms, round paws, little feet and a tail. At the counter they sit with their paws on the ledge. They wave when poked, throw both arms up (banzai) at a great plate, hold their paws to their mouths while eating and tap a paw when they get impatient. A soft ink outline goes around every part.
+
+Faces are painted textures swapped per expression, the way games of that era did them (`src/sushi/faces.js`):
+- **Eyes:** big glossy eyes with sparkle highlights, ^^ squints, heart eyes, star eyes, teary eyes, half-lidded eyes and >< eyes.
+- **The rest:** brows that move with the mood, a little ω mouth (with a fang for the cat and fox), and hatched blush (with whiskers for the cat and fox).
+- **Emotes:** ! ? ♪ ♥ 💢 💧 ✨ and gloom lines pop over their heads.
+- **Blinking:** they blink, and their ears droop when a guest waits too long.
+
+Pochi, the shiba sous chef, sits on the counter in a chef's toque and a red neckerchief. He greets each guest, cheers good plates and sweats over bad ones. The chef is a cat: a paw cups the rice when you scoop and presses it on the mat.
 
 ### The Sushi book 図鑑
 
@@ -119,7 +135,7 @@ Lighting aims for a bright, toy-like look:
 - A cool rim behind the guests.
 - Reflections come from a generated restaurant environment: a softbox over the counter and two lanterns.
 
-The animals carry a shader rim light: a soft cream glow along the edges that face the sky, toned down on white fur so the panda and bunny do not blow out. Each one sits on a soft contact shadow that shrinks and fades as it hops. The guest at the counter casts a long one onto the counter, so they read as sitting at the bar rather than floating behind it.
+The animals carry a shader rim light: a soft cream glow along the edges that face the sky, toned down on white fur so the panda and bunny do not blow out. Each one sits on a soft contact shadow that shrinks and fades as it hops. The guest at the counter casts a soft one onto the ledge where their paws rest.
 
 Quality tiers (`high`, `medium`, `low`, `minimal`):
 - Phones start on `medium`, desktops on `high`.
@@ -189,7 +205,8 @@ src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces, no
 src/sushi/maki.js      rolls: sheet, rolling, log, cut pieces, cut-face shader
 src/sushi/hot.js       stove, udon bowl, noodles, toppings, gyoza that fold and brown
 src/sushi/stove.js     the stove station: udon and gyoza steps
-src/sushi/critters.js  mochi animal guests, the sous chef, the chef's paw
+src/sushi/critters.js  chibi animal guests, the sous chef, the chef's paw
+src/sushi/faces.js     painted eyes, brows, mouths, blush and emotes
 src/sushi/booth.js     ticket pictures and plate photos
 src/sushi/wall.js      the wall: posting, loading, local fallback
 src/sushi/ui.js        HUD, tickets, cards, the wall and the Sushi book

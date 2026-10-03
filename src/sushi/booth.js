@@ -112,12 +112,13 @@ export class PhotoBooth {
     const c = new Customer(look, 3);
     c.setExpression('smile');
     for (let k = 0; k < 20; k++) c.update(1 / 30);
-    const H = c.body.height;
+    const H = c.height;
     const url = await this.shoot(w, h, () => {
       this.board.visible = false;
       this.scene.add(c.group);
-      this.camera.position.set(0.9, H * 0.75, 4.3);
-      this.camera.lookAt(0, H * 0.52, 0);
+      // Head and paws, a little from above, the way a character select screen does it.
+      this.camera.position.set(0.8, H * 0.74, H * 1.6);
+      this.camera.lookAt(0, H * 0.57, 0);
     }, null, this.scene, () => {
       this.scene.remove(c.group);
       this.board.visible = true;

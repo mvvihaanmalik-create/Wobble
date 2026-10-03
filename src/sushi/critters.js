@@ -1,12 +1,14 @@
 import {
   PlaneGeometry,
+  BackSide,
   BufferAttribute,
   CanvasTexture,
   CapsuleGeometry,
   CatmullRomCurve3,
-  CircleGeometry,
   Color,
+  ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   Group,
   IcosahedronGeometry,
   Matrix4,
@@ -16,96 +18,140 @@ import {
   Quaternion,
   Shape,
   ShapeGeometry,
+  SphereGeometry,
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
+  TorusGeometry,
   TubeGeometry,
   Vector3,
 } from 'three';
 import { bodyMesh, Squishy, unitSphere } from './meshes.js';
+import { cheekTexture, emoteTexture, eyeTexture, mouthTexture } from './faces.js';
 
-// Soft mochi animals: a squishy body with fur markings drawn in the shader,
-// and ears, eyes, nose and mouth pinned to the moving surface.
+// Chibi mochi animals, 2000s Japanese game style: a big, soft, round head
+// (a soft body that squashes and wobbles) on a small round body with stubby
+// arms, little feet and a tail. Faces are painted textures swapped per
+// expression: big glossy eyes, ^^ squints, heart eyes, a little ω mouth,
+// hatched blush. Manga emotes pop over their heads.
 
 const CRITTER_SIM = {
   sim: { spring: 110, damping: 2.6, coupling: 2200, pressure: 90, maxDisplacement: 0.4, softLimit: 0.22 },
   modes: { shearSpring: 38, squashSpring: 60, damping: 2.2, maxShear: 0.35, maxSquash: 0.42, breathing: 0.02, breathingRate: 2.1, tremble: 0.004 },
 };
 
-// Body shapes from a unit sphere: wide, soft and a little bottom heavy.
-const SHAPES = {
-  mochi: (x, y, z) => [x * 1.06, y > 0 ? Math.pow(y, 0.82) * 1.24 : y * 0.22, z * 0.96],
-  round: (x, y, z) => [x * 1.0, y > 0 ? Math.pow(y, 0.86) * 1.3 : y * 0.24, z * 0.96],
-  bean: (x, y, z) => [x * 0.86, y > 0 ? y * 1.36 : y * 0.36, z * 0.82],
-  drop: (x, y, z) => {
-    const t = (y + 1) / 2;
-    const k = 1 - 0.38 * Math.pow(t, 2.4);
-    return [x * 0.98 * k, y > 0 ? y * 1.3 : y * 0.3, z * 0.9 * k];
+// Head shapes from a unit sphere: round, a touch wider than tall.
+const HEADS = {
+  round: (x, y, z) => [x * 1.0, y * 0.92, z * 0.94],
+  // Fluffy cheeks low on the sides, for the cat and the fox.
+  cheeky: (x, y, z) => {
+    const cheek = Math.exp(-(((y + 0.28) / 0.34) ** 2)) * (1 - Math.abs(z) * 0.35);
+    return [x * (1 + 0.13 * cheek), y * 0.9, z * 0.94];
   },
+  tall: (x, y, z) => [x * 0.93, y * 0.98, z * 0.9],
 };
 
-// Patches are ellipsoids in normalized body space: x and z run -1..1 across
-// the body, y runs 0..1 from the seat to the crown, the face looks down +z.
+// Patches are ellipsoids in normalized head space: x and z run -1..1 across
+// the head, y runs 0..1 from chin to crown, the face looks down +z.
+// iris: eye color. brow: brow color. lashes, fang, whiskers: face details.
+// body, belly, arms, paws, feet: body colors. tail and acc: extras.
 export const SPECIES = {
   cat: {
-    shape: 'mochi',
+    head: 'cheeky',
     fur: '#fff8f1',
     ear: 'cat',
     inner: '#ffb3c1',
     nose: '#ff8ea4',
+    iris: '#d08a1a',
+    lashes: true,
+    fang: true,
     whiskers: '#8d7a72',
     patches: [
-      { c: [0.62, 0.95, 0.1], r: [0.5, 0.42, 0.75], col: '#f0a35c' },
-      { c: [-0.7, 0.6, -0.4], r: [0.42, 0.4, 0.6], col: '#4a3a33' },
+      { c: [0.62, 0.9, 0.05], r: [0.52, 0.42, 0.8], col: '#f0a35c' },
+      { c: [-0.7, 0.72, -0.45], r: [0.42, 0.38, 0.6], col: '#4a3a33' },
     ],
+    body: '#fff8f1',
+    belly: '#ffffff',
+    tail: { kind: 'cat', color: '#f0a35c' },
+    acc: 'collar',
   },
   shiba: {
-    shape: 'mochi',
+    head: 'round',
     fur: '#eb9c56',
     ear: 'shiba',
     inner: '#fff1de',
     nose: '#2b1d18',
-    patches: [
-      { c: [0, 0.3, 0.95], r: [0.7, 0.36, 0.5], col: '#fff4e4' },
-      { c: [0.3, 0.74, 0.9], r: [0.09, 0.055, 0.3], col: '#fff4e4', mirror: true },
-    ],
+    iris: '#6a3a1a',
+    brow: '#fff4e4', // the shiba's pale eyebrow spots
+    patches: [{ c: [0, 0.22, 0.95], r: [0.78, 0.32, 0.55], col: '#fff4e4' }],
+    body: '#eb9c56',
+    belly: '#fff4e4',
+    paws: '#fff4e4',
+    tail: { kind: 'curl', color: '#eb9c56' },
+    acc: 'bandana',
   },
   bunny: {
-    shape: 'bean',
+    head: 'tall',
     fur: '#fff3f5',
     ear: 'bunny',
     inner: '#ffbccb',
     nose: '#ff99b1',
-    patches: [{ c: [0, 0.38, 0.95], r: [0.42, 0.22, 0.4], col: '#ffffff' }],
+    iris: '#c2405a',
+    lashes: true,
+    patches: [{ c: [0, 0.26, 0.95], r: [0.42, 0.22, 0.4], col: '#ffffff' }],
+    body: '#fff3f5',
+    belly: '#ffffff',
+    tail: { kind: 'puff', color: '#ffffff' },
+    acc: 'bow',
   },
   bear: {
-    shape: 'round',
+    head: 'round',
     fur: '#b88760',
     ear: 'round',
     inner: '#ecd0b0',
     nose: '#3b241a',
-    patches: [{ c: [0, 0.36, 0.95], r: [0.42, 0.24, 0.45], col: '#f3dec6' }],
+    iris: '#5b3420',
+    patches: [{ c: [0, 0.26, 0.95], r: [0.42, 0.24, 0.45], col: '#f3dec6' }],
+    body: '#b88760',
+    belly: '#f3dec6',
+    tail: { kind: 'puff', color: '#b88760' },
+    acc: 'scarf',
   },
   panda: {
-    shape: 'round',
+    head: 'round',
     fur: '#fbfaf6',
     ear: 'round',
     earColor: '#2a2527',
     inner: '#2a2527',
     nose: '#2a2527',
-    patches: [{ c: [0.33, 0.55, 0.9], r: [0.2, 0.17, 0.35], col: '#2e292b', mirror: true, tilt: 0.5 }],
+    iris: '#4a4060',
+    brow: '#2a2527',
+    patches: [{ c: [0.42, 0.43, 0.9], r: [0.24, 0.22, 0.4], col: '#2e292b', mirror: true, tilt: 0.45 }],
+    body: '#fbfaf6',
+    arms: '#2a2527',
+    feet: '#2a2527',
+    tail: { kind: 'puff', color: '#fbfaf6' },
+    acc: 'leaf',
   },
   fox: {
-    shape: 'drop',
+    head: 'cheeky',
     fur: '#f48b3d',
     ear: 'fox',
     inner: '#fff3e6',
     nose: '#2b1d18',
+    iris: '#e08a2a',
+    fang: true,
     whiskers: '#5a3b2b',
     patches: [
-      { c: [0.38, 0.32, 0.9], r: [0.42, 0.3, 0.45], col: '#fff6ec', mirror: true },
-      { c: [0, 0.0, 0.9], r: [0.5, 0.25, 0.4], col: '#fff6ec' },
+      { c: [0.4, 0.26, 0.9], r: [0.42, 0.28, 0.45], col: '#fff6ec', mirror: true },
+      { c: [0, 0.12, 0.9], r: [0.5, 0.22, 0.4], col: '#fff6ec' },
     ],
+    body: '#f48b3d',
+    belly: '#fff6ec',
+    paws: '#4a2c1e',
+    feet: '#4a2c1e',
+    tail: { kind: 'fox', color: '#f48b3d' },
+    acc: 'yuzu',
   },
 };
 
@@ -227,67 +273,6 @@ const RIM_GLSL = /* glsl */ `
   totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.6, 0.45) * 0.05 * (1.0 - facing);
 }`;
 
-// Lines for the mouth, drawn as thin tubes. Filled shapes for open mouths.
-const MOUTHS = {
-  smile: [[-0.1, 0.012], [-0.068, -0.03], [-0.028, -0.026], [0, 0.002], [0.028, -0.026], [0.068, -0.03], [0.1, 0.012]],
-  flat: [[-0.055, -0.018], [0, -0.022], [0.055, -0.018]],
-  frown: [[-0.075, -0.05], [-0.035, -0.022], [0, -0.016], [0.035, -0.022], [0.075, -0.05]],
-  chew: [[-0.06, -0.02], [-0.025, -0.045], [0.02, -0.012], [0.06, -0.036]],
-  grin: [[-0.1, 0.012], [-0.068, -0.03], [-0.028, -0.026], [0, 0.002], [0.028, -0.026], [0.068, -0.03], [0.1, 0.012]],
-  open: [[-0.1, 0.012], [-0.068, -0.03], [-0.028, -0.026], [0, 0.002], [0.028, -0.026], [0.068, -0.03], [0.1, 0.012]],
-};
-const FILLS = {
-  grin: (s) => {
-    s.moveTo(-0.07, -0.022);
-    s.quadraticCurveTo(0, -0.02, 0.07, -0.022);
-    s.bezierCurveTo(0.065, -0.11, -0.065, -0.11, -0.07, -0.022);
-  },
-  open: (s) => {
-    s.moveTo(0, -0.025);
-    s.bezierCurveTo(0.05, -0.025, 0.05, -0.095, 0, -0.095);
-    s.bezierCurveTo(-0.05, -0.095, -0.05, -0.025, 0, -0.025);
-  },
-};
-
-let shared = null;
-function sharedParts() {
-  if (shared) return shared;
-  const eye = new IcosahedronGeometry(0.1, 4);
-  eye.scale(1, 1.14, 0.5);
-  const tubes = {};
-  for (const [k, pts] of Object.entries(MOUTHS)) {
-    tubes[k] = new TubeGeometry(new CatmullRomCurve3(pts.map(([x, y]) => new Vector3(x, y, 0))), 40, 0.011, 6);
-  }
-  const fills = {};
-  for (const [k, draw] of Object.entries(FILLS)) {
-    const s = new Shape();
-    draw(s);
-    fills[k] = new ShapeGeometry(s, 16);
-  }
-  // Closed happy eyes, like ^ ^.
-  const arc = new CatmullRomCurve3([[-0.08, -0.02], [-0.045, 0.03], [0, 0.048], [0.045, 0.03], [0.08, -0.02]].map(([x, y]) => new Vector3(x, y, 0)));
-  const whisker = new TubeGeometry(new CatmullRomCurve3([new Vector3(0, 0, 0), new Vector3(0.12, 0.012, -0.01), new Vector3(0.24, 0.0, -0.03)]), 12, 0.0055, 4);
-  shared = {
-    eye,
-    shine: new IcosahedronGeometry(0.028, 2),
-    shine2: new IcosahedronGeometry(0.013, 2),
-    happy: new TubeGeometry(arc, 24, 0.015, 6),
-    whisker,
-    philtrum: new TubeGeometry(new CatmullRomCurve3([new Vector3(0, 0.0, 0), new Vector3(0, 0.025, 0), new Vector3(0, 0.05, 0)]), 4, 0.01, 6),
-    tubes,
-    fills,
-    blush: new CircleGeometry(0.085, 24).scale(1.35, 0.8, 1),
-    nose: new IcosahedronGeometry(0.042, 3).scale(1.35, 0.85, 0.6),
-    ink: new MeshPhysicalMaterial({ color: '#0a0606', roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.04, specularIntensity: 0.4, envMapIntensity: 0.25 }),
-    mouthInk: new MeshPhysicalMaterial({ color: '#3a1c1c', roughness: 0.3 }),
-    tongue: new MeshPhysicalMaterial({ color: '#c24456', roughness: 0.4 }),
-    white: new MeshBasicMaterial({ color: new Color(6, 6, 6) }),
-    blushMat: new MeshBasicMaterial({ map: softDot(), color: '#ff7f9c', transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
-    heart: new SpriteMaterial({ map: heartTexture(), transparent: true, depthWrite: false }),
-  };
-  return shared;
-}
-
 // Ear shapes: an ellipsoid pinched toward the tip, pointing +y, facing +z.
 function earGeometry(w, h, d, taper, bend = 0) {
   const g = new IcosahedronGeometry(1, 4);
@@ -339,12 +324,133 @@ function frame(normal, axis = 'z') {
   return new Quaternion().setFromRotationMatrix(_m.makeBasis(x, n, z));
 }
 
+
+// --- Toon outline ----------------------------------------------------------------
+// The soft ink line around every part, the way 2000s console mascots were
+// drawn: the back faces of the same mesh, pushed out along the normals.
+
+const OUTLINE_COLOR = '#3b1f14';
+const outlineMats = new Map();
+function outlineMaterial(thickness) {
+  const key = thickness.toFixed(4);
+  if (outlineMats.has(key)) return outlineMats.get(key);
+  const m = new MeshBasicMaterial({ color: OUTLINE_COLOR, side: BackSide });
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normalize(normal) * ${key};`);
+  };
+  m.customProgramCacheKey = () => `critter-outline-${key}`;
+  outlineMats.set(key, m);
+  return m;
+}
+
+function outline(mesh, thickness = 0.02) {
+  const o = new Mesh(mesh.geometry, outlineMaterial(thickness));
+  o.position.copy(mesh.position);
+  o.quaternion.copy(mesh.quaternion);
+  o.scale.copy(mesh.scale);
+  o.castShadow = false;
+  o.receiveShadow = false;
+  o.userData.outline = true;
+  return o;
+}
+
+// A mesh and its outline, in a group.
+function inked(geo, mat, thickness = 0.02, shadow = true) {
+  const g = new Group();
+  const m = new Mesh(geo, mat);
+  m.castShadow = shadow;
+  m.receiveShadow = true;
+  g.add(m, outline(m, thickness));
+  return g;
+}
+
+// --- Face decals -------------------------------------------------------------------
+
+// A small patch bent to sit on a round head of radius R.
+const decalGeos = new Map();
+function decalGeometry(w, h, R) {
+  const key = `${w}|${h}|${R.toFixed(3)}`;
+  if (decalGeos.has(key)) return decalGeos.get(key);
+  const g = new PlaneGeometry(w, h, 8, 8);
+  const p = g.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) p[i + 2] -= (p[i] * p[i] + p[i + 1] * p[i + 1]) / (2 * R);
+  g.computeVertexNormals();
+  decalGeos.set(key, g);
+  return g;
+}
+
+function decalMaterial(map) {
+  return new MeshBasicMaterial({ map, color: new Color(0.96, 0.96, 0.96), transparent: true, depthWrite: false, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+}
+
+// Each expression: which eyes, brows, mouth and how much blush.
+const EXPRESSIONS = {
+  smile: { eye: 'open', brow: 'neutral', mouth: 'smile', blush: 0.75 },
+  open: { eye: 'open', brow: 'raised', mouth: 'open', blush: 0.8 },
+  chew: { eye: 'happy', brow: 'neutral', mouth: 'chew', blush: 1 },
+  grin: { eye: 'happy', brow: 'raised', mouth: 'grin', blush: 1 },
+  frown: { eye: 'sad', brow: 'worried', mouth: 'frown', blush: 0.35 },
+  flat: { eye: 'half', brow: 'flat', mouth: 'flat', blush: 0.35 },
+  love: { eye: 'heart', brow: 'raised', mouth: 'grin', blush: 1.2 },
+  wow: { eye: 'star', brow: 'raised', mouth: 'open', blush: 1 },
+  angry: { eye: 'angry', brow: 'angry', mouth: 'pout', blush: 0 },
+};
+export const EXPRESSION_NAMES = Object.keys(EXPRESSIONS);
+const BLINKS = new Set(['open', 'star', 'sad', 'half']);
+
+// Arm poses: rotation about x (swing forward and up) and z (out to the side).
+const POSES = {
+  rest: () => [-1.0, 0.16],
+  banzai: (t, s) => [-2.85, 0.42 + 0.08 * Math.sin(t * 16 + s)],
+  wave: (t, s) => (s > 0 ? [-2.7, 0.3 + 0.38 * Math.sin(t * 15)] : [-1.0, 0.16]),
+  eat: () => [-2.0, -0.32],
+  tap: (t, s) => (s > 0 ? [-1.0 + 0.22 * Math.max(0, Math.sin(t * 11)), 0.16] : [-1.0, 0.16]),
+  hop: (t, s) => [-0.5, 0.95 + 0.25 * Math.sin(t * 22 + s)],
+};
+
+// --- Body parts ---------------------------------------------------------------------
+
+const HEAD_Y = 0.8; // where the head sits on the body
+const TORSO = { r: 0.62, sx: 1.05, sy: 0.82, sz: 0.95, y: 0.5 };
+let BODY_GEO = null;
+function bodyGeo() {
+  if (BODY_GEO) return BODY_GEO;
+  const torso = new SphereGeometry(TORSO.r, 36, 22);
+  torso.scale(TORSO.sx, TORSO.sy, TORSO.sz);
+  const belly = new SphereGeometry(0.42, 28, 18);
+  belly.scale(1, 1.02, 0.5);
+  const arm = new CapsuleGeometry(0.14, 0.26, 6, 16);
+  arm.translate(0, -0.2, 0);
+  const paw = new SphereGeometry(0.18, 22, 14);
+  paw.scale(1, 0.88, 1);
+  const foot = new SphereGeometry(0.2, 22, 14);
+  foot.scale(1, 0.55, 1.35);
+  const puff = new IcosahedronGeometry(0.17, 3);
+  BODY_GEO = { torso, belly, arm, paw, foot, puff };
+  return BODY_GEO;
+}
+
+function tailGeometry(kind) {
+  const tube = (pts, r) => new TubeGeometry(new CatmullRomCurve3(pts.map((p) => new Vector3(...p))), 24, r, 10, false);
+  if (kind === 'cat') return tube([[0, 0.24, -0.5], [0.12, 0.3, -0.78], [0.26, 0.62, -0.86], [0.2, 0.92, -0.76], [0.06, 1.0, -0.66]], 0.075);
+  if (kind === 'curl') return tube([[0, 0.34, -0.5], [0.04, 0.62, -0.72], [0.14, 0.82, -0.6], [0.16, 0.7, -0.42], [0.08, 0.58, -0.5]], 0.1);
+  if (kind === 'fox') {
+    const g = new CapsuleGeometry(0.2, 0.55, 8, 18);
+    g.rotateX(-0.75);
+    g.translate(0, 0.52, -0.82);
+    return g;
+  }
+  return null;
+}
+
 export class Critter {
   constructor(species, seed = 1) {
     const sp = typeof species === 'string' ? SPECIES[species] : species;
     this.sp = sp;
+    this.mats = [];
+    // The head: a soft body that squashes, wobbles and carries the face.
     const base = unitSphere(12);
-    const fn = SHAPES[sp.shape] || SHAPES.mochi;
+    const fn = HEADS[sp.head] || HEADS.round;
     const pos = new Float32Array(base.pos.length);
     for (let i = 0; i < pos.length; i += 3) {
       const [x, y, z] = fn(base.pos[i], base.pos[i + 1], base.pos[i + 2]);
@@ -358,28 +464,47 @@ export class Critter {
     this.squishy.geometry.setAttribute('aFood', new BufferAttribute(this.normalizedRest(), 3));
     this.group = new Group();
     this.inner = new Group(); // hop offsets live here
-    this.inner.add(this.squishy.mesh);
     this.group.add(this.inner);
+    this.headY = HEAD_Y;
+    this.head = new Group();
+    this.head.position.y = this.headY;
+    this.head.add(this.squishy.mesh, outline(this.squishy.mesh, 0.024));
+    this.inner.add(this.head);
+    this.buildBody();
     // Contact shadow: a soft dark pool on whatever the critter sits on. It
     // stays put and fades as the critter hops.
     this.blob = new Mesh(blobGeometry(), blobMaterial());
     this.blob.rotation.x = -Math.PI / 2;
     this.blob.position.y = 0.012;
-    this.blob.scale.set(this.body.width * 0.62, this.body.depth * 0.62, 1);
+    this.blob.scale.set(1.5, 1.25, 1);
     this.blob.renderOrder = 1;
     this.blobBase = this.blob.scale.clone();
     this.group.add(this.blob);
     this.parts = [];
     this.buildFace();
     this.buildEars();
+    this.buildAccessory();
     this.expression = 'smile';
     this.setExpression('smile');
+    this.pose = 'rest';
+    this.poseUntil = 0;
+    this.squash = 0;
+    this.squashV = 0;
     this.hop = null;
     this.blinkAt = 1 + Math.random() * 3;
     this.time = Math.random() * 10;
     this.impatience = 0;
     this.hearts = [];
     this.seed = seed;
+  }
+
+  // Total height and width, in the critter's own units.
+  get height() {
+    return this.headY + this.body.height;
+  }
+
+  get width() {
+    return Math.max(this.body.width, TORSO.r * 2 * TORSO.sx);
   }
 
   normalizedRest() {
@@ -391,6 +516,154 @@ export class Critter {
       out[i * 3 + 2] = rest[i * 3 + 2] / (depth / 2);
     }
     return out;
+  }
+
+  soft(color, opts) {
+    const m = softMaterial(color, opts);
+    this.mats.push(m);
+    return m;
+  }
+
+  // Round little body, stubby arms with paws, feet and a tail.
+  buildBody() {
+    const sp = this.sp;
+    const geo = bodyGeo();
+    const furCol = sp.body || sp.fur;
+    const bodyMat = this.soft(furCol);
+    this.torso = new Group();
+    const torso = inked(geo.torso, bodyMat, 0.022);
+    torso.position.y = TORSO.y;
+    this.torso.add(torso);
+    if (sp.belly) {
+      const belly = new Mesh(geo.belly, this.soft(sp.belly));
+      belly.position.set(0, TORSO.y - 0.04, TORSO.r * TORSO.sz - 0.17);
+      belly.receiveShadow = true;
+      this.torso.add(belly);
+    }
+    this.inner.add(this.torso);
+    const armMat = sp.arms ? this.soft(sp.arms) : bodyMat;
+    const pawMat = sp.paws ? this.soft(sp.paws) : armMat;
+    this.arms = [-1, 1].map((side) => {
+      const g = new Group();
+      g.position.set(side * 0.5, 0.74, 0.1);
+      const arm = inked(geo.arm, armMat, 0.018);
+      const paw = inked(geo.paw, pawMat, 0.018);
+      paw.position.y = -0.42;
+      g.add(arm, paw);
+      g.userData.side = side;
+      this.inner.add(g);
+      return g;
+    });
+    const footMat = sp.feet ? this.soft(sp.feet) : sp.paws ? pawMat : bodyMat;
+    this.feet = [-1, 1].map((side) => {
+      const f = inked(geo.foot, footMat, 0.016);
+      f.position.set(side * 0.27, 0.07, 0.38);
+      f.rotation.y = side * 0.25;
+      this.inner.add(f);
+      return f;
+    });
+    const t = sp.tail;
+    if (t) {
+      const tailMat = this.soft(t.color);
+      if (t.kind === 'puff') {
+        const p = inked(geo.puff, tailMat, 0.016);
+        p.position.set(0, 0.32, -0.56);
+        this.tail = p;
+      } else {
+        const g = tailGeometry(t.kind);
+        this.tail = inked(g, tailMat, 0.016);
+        this.tailGeo = g;
+        if (t.kind === 'fox') {
+          const tip = new Mesh(geo.puff, this.soft('#fff8ee'));
+          tip.scale.set(1.15, 1.3, 1.15);
+          tip.position.set(0, 0.86, -1.12);
+          this.tail.add(tip);
+        }
+      }
+      this.inner.add(this.tail);
+    }
+  }
+
+  // Neck accessories ride on the body; head ones are pinned to the head.
+  buildAccessory() {
+    const acc = this.sp.acc;
+    const neckY = this.headY + 0.06;
+    const ring = (color, r = 0.5, tube = 0.065) => {
+      const m = new Mesh(new TorusGeometry(r, tube, 12, 40), this.soft(color, { sheen: 0.4, roughness: 0.55 }));
+      m.rotation.x = Math.PI / 2;
+      m.position.y = neckY;
+      m.castShadow = true;
+      return m;
+    };
+    if (acc === 'collar') {
+      this.inner.add(ring('#e2483a', 0.5, 0.06));
+      const bell = new Mesh(new SphereGeometry(0.11, 20, 14), new MeshPhysicalMaterial({ color: '#f2c14e', metalness: 0.9, roughness: 0.25, clearcoat: 0.6 }));
+      this.mats.push(bell.material);
+      bell.position.set(0, neckY - 0.1, 0.5);
+      const slit = new Mesh(new CylinderGeometry(0.012, 0.012, 0.1, 6), new MeshBasicMaterial({ color: '#5a3a10' }));
+      slit.rotation.x = Math.PI / 2;
+      slit.position.set(0, -0.04, 0.07);
+      bell.add(slit);
+      this.inner.add(bell);
+    } else if (acc === 'bandana' || acc === 'scarf') {
+      const color = acc === 'bandana' ? this.sp.bandana || '#3e6fb5' : '#4f9a5b';
+      this.inner.add(ring(color, 0.5, acc === 'scarf' ? 0.1 : 0.06));
+      const cloth = this.soft(color, { sheen: 0.5, roughness: 0.6, side: DoubleSide });
+      if (acc === 'bandana') {
+        const tri = new Mesh(new ConeGeometry(0.34, 0.42, 3), cloth);
+        tri.rotation.set(Math.PI, Math.PI / 6, 0);
+        tri.scale.set(1, 1, 0.25);
+        tri.position.set(0, neckY - 0.2, 0.47);
+        tri.castShadow = true;
+        this.inner.add(tri);
+      } else {
+        const end = new Mesh(new CapsuleGeometry(0.09, 0.28, 4, 10), cloth);
+        end.position.set(0.24, neckY - 0.22, 0.46);
+        end.rotation.z = 0.2;
+        end.castShadow = true;
+        this.inner.add(end);
+      }
+    } else if (acc === 'bow') {
+      const g = new Group();
+      const mat = this.soft('#ff7aa8', { sheen: 0.6 });
+      for (const s of [-1, 1]) {
+        const lobe = new Mesh(new SphereGeometry(0.15, 16, 12), mat);
+        lobe.scale.set(1.3, 0.85, 0.45);
+        lobe.position.x = s * 0.15;
+        lobe.rotation.z = s * 0.25;
+        g.add(lobe);
+      }
+      const knot = new Mesh(new SphereGeometry(0.075, 12, 10), mat);
+      g.add(knot);
+      g.traverse((o) => o.isMesh && (o.castShadow = true));
+      const H = this.body.height;
+      this.pin(g, this.nearest(-0.42, H * 0.86, null, new Vector3(-0.3, 1, 0.5).normalize(), 0.2), 0.03, { axis: 'y', dir: new Vector3(-0.35, 1, 0.45).normalize() });
+    } else if (acc === 'leaf' || acc === 'yuzu') {
+      const g = new Group();
+      const leafMat = this.soft('#5cae4a', { sheen: 0.3, roughness: 0.4, side: DoubleSide });
+      const leaf = (rx, rz, len) => {
+        const l = new Mesh(new SphereGeometry(1, 16, 8), leafMat);
+        l.scale.set(0.07, 0.015, len);
+        l.position.set(Math.sin(rz) * len * 0.8, 0.04, Math.cos(rz) * len * 0.8 - 0.05);
+        l.rotation.set(rx, rz, 0);
+        l.castShadow = true;
+        return l;
+      };
+      if (acc === 'leaf') {
+        g.add(leaf(-0.3, 0.4, 0.3), leaf(-0.25, -0.5, 0.26));
+        const stem = new Mesh(new CylinderGeometry(0.025, 0.03, 0.2, 8), this.soft('#7a9a3a'));
+        stem.position.y = 0.06;
+        g.add(stem);
+      } else {
+        const fruit = new Mesh(new SphereGeometry(0.15, 20, 14), this.soft('#ffc93c', { roughness: 0.35, clearcoat: 0.7 }));
+        fruit.position.y = 0.12;
+        fruit.castShadow = true;
+        g.add(fruit, leaf(-0.4, 0.7, 0.16));
+      }
+      const H = this.body.height;
+      const x = acc === 'yuzu' ? 0.5 : 0.05;
+      this.pin(g, this.nearest(x, H, null, new Vector3(x, 1, 0.2).normalize(), 0.3), -0.02, { axis: 'y', dir: new Vector3(x * 0.6, 1, 0.2).normalize() });
+    }
   }
 
   // Surface vertex nearest a point, among those facing a direction.
@@ -415,73 +688,53 @@ export class Critter {
     return new Vector3(n[v * 3], n[v * 3 + 1], n[v * 3 + 2]);
   }
 
-  // Pin an object to a vertex. axis: which local axis follows the normal.
+  // Pin an object to a head vertex. axis: which local axis follows the normal.
   pin(obj, v, lift, { axis = 'z', dir = null } = {}) {
     const rn = this.restNormalOf(v);
-    this.inner.add(obj);
+    this.head.add(obj);
     const part = { obj, v, lift, restN: rn, restQ: frame(dir || rn, axis), extra: new Quaternion() };
     this.parts.push(part);
     return part;
   }
 
-  // Face parts sit on the front of the body: x across, y up, in body units.
+  // Face parts sit on the front of the head: x across, y up, in head units.
   pinFace(obj, x, y, lift) {
     return this.pin(obj, this.nearest(x, y, null, new Vector3(0, 0, 1)), lift);
   }
 
   buildFace() {
-    const s = sharedParts();
     const sp = this.sp;
     const H = this.body.height;
     const W = this.body.width;
-    const eyeY = H * (sp.shape === 'bean' ? 0.5 : 0.48);
-    const spread = Math.min(0.34, W * 0.17);
-    this.eyeY = eyeY;
+    const R = Math.min(W, this.body.depth) / 2;
+    // Big eyes, set low and wide: the baby face that made the era.
+    const eyeX = W * 0.22;
+    const eyeY = H * 0.47;
+    const blank = eyeTexture('open', 'neutral', sp.iris || '#5a3420');
     this.eyes = [-1, 1].map((side) => {
-      const g = new Group();
-      const open = new Group();
-      const e = new Mesh(s.eye, s.ink);
-      const shine = new Mesh(s.shine, s.white);
-      shine.position.set(0.03, 0.04, 0.05);
-      const shine2 = new Mesh(s.shine2, s.white);
-      shine2.position.set(-0.032, -0.04, 0.05);
-      open.add(e, shine, shine2);
-      const closed = new Mesh(s.happy, s.ink);
-      closed.visible = false;
-      g.add(open, closed);
-      g.userData = { open, closed };
-      this.pinFace(g, side * spread, eyeY, 0.02);
-      return g;
+      const m = new Mesh(decalGeometry(0.5, 0.625, R * 0.92), decalMaterial(blank));
+      m.renderOrder = 3;
+      // The painted eye is the one on the left of the screen; flip the other.
+      m.scale.x = side < 0 ? 1 : -1;
+      this.mats.push(m.material);
+      this.pinFace(m, side * eyeX, eyeY, 0.012);
+      return m;
     });
-    for (const side of [-1, 1]) {
-      const b = new Mesh(s.blush, s.blushMat);
-      this.pinFace(b, side * (spread + 0.16), eyeY - 0.12, 0.012);
-    }
-    const nose = new Mesh(s.nose, new MeshPhysicalMaterial({ color: sp.nose, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08 }));
-    this.pinFace(nose, 0, eyeY - 0.075, 0.018);
-    this.mouth = new Group();
-    this.mouthLine = new Mesh(s.tubes.smile, s.ink);
-    this.mouthFill = new Mesh(s.fills.grin, s.mouthInk);
-    this.mouthFill.position.z = -0.004;
-    // A short line from the nose down to the mouth, so the two read as one.
-    const philtrum = new Mesh(s.philtrum, s.ink);
-    this.mouth.add(this.mouthLine, this.mouthFill, philtrum);
-    this.mouth.scale.setScalar(0.8);
-    this.pinFace(this.mouth, 0, eyeY - 0.14, 0.016);
-    if (sp.whiskers) {
-      const mat = new MeshBasicMaterial({ color: sp.whiskers, transparent: true, opacity: 0.75 });
-      for (const side of [-1, 1]) {
-        const g = new Group();
-        for (let k = 0; k < 3; k++) {
-          const w = new Mesh(s.whisker, mat);
-          w.rotation.z = (k - 1) * 0.22;
-          w.position.y = (k - 1) * 0.025;
-          g.add(w);
-        }
-        g.scale.x = side;
-        this.pinFace(g, side * (spread + 0.12), eyeY - 0.09, 0.008);
-      }
-    }
+    this.cheeks = [-1, 1].map((side) => {
+      const m = new Mesh(decalGeometry(0.46, 0.29, R * 0.9), decalMaterial(cheekTexture(sp.whiskers || null)));
+      m.renderOrder = 2;
+      m.scale.x = side < 0 ? 1 : -1;
+      this.mats.push(m.material);
+      this.pinFace(m, side * W * 0.32, H * 0.31, 0.01);
+      return m;
+    });
+    const nose = new Mesh(new IcosahedronGeometry(0.045, 3).scale(1.4, 0.85, 0.6), new MeshPhysicalMaterial({ color: sp.nose, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08 }));
+    this.mats.push(nose.material);
+    this.pinFace(nose, 0, H * 0.355, 0.02);
+    this.mouth = new Mesh(decalGeometry(0.36, 0.27, R * 0.92), decalMaterial(mouthTexture('smile')));
+    this.mouth.renderOrder = 3;
+    this.mats.push(this.mouth.material);
+    this.pinFace(this.mouth, 0, H * 0.255, 0.012);
   }
 
   buildEars() {
@@ -490,18 +743,18 @@ export class Critter {
     if (!e) return;
     const W = this.body.width;
     const H = this.body.height;
-    const outerMat = softMaterial(sp.earColor || sp.fur);
-    const innerMat = softMaterial(sp.inner, { sheen: 0.6 });
+    const outerMat = this.soft(sp.earColor || sp.fur);
+    const innerMat = this.soft(sp.inner, { sheen: 0.6 });
     const outerGeo = e.outer();
     const innerGeo = e.inner();
     this.ears = [-1, 1].map((side) => {
       const g = new Group();
-      g.scale.setScalar(1.25);
+      g.scale.setScalar(1.3);
       const o = new Mesh(outerGeo, outerMat);
       const i = new Mesh(innerGeo, innerMat);
       i.position.set(...e.innerAt);
       o.castShadow = true;
-      g.add(o, i);
+      g.add(o, outline(o, 0.014), i);
       const v = this.nearest(side * (W / 2) * e.at[0], H * e.at[1], 0, new Vector3(0, 1, 0), -0.2);
       // Ears lean out from the crown, a little forward.
       const n = this.restNormalOf(v);
@@ -514,24 +767,58 @@ export class Critter {
   }
 
   setExpression(name) {
-    if (!MOUTHS[name]) return;
-    const s = sharedParts();
+    const e = EXPRESSIONS[name];
+    if (!e) return;
     this.expression = name;
-    this.mouthLine.geometry = s.tubes[name];
-    this.mouthFill.visible = !!s.fills[name];
-    if (s.fills[name]) this.mouthFill.geometry = s.fills[name];
-    const happy = name === 'grin';
-    for (const e of this.eyes) {
-      e.userData.open.visible = !happy;
-      e.userData.closed.visible = happy;
-    }
+    this.face = e;
+    this.paintEyes(e.eye);
+    const sp = this.sp;
+    this.mouth.material.map = mouthTexture(e.mouth, !!sp.fang && (e.mouth === 'open' || e.mouth === 'grin'));
+    for (const c of this.cheeks) c.material.opacity = Math.min(1, e.blush);
   }
 
-  // Squash hello: little hop in place.
+  paintEyes(kind) {
+    const sp = this.sp;
+    const t = eyeTexture(kind, this.face.brow, sp.iris || '#5a3420', { lashes: !!sp.lashes, brow: sp.brow || '#2a160f' });
+    for (const m of this.eyes) m.material.map = t;
+    this.eyeKind = kind;
+  }
+
+  // Strike a pose with the arms for a while.
+  setPose(name, seconds = 1) {
+    this.pose = name;
+    this.poseUntil = this.time + seconds;
+  }
+
+  // A manga symbol over the head for a moment: surprise, question, note,
+  // heart, anger, sweat, sparkle or gloom.
+  emote(kind, ms = 1500) {
+    if (!this.emoteSprite) {
+      this.emoteSprite = new Sprite(new SpriteMaterial({ map: emoteTexture(kind), transparent: true, depthWrite: false }));
+      this.mats.push(this.emoteSprite.material);
+      this.inner.add(this.emoteSprite);
+    }
+    const s = this.emoteSprite;
+    s.material.map = emoteTexture(kind);
+    const H = this.body.height;
+    const W = this.body.width;
+    const top = this.headY + H;
+    const at = kind === 'sweat' ? [W * 0.42, this.headY + H * 0.82, 0.35] : kind === 'gloom' ? [0, top + 0.12, 0.4] : [W * 0.4, top + 0.22, 0.15];
+    s.position.set(...at);
+    s.visible = true;
+    this.emoteState = { t: 0, life: ms / 1000, kind, y: at[1] };
+  }
+
+  // Squash hello: little hop in place. A real poke gets a wave and a note.
   poke(strength = 1) {
     this.body.impulse(0, this.body.height * 0.6, 0.6, 0, -0.3, -1, 2.2 * strength, 0.45);
     this.body.kickAll((Math.random() - 0.5) * 1.2, 1.3 * strength, -0.6);
+    this.squashV += 2.2 * strength;
     this.earFlick = 1;
+    if (strength >= 1) {
+      this.setPose('wave', 0.9);
+      this.emote(Math.random() < 0.5 ? 'note' : 'heart', 1100);
+    }
   }
 
   hopTo(target, duration = 0.55, height = 1.2, scale = null) {
@@ -540,6 +827,7 @@ export class Critter {
     return new Promise((resolve) => {
       this.hop = { from: this.group.position.clone(), to: target.clone(), s0: this.group.scale.x, s1: scale ?? this.group.scale.x, t: 0, duration, height, resolve };
       this.body.kickAll(0, -1.6, 0);
+      this.squashV += 3;
     });
   }
 
@@ -548,21 +836,25 @@ export class Critter {
     for (let i = 0; i < 5; i++) {
       const h = new Sprite(s.heart);
       h.scale.setScalar(0.3);
-      h.position.set((Math.random() - 0.5) * 0.9, this.body.height * 0.95, 0.3);
+      h.position.set((Math.random() - 0.5) * 0.9, this.headY + this.body.height * 0.95, 0.3);
       h.userData = { vy: 0.9 + Math.random() * 0.6, vx: (Math.random() - 0.5) * 0.5, life: 0, delay: i * 0.12 };
       h.visible = false;
       this.inner.add(h);
       this.hearts.push(h);
     }
-    this.setExpression('grin');
+    this.setExpression(this.cheer || 'love');
+    this.setPose('banzai', 1.4);
+    this.emote('sparkle', 1400);
     this.body.kickAll(0, -2.4, 0);
+    this.squashV += 3;
     this.earFlick = 1.4;
   }
 
   update(dt) {
     this.time += dt;
+    const t = this.time;
     const b = this.body;
-    // Waiting too long: sag, droop the ears, lose the smile.
+    // Waiting too long: sag, droop the ears, tap a paw on the counter.
     b.userMode[1] = 0.16 * this.impatience;
     if (this.hop) {
       const h = this.hop;
@@ -577,18 +869,40 @@ export class Critter {
         this.hop = null;
         this.inner.position.y = 0;
         b.kickAll(0, 2.4, 0);
+        this.squashV -= 3.5;
         this.earFlick = 1;
         h.resolve();
       }
     }
     this.squishy.step(dt);
+    // The body squashes on a spring and breathes; the head rides on top.
+    this.squashV += (-this.squash * 170 - this.squashV * 9) * dt;
+    this.squash += this.squashV * dt;
+    const sq = Math.max(-0.25, Math.min(0.25, this.squash * 0.06));
+    const breath = 0.022 * Math.sin(t * 2.1 + this.seed);
+    this.torso.scale.set(1 + sq * 0.6 - breath * 0.4, 1 - sq + breath, 1 + sq * 0.6 - breath * 0.4);
+    this.head.position.y = this.headY * (1 - sq + breath);
+    // Arms.
+    let pose = this.time < this.poseUntil ? this.pose : this.impatience > 0.5 ? 'tap' : 'rest';
+    if (this.hop) pose = 'hop';
+    for (const a of this.arms) {
+      const s = a.userData.side;
+      const [rx, rz] = POSES[pose](t, s);
+      const k = Math.min(1, dt * 12);
+      a.rotation.x += (rx - a.rotation.x) * k;
+      a.rotation.z += (s * rz - a.rotation.z) * k;
+      a.position.y = 0.74 * (1 - sq * 0.8 + breath);
+    }
+    for (const f of this.feet) f.scale.y = this.hop ? 0.7 : 1;
+    if (this.tail) this.tail.rotation.y = Math.sin(t * (this.impatience > 0.5 ? 9 : 2.4)) * 0.18;
+
     const lift = Math.max(0, this.inner.position.y);
-    const k = 1 / (1 + lift * 0.9);
-    this.blob.scale.set(this.blobBase.x * (0.7 + 0.3 * k), this.blobBase.y * (0.7 + 0.3 * k), 1);
-    this.blob.material.opacity = 0.55 * k;
+    const kk = 1 / (1 + lift * 0.9);
+    this.blob.scale.set(this.blobBase.x * (0.7 + 0.3 * kk), this.blobBase.y * (0.7 + 0.3 * kk), 1);
+    this.blob.material.opacity = 0.55 * kk;
 
     this.earFlick = Math.max(0, (this.earFlick || 0) - dt * 2.5);
-    const flick = Math.sin(this.time * 26) * this.earFlick * 0.18;
+    const flick = Math.sin(t * 26) * this.earFlick * 0.18;
     const droop = this.impatience * (this.sp.ear === 'bunny' ? 0.9 : 0.45);
     // Parts follow the surface: rotate their rest pose by how far the
     // normal under them has turned.
@@ -608,11 +922,30 @@ export class Critter {
         p.obj.quaternion.multiply(p.extra);
       }
     }
-    // Blink.
+    // Blink: swap to closed eyes for a moment, when the eyes are open.
     this.blinkAt -= dt;
-    const closing = this.blinkAt < 0 ? Math.max(0.08, Math.abs(this.blinkAt + 0.07) / 0.07) : 1;
-    if (this.blinkAt < -0.14) this.blinkAt = 2 + Math.random() * 4;
-    for (const e of this.eyes) e.userData.open.scale.y = Math.min(1, closing) * (this.impatience > 0.7 ? 0.6 : 1);
+    if (this.blinkAt < 0 && BLINKS.has(this.face.eye)) {
+      if (this.eyeKind !== 'closed') this.paintEyes('closed');
+      if (this.blinkAt < -0.13) {
+        this.paintEyes(this.face.eye);
+        this.blinkAt = 1.8 + Math.random() * 3.5;
+      }
+    } else if (this.blinkAt < -0.13) this.blinkAt = 1.8 + Math.random() * 3.5;
+    // Emote: pop in, bob, fade out.
+    const em = this.emoteState;
+    if (em) {
+      em.t += dt;
+      const s = this.emoteSprite;
+      const pop = em.t < 0.22 ? 1 + 2.4 * (em.t / 0.22 - 1) ** 3 + 1.4 * (em.t / 0.22 - 1) ** 2 : 1;
+      const size = em.kind === 'gloom' ? 0.8 : 0.62;
+      s.scale.setScalar(Math.max(0.01, size * pop));
+      s.position.y = em.y + (em.kind === 'sweat' ? -em.t * 0.12 : Math.sin(em.t * 6) * 0.03);
+      s.material.opacity = Math.min(1, (em.life - em.t) / 0.25);
+      if (em.t >= em.life) {
+        s.visible = false;
+        this.emoteState = null;
+      }
+    }
     // Hearts float up and fade.
     for (const h of this.hearts) {
       const u = h.userData;
@@ -639,6 +972,8 @@ export class Critter {
     this.squishy.dispose();
     this.squishy.mesh.material.dispose();
     this.blob.material.dispose();
+    for (const m of this.mats) m.dispose();
+    if (this.tailGeo) this.tailGeo.dispose();
   }
 }
 
@@ -650,26 +985,33 @@ export class Customer extends Critter {
   }
 }
 
-// The sous chef: a shiba in a little chef's toque.
+// The sous chef: a shiba in a little chef's toque and a red neckerchief.
 export class SousChef extends Critter {
   constructor() {
-    super('shiba', 3);
+    super({ ...SPECIES.shiba, acc: 'bandana', bandana: '#e2483a' }, 3);
+    this.cheer = 'grin';
     const H = this.body.height;
     const hat = new Group();
-    const white = softMaterial('#fbf8f2', { sheen: 0.8, roughness: 0.7, clearcoat: 0 });
-    const band = new Mesh(new CylinderGeometry(0.3, 0.32, 0.2, 32), white);
+    const white = this.soft('#fbf8f2', { sheen: 0.8, roughness: 0.7, clearcoat: 0 });
+    const band = new Mesh(new CylinderGeometry(0.34, 0.36, 0.22, 32), white);
     band.position.y = 0.1;
     hat.add(band);
-    const puffs = [[0, 0.36, 0, 0.3], [0.17, 0.3, 0.05, 0.2], [-0.17, 0.3, 0.05, 0.2], [0, 0.3, -0.16, 0.2], [0.08, 0.5, 0.04, 0.2], [-0.1, 0.48, -0.04, 0.2]];
+    const puffs = [[0, 0.4, 0, 0.34], [0.19, 0.33, 0.05, 0.22], [-0.19, 0.33, 0.05, 0.22], [0, 0.33, -0.18, 0.22], [0.09, 0.56, 0.04, 0.22], [-0.11, 0.53, -0.04, 0.22]];
     for (const [x, y, z, r] of puffs) {
       const m = new Mesh(new IcosahedronGeometry(r, 3), white);
       m.position.set(x, y, z);
       m.castShadow = true;
       hat.add(m);
     }
-    const v = this.nearest(0.08, H, -0.05, new Vector3(0, 1, 0), 0.5);
-    this.pin(hat, v, -0.06, { axis: 'y', dir: new Vector3(0.12, 1, -0.15).normalize() });
+    const v = this.nearest(0.1, H, -0.05, new Vector3(0, 1, 0), 0.5);
+    this.pin(hat, v, -0.08, { axis: 'y', dir: new Vector3(0.14, 1, -0.15).normalize() });
   }
+}
+
+// Hearts for celebrations.
+let shared = null;
+function sharedParts() {
+  return (shared ||= { heart: new SpriteMaterial({ map: heartTexture(), transparent: true, depthWrite: false }) });
 }
 
 // The chef's paw: a cream forearm out of a white chef's sleeve, with pink
