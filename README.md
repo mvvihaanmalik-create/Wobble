@@ -175,7 +175,11 @@ The bar has its own lo-fi band, written live in Web Audio (`src/sushi/music.js`)
 
 ### Loading
 
-A loading screen shows straight away, before any script arrives. Behind it the game compiles only the bar itself and runs one frame through the post chain, so the title comes up quickly. While the title is showing, one of every dish, tool and the photo booth compile in the background, one dish at a time so the title never freezes. If you start a stage before that is done, it starts the moment it finishes.
+A loading screen shows straight away, before any game script arrives. It has a mochi you can poke (it squishes, says "boing!" and counts your squishes), a real progress bar and a rotating gameplay tip.
+
+Behind it the game compiles only what the title camera can see, a dozen meshes at a time with a frame in between, so the loading screen stays alive and the bar shows real progress. The game loop does not draw while this runs, so no time goes to frames nobody sees. Then one frame runs through the post chain and the title comes up.
+
+While the title is showing, the stations off camera and one of every dish compile in the background, a few at a time so the title never freezes. If you press start before that is done, the button fills up as a progress bar ("Warming the plates 60%") and the stage opens by itself when it is ready.
 
 ### Interface
 

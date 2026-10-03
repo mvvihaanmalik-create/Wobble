@@ -1,4 +1,4 @@
-import { Quaternion, Raycaster, Scene, Vector2, Vector3 } from 'three';
+import { Frustum, Matrix4, Quaternion, Raycaster, Scene, Vector2, Vector3 } from 'three';
 import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, dishKey, usesStove } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
@@ -132,42 +132,89 @@ export class Game {
     this.running = false;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.pause();
-      else if (this.mode !== 'paused') this.resume();
+      else if (this.mode !== 'paused' && !this.loading) this.resume();
       this.music.sync();
     });
     this.resume();
   }
 
-  // Loading is two steps. Behind the loading screen: the bar itself and one
-  // frame through the post chain, so the title comes up fast. Then, while the
-  // title is showing, one of every dish compiles in the background, a piece
-  // at a time so the title never freezes. Starting a stage waits for it.
+  // Loading is two steps. Behind the loading screen: only what the title
+  // camera can see, a few meshes at a time so the loading screen stays alive
+  // and its bar shows real progress, then one frame through the post chain.
+  // Then, while the title is showing, the rest of the bar and one of every
+  // dish compile in the background. Starting a stage waits for that.
   async warmUp(progress = () => {}) {
-    const r = this.stage.renderer;
-    await progress(0.1);
-    try {
-      if (r.compileAsync) await r.compileAsync(this.stage.scene, this.stage.camera);
-    } catch (err) {
-      console.warn('Shader warm-up skipped', err);
-    }
+    const stage = this.stage;
+    // Nothing is on screen yet: drawing frames now would only steal time
+    // from the compile (and compile everything in view, all at once).
+    this.loading = true;
+    this.pause();
+    const cam = stage.camera;
+    stage.update(0);
+    cam.updateMatrixWorld();
+    const frustum = new Frustum().setFromProjectionMatrix(new Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const seen = [];
+    const rest = [];
+    stage.scene.traverse((o) => {
+      if (!(o.isMesh || o.isPoints || o.isLine || o.isSprite) || !o.material) return;
+      let shown = o.visible;
+      for (let p = o.parent; shown && p; p = p.parent) shown = p.visible;
+      const inView = shown && (!o.frustumCulled || (o.isSprite ? frustum.intersectsSprite(o) : frustum.intersectsObject(o)));
+      (inView ? seen : rest).push(o);
+    });
+    this.warmRest = rest;
+    await this.compileChunks(seen, (k) => progress(0.05 + k * 0.75));
     performance.mark('warm-scene');
-    await progress(0.7);
-    this.stage.render(1 / 60);
+    await progress(0.85);
+    stage.render(1 / 60);
     performance.mark('warm-frame');
     await progress(1);
-    this.last = performance.now();
+    this.loading = false;
+    this.resume();
     this.warming = this.warmFood()
-      .catch((err) => console.warn('Food warm-up skipped', err))
+      .catch((err) => console.warn('Background warm-up skipped', err))
       .finally(() => {
         this.warming = null;
+        this.warmRest = null;
+        this.ui.warming(false);
         performance.mark('warm-food');
       });
+  }
+
+  // Compile a list of meshes against the bar's lights, a handful at a time
+  // with a frame in between, so nothing on screen ever freezes for long.
+  async compileChunks(list, onProgress = () => {}, size = 12) {
+    const r = this.stage.renderer;
+    const scene = this.stage.scene;
+    const cam = this.stage.camera;
+    const frame = () => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
+    const done = new Set();
+    for (let i = 0; i < list.length; i += size) {
+      // Skip meshes whose material already has a program: they cost nothing.
+      const chunk = list.slice(i, i + size).filter((o) => !done.has(o.material));
+      if (chunk.length) {
+        // A stand-in parent: compile() walks it for materials (and for lights,
+        // of which it has none; the bar's come from the scene).
+        const holder = { traverse: (fn) => chunk.forEach((o) => fn(o)), traverseVisible: () => {} };
+        try {
+          if (r.compileAsync) await r.compileAsync(holder, cam, scene);
+          else r.compile(holder, cam, scene);
+        } catch (err) {
+          console.warn('Shader warm-up step skipped', err);
+        }
+        chunk.forEach((o) => done.add(o.material));
+      }
+      await onProgress(Math.min(1, (i + size) / Math.max(1, list.length)));
+      await frame();
+    }
   }
 
   async warmFood() {
     const r = this.stage.renderer;
     const frame = () => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
     await frame();
+    // The stations off camera first: they are what a stage needs right away.
+    if (this.warmRest) await this.compileChunks(this.warmRest, (k) => this.ui.warming(true, k * 0.5));
     const parts = [...warmFoods().children, new Paw().group, platedMaki('kappa'), platedMaki('tekka'), platedMaki('sake'), ...warmHot().children];
     const sheet = new MakiSheet();
     sheet.addFilling('kappa');
@@ -184,6 +231,7 @@ export class Game {
       tmp.add(part);
       if (r.compileAsync) await r.compileAsync(tmp, this.stage.camera, this.stage.scene);
       else r.compile(tmp, this.stage.camera, this.stage.scene);
+      this.ui.warming(true, 0.5 + (0.45 * (parts.indexOf(part) + 1)) / parts.length);
       await frame();
     }
     if (r.compileAsync) await r.compileAsync(this.booth.scene, this.booth.camera);
@@ -224,7 +272,7 @@ export class Game {
   startDay(dayIndex) {
     // The dishes are still compiling: start the moment they are ready.
     if (this.warming) {
-      this.ui.toast('Warming the plates...', 1500);
+      this.ui.warming(true, null, true);
       if (this.pendingStart == null) {
         this.warming.then(() => {
           const d = this.pendingStart;

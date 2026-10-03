@@ -2917,3 +2917,23 @@ body {
 #stations button[hidden] {
   display: none;
 }
+
+/* Start pressed while the kitchen is still warming up: a light fill
+   sweeps across the button like a progress bar, then the stage opens on
+   its own. */
+#startBtn.warming {
+  overflow: hidden;
+  cursor: progress;
+}
+#startBtn.warming::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--warm, 0%);
+  background: rgba(255, 240, 200, 0.32);
+  transition: width 0.3s ease;
+  pointer-events: none;
+}
+#startBtn.warming small {
+  display: none;
+}

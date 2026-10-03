@@ -728,6 +728,22 @@ export class GameUI {
     ring.classList.toggle('in', value >= band[0] && value <= band[1]);
   }
 
+  // While the kitchen warms up behind the title, the start button shows how
+  // far along it is once pressed, then the stage opens by itself.
+  warming(on, k = null, pressed = false) {
+    const b = $('startBtn');
+    if (!b) return;
+    if (pressed) this.warmPressed = true;
+    if (k != null) this.warmK = k;
+    const waiting = on && this.warmPressed;
+    b.classList.toggle('warming', waiting);
+    b.style.setProperty('--warm', `${Math.round((this.warmK || 0) * 100)}%`);
+    const label = b.querySelector('span');
+    if (!this.startLabel) this.startLabel = label.textContent;
+    label.textContent = waiting ? `Warming the plates ${Math.round((this.warmK || 0) * 100)}%` : this.startLabel;
+    if (!on) this.warmPressed = false;
+  }
+
   toast(text, ms = 1800) {
     const t = $('toast');
     t.textContent = text;

@@ -11,24 +11,101 @@
       /* Shown before any script or stylesheet arrives. */
       #loading { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #3a2416, #1a0e08 70%); transition: opacity 0.5s ease, visibility 0.5s; }
       #loading.done { opacity: 0; visibility: hidden; pointer-events: none; }
-      .load-card { display: grid; justify-items: center; gap: 18px; }
-      .load-sushi { width: 96px; height: 60px; animation: load-bob 0.9s ease-in-out infinite; }
+      .load-card { display: grid; justify-items: center; gap: 14px; padding: 0 16px; text-align: center; }
       .load-logo { font: 400 44px/1 'Titan One', system-ui, sans-serif; color: #fff6e4; -webkit-text-stroke: 7px #3b2417; paint-order: stroke fill; text-shadow: 0 5px 0 #3b2417; }
+      .load-mochi { position: relative; width: 132px; height: 112px; padding: 0; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+      .load-mochi svg { width: 100%; height: 100%; overflow: visible; transform-origin: 50% 92%; animation: load-bob 1.6s ease-in-out infinite; }
+      .load-mochi.boing svg { animation: load-boing 0.55s cubic-bezier(.3,1.6,.5,1); }
+      .load-mochi .shut { display: none; }
+      .load-mochi.boing .open { display: none; }
+      .load-mochi.boing .shut { display: inline; }
+      .load-mochi:focus-visible { outline: 3px solid #ffc83d; outline-offset: 6px; border-radius: 40px; }
+      .load-pop { position: absolute; left: 50%; top: -6px; transform: translate(-50%, 0); font: 400 18px/1 'Titan One', system-ui, sans-serif; color: #ffe07a; -webkit-text-stroke: 4px #3b2417; paint-order: stroke fill; opacity: 0; pointer-events: none; white-space: nowrap; }
+      .load-mochi.boing .load-pop { animation: load-pop 0.7s ease-out; }
+      .load-hint { margin: -4px 0 0; font: 700 13px/1.3 system-ui, sans-serif; color: #d9bf98; }
+      .load-hint b { color: #ffe07a; }
       .load-bar { width: 220px; height: 16px; border: 3px solid #3b2417; border-radius: 99px; background: #5b3a22; overflow: hidden; box-shadow: 0 4px 0 #3b2417; }
       .load-bar i { display: block; height: 100%; width: 6%; border-radius: 99px; background: linear-gradient(#ffe07a, #ffc83d); transition: width 0.35s ease; }
       .load-text { margin: 0; font: 700 14px/1 system-ui, sans-serif; color: #f7e6c6; }
-      @keyframes load-bob { 50% { transform: translateY(-8px) scale(1.04, 0.96); } }
+      .load-tip { max-width: 300px; min-height: 2.7em; margin: 4px 0 0; font: 600 13px/1.35 system-ui, sans-serif; color: #c9ab82; transition: opacity 0.35s ease; }
+      .load-tip.fade { opacity: 0; }
+      @keyframes load-bob { 50% { transform: translateY(-6px) scale(1.03, 0.97); } }
+      @keyframes load-boing { 0% { transform: scale(1, 1); } 25% { transform: scale(1.28, 0.7); } 55% { transform: scale(0.88, 1.14) translateY(-10px); } 80% { transform: scale(1.05, 0.95); } 100% { transform: scale(1, 1); } }
+      @keyframes load-pop { 0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); } 25% { opacity: 1; transform: translate(-50%, -10px) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -26px) scale(1); } }
+      @media (prefers-reduced-motion: reduce) { .load-mochi svg, .load-mochi.boing svg, .load-mochi.boing .load-pop { animation: none; } }
     </style>
   </head>
   <body>
-    <div id="loading" role="status" aria-live="polite">
+    <div id="loading">
       <div class="load-card">
-        <svg class="load-sushi" viewBox="0 0 48 30" aria-hidden="true"><ellipse cx="24" cy="22" rx="20" ry="7" fill="#fff" stroke="#3b2417" stroke-width="2.4"/><path d="M5 18 C6 6 42 6 43 18 C35 14 13 14 5 18Z" fill="#ff7a45" stroke="#3b2417" stroke-width="2.4" stroke-linejoin="round"/><path d="M14 12 l4 4 M22 10 l4 4 M30 11 l3 3.5" stroke="#ffd2b8" stroke-width="2.2" stroke-linecap="round"/></svg>
         <div class="load-logo">Squishi</div>
-        <div class="load-bar"><i id="loadBar"></i></div>
-        <p class="load-text" id="loadText">Opening the shutters</p>
+        <button class="load-mochi" id="loadMochi" type="button" aria-label="Poke the mochi">
+          <svg viewBox="0 0 132 112" aria-hidden="true">
+            <ellipse cx="66" cy="104" rx="46" ry="6" fill="#000" opacity="0.25"/>
+            <path d="M14 78 C10 38 38 12 66 12 C94 12 122 38 118 78 C116 98 96 104 66 104 C36 104 16 98 14 78Z" fill="#fff8ef" stroke="#3b2417" stroke-width="4.5"/>
+            <path d="M20 46 C34 24 98 24 112 46 C96 38 36 38 20 46Z" fill="#ff8a5c" stroke="#3b2417" stroke-width="3.5" stroke-linejoin="round"/>
+            <path d="M40 34 l6 6 M60 30 l6 6 M80 31 l5 6" stroke="#ffd2b8" stroke-width="3" stroke-linecap="round"/>
+            <ellipse cx="34" cy="76" rx="10" ry="6" fill="#ff9db4" opacity="0.7"/>
+            <ellipse cx="98" cy="76" rx="10" ry="6" fill="#ff9db4" opacity="0.7"/>
+            <g class="open"><ellipse cx="48" cy="64" rx="6.5" ry="8.5" fill="#2a160f"/><ellipse cx="84" cy="64" rx="6.5" ry="8.5" fill="#2a160f"/><circle cx="50.5" cy="60.5" r="2.6" fill="#fff"/><circle cx="86.5" cy="60.5" r="2.6" fill="#fff"/></g>
+            <g class="shut" fill="none" stroke="#2a160f" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M41 58 L53 64 L41 70"/><path d="M91 58 L79 64 L91 70"/></g>
+            <path d="M58 78 q4 5 8 0 q4 5 8 0" fill="none" stroke="#2a160f" stroke-width="3.4" stroke-linecap="round"/>
+          </svg>
+          <span class="load-pop" id="loadPop">boing!</span>
+        </button>
+        <p class="load-hint" id="loadHint">Poke the mochi while the kitchen warms up</p>
+        <div class="load-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100"><i id="loadBar"></i></div>
+        <p class="load-text" id="loadText" role="status" aria-live="polite">Opening the shutters</p>
+        <p class="load-tip" id="loadTip"></p>
       </div>
     </div>
+    <script>
+      // Runs before the game script arrives, so there is something to do
+      // (and read) from the first moment.
+      (function () {
+        var tips = [
+          'Let go of the scoop inside the green band for a perfect scoop.',
+          'Regulars have a favourite dish. Nail it for a bigger tip.',
+          'Turn takoyaki the moment the underside goes golden.',
+          'Stir the noodles in circles so they do not stick.',
+          'Salmon and tuna want a 45 degree cut. Tamago wants a straight one.',
+          'Press too hard and the rice squashes flat. Pochi will help.',
+          'Guests only lose patience on game time. Pausing is free.',
+          'Tap on the beat to pinch neat gyoza pleats.',
+          'Every stage has its own menu. Try them in any order.',
+        ];
+        var i = Math.floor(Math.random() * tips.length);
+        var tip = document.getElementById('loadTip');
+        tip.textContent = tips[i];
+        var timer = setInterval(function () {
+          if (!document.getElementById('loading')) return clearInterval(timer);
+          tip.classList.add('fade');
+          setTimeout(function () {
+            i = (i + 1) % tips.length;
+            tip.textContent = tips[i];
+            tip.classList.remove('fade');
+          }, 350);
+        }, 3600);
+        var mochi = document.getElementById('loadMochi');
+        var pop = document.getElementById('loadPop');
+        var hint = document.getElementById('loadHint');
+        var words = ['boing!', 'squish!', 'mochi!', 'hehe', 'puni!', 'wobble!'];
+        var n = 0;
+        mochi.addEventListener('pointerdown', function (e) {
+          e.preventDefault();
+          n++;
+          pop.textContent = n % 10 === 0 ? n + ' squishes!' : words[n % words.length];
+          mochi.classList.remove('boing');
+          void mochi.offsetWidth;
+          mochi.classList.add('boing');
+          if (navigator.vibrate) navigator.vibrate(8);
+          hint.innerHTML = 'Squished <b>' + n + '</b> time' + (n === 1 ? '' : 's');
+        });
+        mochi.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') mochi.dispatchEvent(new PointerEvent('pointerdown'));
+        });
+      })();
+    </script>
     <canvas id="gl" aria-label="The sushi counter. Tap, hold and swipe to work each station."></canvas>
 
     <div id="hud" hidden>
