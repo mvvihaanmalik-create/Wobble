@@ -1,10 +1,12 @@
-import { BUILD, CUSTOMER_LOOKS, DAYS, FISH, KNIFE, RICE, RUSH, SCORE, TOPPINGS, dishKey } from './config.js';
+import { BUILD, CUSTOMER_LOOKS, DAYS, FISH, HOT, HOT_TOPPINGS, KNIFE, RICE, RUSH, SCORE, TOPPINGS, UDON, dishKey } from './config.js';
 import { FILLINGS } from './maki.js';
 import { mulberry } from './set.js';
 
 // One order: a guest and a few pieces. A piece is a nigiri ({ fish, wasabi,
-// toppings }) or a roll ({ maki: filling }). Rolls come with at most one
-// nigiri, so the board has room for six roll pieces.
+// toppings }), a roll ({ maki: filling }), a bowl of udon ({ udon: kind,
+// toppings }) or a plate of gyoza ({ gyoza: count }). Rolls come with at most
+// one nigiri, so the board has room for six roll pieces. Stove dishes come on
+// their own: the bowl or plate takes the whole board.
 export function makeOrders(dayIndex, seed = Date.now()) {
   const day = DAYS[dayIndex];
   const rand = mulberry(seed);
@@ -29,9 +31,29 @@ export function makeOrders(dayIndex, seed = Date.now()) {
     if (piece.toppings.ikura) piece.toppings.ikura = BUILD.ikuraTarget;
     return piece;
   };
+  const hotPiece = (kind) => {
+    if (kind === 'gyoza') return { gyoza: HOT.gyoza.count };
+    const u = pick(day.hot.udon);
+    return { udon: u, toppings: Object.fromEntries(UDON[u].toppings.map((t) => [t, true])) };
+  };
   for (let c = 0; c < day.customers; c++) {
     let count = day.pieces[0] + Math.floor(rand() * (day.pieces[1] - day.pieces[0] + 1));
     const pieces = [];
+    const look0 = looks[c % looks.length];
+    // A stove dish: the day's first guest orders the new one.
+    const hot = day.hot;
+    if (hot && ((c === 0 && hot.first) || rand() < hot.chance)) {
+      const kinds = [...(hot.udon ? ['udon'] : []), ...(hot.gyoza ? ['gyoza'] : [])];
+      const first = c === 0 && hot.first;
+      let piece = hotPiece(first || pick(kinds));
+      // Regulars who love a stove dish ask for it when they can.
+      const [fk, fw] = look0.fav.split(':');
+      if (!first && fk === 'u' && hot.udon && hot.udon.includes(fw) && rand() < 0.6) piece = { udon: fw, toppings: Object.fromEntries(UDON[fw].toppings.map((t) => [t, true])) };
+      const rush = c >= r0 && c <= r1;
+      // Stove dishes take longer, so their guests wait a little longer.
+      orders.push({ look: look0, pieces: [piece], patience: day.patience * 1.15 * (rush ? RUSH.patience : 1), rush });
+      continue;
+    }
     if (day.maki && rand() < day.makiChance) {
       pieces.push({ maki: pick(day.maki), wasabi: 0, toppings: {} });
       count = Math.min(count, 1) - (c === 0 && dayIndex === 3 ? 1 : 0); // the first roll of Day 4 comes alone
@@ -54,12 +76,15 @@ export function makeOrders(dayIndex, seed = Date.now()) {
 }
 
 export const isMaki = (p) => !!p.maki;
-export const nigiriOf = (order) => order.pieces.filter((p) => !p.maki);
+export const isHot = (p) => !!(p.udon || p.gyoza);
+export const nigiriOf = (order) => order.pieces.filter((p) => !p.maki && !isHot(p));
 export const makiOf = (order) => order.pieces.filter((p) => p.maki);
+export const hotOf = (order) => (order ? order.pieces.filter(isHot) : []);
 
 // Where things sit on the serving board for an order: nigiri x positions,
 // and the center of the roll's 3 by 2 grid.
 export function plateLayout(order) {
+  if (hotOf(order).length) return { nigiri: [], maki: null, hot: -0.55 };
   const n = nigiriOf(order).length;
   const m = makiOf(order).length;
   if (!m) return { nigiri: { 1: [-0.55], 2: [-1.85, 0.75], 3: [-2.3, -0.75, 0.8] }[Math.max(1, Math.min(3, n))], maki: null };
@@ -67,6 +92,8 @@ export function plateLayout(order) {
 }
 
 export function describePiece(p) {
+  if (p.udon) return [UDON[p.udon].label, ...Object.keys(p.toppings).map((t) => HOT_TOPPINGS[t].label)];
+  if (p.gyoza) return [`Gyoza ×${p.gyoza}`];
   if (p.maki) return [FILLINGS[p.maki].roll];
   const lines = [`${FISH[p.fish].label} nigiri`];
   if ((p.fish !== 'tamago' && p.fish !== 'unagi') || p.wasabi) lines.push(p.wasabi ? `${cap(BUILD.wasabiLevels[p.wasabi])} wasabi` : 'No wasabi');
@@ -97,12 +124,29 @@ export function scorePlate(order, built, waited) {
   const want = order.pieces.map((p, i) => ({ ...p, i, used: false }));
   const results = [];
   for (const b of built) {
-    const same = (w) => (b.maki ? w.maki === b.maki : !w.maki && w.fish === b.fish);
-    const kind = (w) => !!w.maki === !!b.maki;
+    const same = (w) => (b.udon ? w.udon === b.udon : b.gyoza ? !!w.gyoza : b.maki ? w.maki === b.maki : !w.maki && !isHot(w) && w.fish === b.fish);
+    const kind = (w) => !!w.maki === !!b.maki && !!w.udon === !!b.udon && !!w.gyoza === !!b.gyoza;
     let match = want.find((w) => !w.used && same(w)) || want.find((w) => !w.used && kind(w)) || want.find((w) => !w.used);
     if (!match) continue;
     match.used = true;
     const wrongFish = !same(match);
+    // Stove dishes score their own steps: boil, dashi and toppings for udon;
+    // filling, pleats and frying for gyoza.
+    if (b.udon || b.gyoza) {
+      if (wrongFish) {
+        results.push({ fish: b.udon || 'gyoza', wrongFish, rice: 0, cut: 0, build: 0 });
+        continue;
+      }
+      if (b.udon) {
+        const asked = Object.keys(match.toppings || {});
+        const given = Object.keys(b.toppings || {});
+        let top = 1;
+        for (const t of asked) if (!given.includes(t)) top -= 1 / asked.length;
+        for (const t of given) if (!asked.includes(t)) top -= 0.3;
+        results.push({ fish: b.udon, rice: clamp01(b.boil * 0.7 + b.stir * 0.3), cut: clamp01(b.pour), build: clamp01(top) });
+      } else results.push({ fish: 'gyoza', rice: clamp01(b.fill), cut: clamp01(b.pleat), build: clamp01(b.fry) });
+      continue;
+    }
     const rice = scoopScore(b.scoop) * 0.4 + b.shape * 0.6;
     const cut = wrongFish ? 0 : b.cut;
     const wasabi = [1, 0.5, 0, 0][Math.min(3, Math.abs(b.wasabi - (match.wasabi || 0)))];
@@ -126,12 +170,21 @@ export function scorePlate(order, built, waited) {
   const w = SCORE.weights;
   const parts = { rice: avg('rice'), cut: avg('cut'), build: avg('build'), wait };
   const total = Math.round(100 * (parts.rice * w.rice + parts.cut * w.cut + parts.build * w.build + parts.wait * w.wait));
-  return { total, parts, results, missing, extra: built.length - (order.pieces.length - missing) };
+  const hot = hotOf(order)[0];
+  const labels = hot ? (hot.udon ? ['Boil', 'Dashi', 'Toppings'] : ['Filling', 'Pleats', 'Frying']) : ['Rice', 'Cut', 'Build'];
+  return { total, parts, results, missing, labels, extra: built.length - (order.pieces.length - missing) };
 }
 
 // Bigger orders tip more; a roll counts as one and a half pieces of work.
 export function orderSize(order) {
-  return order.pieces.reduce((n, p) => n + (p.maki ? 1.5 : 1), 0);
+  return order.pieces.reduce((n, p) => n + (isHot(p) ? 2 : p.maki ? 1.5 : 1), 0);
+}
+
+// 1 inside the band, falling off over `fall` outside it.
+export function bandScore(v, [a, b], fall = 0.25) {
+  if (v >= a && v <= b) return 1;
+  const d = v < a ? a - v : v - b;
+  return clamp01(1 - d / fall);
 }
 
 export function tipFor(total, dayIndex, size = 1) {

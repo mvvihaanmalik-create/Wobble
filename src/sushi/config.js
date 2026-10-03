@@ -8,7 +8,7 @@ export const GAME = {
 
 // Where things sit on the counter (world space, counter top at y = 0).
 export const LAYOUT = {
-  counter: { x0: -16, x1: 16, zCustomer: -3.5, zChef: 4.6, thickness: 0.7 },
+  counter: { x0: -25, x1: 16, zCustomer: -3.5, zChef: 4.6, thickness: 0.7 },
   tub: { x: -10, z: 1.3, radius: 2.7, height: 1.35 }, // hangiri rice tub
   mat: { x: -5.4, z: 1.6 }, // where rice is pressed
   board: { x: 0, z: 1.5, w: 9.4, d: 4.6, h: 0.32 }, // cutting board
@@ -21,6 +21,9 @@ export const LAYOUT = {
   queue: { x: 9.5, z: -12.5, y: -2.6, scale: 2.3 }, // next in line
   sous: { x: -7.9, z: -2.5, y: 0, scale: 1.6, turn: 0.35 }, // the sous chef, perched on the counter by the tub
   sousTitle: { x: 7.6, z: -6, y: -0.3, scale: 2.8, turn: -0.4 }, // on the title, next to the guest
+  // The stove at the far left of the counter: a pot for udon, a pan for gyoza,
+  // the udon bowl in front of the pot and the gyoza board in front of the pan.
+  stove: { x: -19.5, z: 0.6, top: 0.5, pot: [-21.4, 0.6], pan: [-17.6, 0.6], bowl: [-21.4, 3.2], prep: [-17.6, 3.2] },
 };
 
 // Camera angle for each station. fitW is the world width that must stay in
@@ -31,6 +34,10 @@ export const VIEWS = {
   counter: { pos: [0, 8.4, 13.5], target: [0, 2.6, -6], focus: [0, 2, -7.4], bokeh: 3.2, fov: 40, fitW: 17, portrait: { pos: [0, 7.4, 12], target: [0, 1.2, -5], focus: [0, 1.8, -7.4], bokeh: 3.2, fov: 40, fitW: 10 } },
   rice: { pos: [-7.6, 11.5, 7.2], target: [-7.6, 0.2, 1.3], focus: [-7.2, 0.6, 1.5], bokeh: 2.2, fov: 36, fitW: 11, portrait: { pos: [-8, 13.5, 9.2], target: [-8, 0.2, 3.1], focus: [-7.4, 0.6, 1.6], bokeh: 2.2, fov: 36, fitW: 9.5 } },
   knife: { pos: [-0.2, 2.9, 10.5], target: [-0.2, 0.85, 1.3], focus: [1.8, 1.1, 1.9], bokeh: 4.2, fov: 30, fitW: 10.5, portrait: { pos: [2.2, 3.4, 9.5], target: [2.2, 0.4, 1.3], focus: [2.4, 1.1, 1.9], bokeh: 4.2, fov: 30, fitW: 6 } },
+  stove: { pos: [-20.1, 10.4, 9.6], target: [-20.1, 0.6, 1.9], focus: [-19.5, 0.9, 2.1], bokeh: 2.4, fov: 36, fitW: 10.8, portrait: { pos: [-19.5, 13.5, 10.6], target: [-19.5, 0.4, 2.6], focus: [-19.5, 0.9, 2.2], bokeh: 2.4, fov: 36, fitW: 8.4 } },
+  // Close-ups for each stove dish, the way Cooking Mama frames a step.
+  stoveUdon: { pos: [-21.1, 10.6, 10.4], target: [-21.1, 0.4, 2.9], focus: [-21.2, 1, 2.2], bokeh: 2.2, fov: 36, fitW: 7.8, portrait: { pos: [-21.1, 13, 11.2], target: [-21.1, 0.3, 3.2], focus: [-21.2, 1, 2.2], bokeh: 2.2, fov: 36, fitW: 6.4 } },
+  stoveGyoza: { pos: [-17.8, 10.6, 10.4], target: [-17.8, 0.3, 3.0], focus: [-17.7, 0.5, 2.6], bokeh: 2.2, fov: 36, fitW: 7.8, portrait: { pos: [-17.8, 13, 11.2], target: [-17.8, 0.3, 3.3], focus: [-17.7, 0.5, 2.6], bokeh: 2.2, fov: 36, fitW: 6.4 } },
   build: { pos: [8.7, 7.6, 10.2], target: [8.7, 0.3, 2.9], focus: [10.2, 0.8, 1.6], bokeh: 3, fov: 36, fitW: 11, portrait: { pos: [9.4, 11, 10.2], target: [9.4, 0.3, 3.6], focus: [10.4, 0.8, 1.6], bokeh: 3, fov: 36, fitW: 8.6 } },
 };
 export const CAMERA = {
@@ -80,6 +87,24 @@ export const TOPPINGS = {
   nori: { label: 'Nori belt' },
 };
 
+// Stove dishes. Rates are per second; bands are where to stop for a clean step.
+export const HOT = {
+  udon: { cookRate: 1 / 7, cookBand: [0.6, 0.8], stirs: 3, pourRate: 0.42, pourBand: [0.66, 0.84], pourOver: 0.95 },
+  gyoza: { count: 3, fillRate: 0.75, fillBand: [0.5, 0.72], fillOver: 0.9, pleats: 5, pleatTime: 2.8, brownRate: 1 / 6.5, brownBand: [0.55, 0.78], steamRate: 1 / 4.5, steamBand: [0.6, 0.85] },
+};
+
+export const UDON = {
+  kitsune: { label: 'Kitsune udon', jp: 'きつねうどん', toppings: ['kamaboko', 'scallion', 'aburaage'] },
+  tempura: { label: 'Tempura udon', jp: '天ぷらうどん', toppings: ['kamaboko', 'scallion', 'tempura'] },
+};
+
+export const HOT_TOPPINGS = {
+  kamaboko: { label: 'Kamaboko' },
+  scallion: { label: 'Scallion' },
+  aburaage: { label: 'Aburaage' },
+  tempura: { label: 'Ebi tempura' },
+};
+
 // Each day adds something. pieces: [min, max] per order.
 export const DAYS = [
   // fish: nigiri on the menu. maki: roll fillings, with makiChance per order.
@@ -92,6 +117,11 @@ export const DAYS = [
   { title: 'Day 5', note: 'Unagi, grilled and glazed.', customers: 5, fish: ['salmon', 'unagi', 'tamago'], toppings: ['sesame', 'scallion', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.3, pieces: [1, 2], patience: 210, dish: 'unagi' },
   { title: 'Day 6', note: 'Rush hour. They keep coming.', customers: 7, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.25, pieces: [1, 2], patience: 175, rush: [2, 5] },
   { title: 'Day 7', note: 'Omakase night. Anything goes.', customers: 6, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.4, pieces: [2, 2], patience: 240, rush: [3, 4] },
+  // hot: stove dishes. udon: kinds on the menu; gyoza: on the menu; chance per
+  // order; first: the dish the first guest of the day orders.
+  { title: 'Day 8', note: 'Udon. Boil, stir and pour.', customers: 5, fish: ['salmon', 'tuna', 'tamago'], toppings: ['sesame', 'scallion', 'ikura', 'nori'], maki: ['kappa', 'tekka'], makiChance: 0.2, pieces: [1, 2], patience: 230, hot: { udon: ['kitsune', 'tempura'], chance: 0.5, first: 'udon' }, dish: 'udon' },
+  { title: 'Day 9', note: 'Gyoza. Fill, pleat and fry.', customers: 5, fish: ['salmon', 'tuna', 'unagi'], toppings: ['sesame', 'scallion', 'sauce', 'nori'], maki: ['kappa', 'sake'], makiChance: 0.2, pieces: [1, 2], patience: 250, hot: { udon: ['kitsune', 'tempura'], gyoza: true, chance: 0.55, first: 'gyoza' }, dish: 'gyoza' },
+  { title: 'Day 10', note: 'Izakaya night. Everything, fast.', customers: 7, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.25, pieces: [1, 2], patience: 230, hot: { udon: ['kitsune', 'tempura'], gyoza: true, chance: 0.4 }, rush: [3, 5] },
 ];
 
 // Rush hour, combos and speed.
@@ -123,7 +153,7 @@ export const CUSTOMER_LOOKS = [
   { name: 'Ume', species: 'bunny', kind: 'Bunny', fav: 'm:kappa' },
   { name: 'Azuki', species: 'bear', kind: 'Bear', fav: 'n:unagi' },
   { name: 'Sasa', species: 'panda', kind: 'Panda', fav: 'm:tekka' },
-  { name: 'Yuzu', species: 'fox', kind: 'Fox', fav: 'n:tuna' },
+  { name: 'Yuzu', species: 'fox', kind: 'Fox', fav: 'u:kitsune' }, // a fox who loves kitsune udon, of course
 ];
 
 // Every dish in the Sushi book. key: n:<fish> for nigiri, m:<filling> for
@@ -136,8 +166,12 @@ export const DISHES = [
   { key: 'm:tekka', name: 'Tuna roll', jp: '鉄火巻き', day: 3, piece: { maki: 'tekka', wasabi: 0, toppings: {} } },
   { key: 'n:unagi', name: 'Unagi nigiri', jp: '鰻', day: 4, piece: { fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } } },
   { key: 'm:sake', name: 'Salmon roll', jp: '鮭巻き', day: 4, piece: { maki: 'sake', wasabi: 0, toppings: {} } },
+  { key: 'u:kitsune', name: 'Kitsune udon', jp: 'きつねうどん', day: 7, piece: { udon: 'kitsune' } },
+  { key: 'u:tempura', name: 'Tempura udon', jp: '天ぷらうどん', day: 7, piece: { udon: 'tempura' } },
+  { key: 'g:gyoza', name: 'Gyoza', jp: '餃子', day: 8, piece: { gyoza: 3 } },
 ];
-export const dishKey = (p) => (p.maki ? `m:${p.maki}` : `n:${p.fish}`);
+// u:<kind> for udon, g:gyoza, m:<filling> for rolls, n:<fish> for nigiri.
+export const dishKey = (p) => (p.udon ? `u:${p.udon}` : p.gyoza ? 'g:gyoza' : p.maki ? `m:${p.maki}` : `n:${p.fish}`);
 
 export const PERF = {
   slowFrameMs: 22, // average frame time that counts as slow

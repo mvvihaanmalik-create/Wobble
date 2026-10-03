@@ -1052,6 +1052,26 @@ body {
 .gesture[data-kind='stroke'] .gesture-paw {
   animation: paw-stroke 1.5s cubic-bezier(0.5, 0, 0.3, 1) infinite;
 }
+.gesture[data-kind='circle'] .gesture-paw {
+  animation: paw-circle 1.4s linear infinite;
+}
+@keyframes paw-circle {
+  0% {
+    transform: translate(46px, 0) scale(0.92);
+  }
+  25% {
+    transform: translate(0, 30px) scale(0.92);
+  }
+  50% {
+    transform: translate(-46px, 0) scale(0.92);
+  }
+  75% {
+    transform: translate(0, -30px) scale(0.92);
+  }
+  100% {
+    transform: translate(46px, 0) scale(0.92);
+  }
+}
 .gesture[data-kind='drag'] .gesture-paw {
   animation: paw-stroke 2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
 }
@@ -2891,4 +2911,9 @@ body {
   .banner-text {
     transform: none;
   }
+}
+
+/* Stations the day does not use stay off the hotbar. */
+#stations button[hidden] {
+  display: none;
 }

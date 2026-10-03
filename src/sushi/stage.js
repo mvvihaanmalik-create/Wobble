@@ -116,7 +116,7 @@ export class Stage {
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     const sc = key.shadow.camera;
-    Object.assign(sc, { left: -18, right: 18, top: 12, bottom: -12, near: 4, far: 45 });
+    Object.assign(sc, { left: -26, right: 18, top: 12, bottom: -12, near: 4, far: 50 });
     key.shadow.bias = -0.0003;
     key.shadow.normalBias = 0.025;
     key.shadow.radius = 5;
@@ -124,7 +124,7 @@ export class Stage {
 
     // Pin spots that pool light on each station.
     this.spots = [];
-    for (const [x, z, power] of [[-8.5, 1.4, 55], [0, 1.4, 45], [9.5, 1.8, 65], [0, -7.4, 90]]) {
+    for (const [x, z, power] of [[-8.5, 1.4, 55], [0, 1.4, 45], [9.5, 1.8, 65], [0, -7.4, 90], [-19.5, 1.8, 60]]) {
       const s = new SpotLight('#ffd9a8', power, 26, 0.42, 0.75, 1.6);
       s.position.set(x, 13, z + 2);
       s.target.position.set(x, 0, z);

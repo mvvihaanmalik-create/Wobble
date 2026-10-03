@@ -3,9 +3,11 @@ import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, dishKey } from 
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
 import { contactShadow, Customer, Paw, SousChef } from './critters.js';
-import { makeOrders, makiOf, nigiriOf, orderSize, perfectDay, plateLayout, rankFor, scorePlate, starsFor, tipFor } from './orders.js';
+import { hotOf, makeOrders, makiOf, nigiriOf, orderSize, perfectDay, plateLayout, rankFor, scorePlate, starsFor, tipFor } from './orders.js';
 import { MAKI, makiSpots, MakiSheet, platedMaki } from './maki.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
+import { StoveStation } from './stove.js';
+import { Stove, warmHot } from './hot.js';
 import { GameUI } from './ui.js';
 import { BarSound } from './audio.js';
 import { LofiMusic } from './music.js';
@@ -16,7 +18,7 @@ import { PhotoBooth } from './booth.js';
 import { warmFoods } from './food.js';
 import { loadWall, postRun, savedName } from './wall.js';
 
-const STATIONS = ['counter', 'rice', 'knife', 'build'];
+const STATIONS = ['counter', 'rice', 'knife', 'build', 'stove'];
 
 // The dish each day introduces, for the intro card's photo.
 const SHOWCASE = {
@@ -24,6 +26,8 @@ const SHOWCASE = {
   tamago: { name: 'Tamago nigiri', jp: '玉子', pieces: [{ fish: 'tamago', wasabi: 0, toppings: { nori: true } }] },
   maki: { name: 'Hosomaki rolls', jp: '細巻き', pieces: [{ maki: 'kappa', wasabi: 0, toppings: {} }] },
   unagi: { name: 'Unagi nigiri', jp: '鰻', pieces: [{ fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } }] },
+  udon: { name: 'Kitsune udon', jp: 'きつねうどん', pieces: [{ udon: 'kitsune', toppings: { kamaboko: true, scallion: true, aburaage: true } }] },
+  gyoza: { name: 'Gyoza', jp: '餃子', pieces: [{ gyoza: 3 }] },
 };
 const ENTRANCE = new Vector3(-17, LAYOUT.customer.y, LAYOUT.customer.z);
 
@@ -50,6 +54,8 @@ export class Game {
       setTimeout(() => location.reload(), 900);
     });
     this.set = new SushiSet(this.stage.scene);
+    this.stove = new Stove();
+    this.stage.scene.add(this.stove.group);
     this.sound = new BarSound();
     this.music = new LofiMusic(this.sound);
     // The band starts with the first tap or key (browsers need a gesture).
@@ -108,6 +114,7 @@ export class Game {
       rice: new RiceStation(this),
       knife: new KnifeStation(this),
       build: new BuildStation(this),
+      stove: new StoveStation(this),
     };
     this.station = 'counter';
     this.bindInput();
@@ -136,6 +143,7 @@ export class Game {
     sheet.addFilling('kappa');
     temp.add(sheet.group);
     for (const f of ['kappa', 'tekka', 'sake']) temp.add(platedMaki(f));
+    temp.add(warmHot());
     // Draw everything regardless of the camera, shadows included, so each
     // material compiles in the same variants play will use.
     temp.traverse((o) => {
@@ -214,6 +222,7 @@ export class Game {
     this.mode = 'intro';
     this.placeSous(LAYOUT.sous, true);
     this.ui.setDay(dayIndex, 0, this.orders.length, 0);
+    this.ui.showStations(DAYS[dayIndex].hot ? STATIONS : STATIONS.filter((s) => s !== 'stove'));
     this.stage.goTo('counter');
     const go = () => {
       this.ui.hideCard();
@@ -293,8 +302,9 @@ export class Game {
     this.order.taken = true;
     this.sound.plop();
     this.customer.poke(0.5);
+    const next = hotOf(this.order).length ? 'stove' : 'rice';
     setTimeout(() => {
-      if (this.station === 'counter' && this.mode === 'play') this.goStation('rice');
+      if (this.station === 'counter' && this.mode === 'play') this.goStation(next);
     }, 650);
   }
 
@@ -398,7 +408,18 @@ export class Game {
     if (!this.order) return [];
     let n = 0;
     let m = 0;
+    const stove = this.stations.stove;
     return this.order.pieces.map((want) => {
+      if (want.udon || want.gyoza) {
+        const st = stove.order === this.order ? stove.state : 'none';
+        const plated = !!this.hotDish;
+        if (want.udon) {
+          const tops = plated ? this.hotDish.built.toppings : stove.bowl ? Object.fromEntries(Object.keys(stove.bowl.tops).map((k) => [k, true])) : {};
+          return { hot: true, boiled: plated || ['pour', 'top', 'done'].includes(st), dashi: plated || ['top', 'done'].includes(st), tops, plated };
+        }
+        const made = plated ? want.gyoza : stove.order === this.order ? stove.k || 0 : 0;
+        return { hot: true, made, fried: plated, plated };
+      }
       if (want.maki) {
         const r = this.rolls[m++];
         const sheet = !r && m === this.rolls.length + 1 ? this.stations.rice.sheet : null;
@@ -414,6 +435,12 @@ export class Game {
   // with the right filling, cut and plated.
   plateMatches() {
     if (!this.plateComplete()) return false;
+    const hot = hotOf(this.order)[0];
+    if (hot) {
+      if (hot.gyoza) return true;
+      const given = Object.keys(this.hotDish.built.toppings || {});
+      return hot.udon === this.hotDish.built.udon && given.length === Object.keys(hot.toppings).length && given.every((t) => hot.toppings[t]);
+    }
     const rollsOk = makiOf(this.order).every((want, i) => this.rolls[i] && this.rolls[i].filling === want.maki);
     return (
       rollsOk &&
@@ -428,6 +455,7 @@ export class Game {
 
   plateComplete() {
     if (!this.order) return false;
+    if (hotOf(this.order).length) return !!this.hotDish;
     const n = nigiriOf(this.order).length;
     const m = makiOf(this.order).length;
     return this.pieces.length >= n && this.pieces.every((p) => p.slice) && this.rolls.filter((r) => r.plated).length >= m;
@@ -435,7 +463,7 @@ export class Game {
 
   // Something on the board to serve.
   hasFood() {
-    return this.pieces.some((p) => p.slice) || this.rolls.some((r) => r.plated);
+    return !!this.hotDish || this.pieces.some((p) => p.slice) || this.rolls.some((r) => r.plated);
   }
 
   // --- Rolls -------------------------------------------------------------------
@@ -521,10 +549,19 @@ export class Game {
       r.group.removeFromParent();
       for (const p of r.pieces) p.removeFromParent();
     }
+    if (this.hotDish) {
+      this.hotDish.group.removeFromParent();
+      if (this.hotDish.bowl) this.hotDish.bowl.dispose();
+      if (this.hotDish.plate) this.hotDish.plate.dispose();
+      this.hotDish = null;
+    }
     this.pieces = [];
     this.tray = [];
     this.rolls = [];
-    if (this.stations) this.stations.rice.reset();
+    if (this.stations) {
+      this.stations.rice.reset();
+      this.stations.stove.reset();
+    }
   }
 
   // --- Serving -----------------------------------------------------------------
@@ -545,6 +582,7 @@ export class Game {
       toppings: p.tops,
     }));
     for (const r of this.rolls.filter((x) => x.plated)) built.push({ maki: r.filling, scoop: r.scoop, shape: r.spreadQuality, cut: r.cutScore, wasabi: 0, dx: 0, toppings: {} });
+    if (this.hotDish) built.push(this.hotDish.built);
     const score = scorePlate(this.order, built, this.order.waited || 0);
     // Tip: the plate, then rush, combo and speed on top.
     const bonuses = [];
@@ -571,7 +609,7 @@ export class Game {
     }
     const tip = Math.round((tipFor(score.total, this.day, orderSize(this.order)) * mult) / 10) * 10;
     this.ui.combo(this.combo);
-    const photo = this.booth.platePhoto(480, 300, this.rolls.length ? 2 : this.pieces.length);
+    const photo = this.booth.platePhoto(480, 300, this.rolls.length || this.hotDish ? 2 : this.pieces.length);
     photo.then((img) => (this.served = [...(this.served || []), { img, score: score.total, tip, guest: this.order.look.name, species: this.order.look.species, day: this.day }]));
     await this.wait(350);
     this.sound.whoosh();
@@ -595,6 +633,31 @@ export class Game {
         await this.wait(200);
       }
       p.group.visible = false;
+    }
+    // Udon in three big slurps; gyoza one at a time.
+    const hd = this.hotDish;
+    if (hd && hd.bowl) {
+      for (let k = 1; k <= 3; k++) {
+        c.setExpression(k % 2 ? 'open' : 'chew');
+        this.sound.slurp();
+        c.body.kickAll(0, 1.4, -0.9);
+        const from = (k - 1) / 3;
+        for (let f = 0; f <= 6; f++) {
+          hd.bowl.eat(from + (f / 6) * (1 / 3));
+          await this.wait(40);
+        }
+        await this.wait(260);
+      }
+    } else if (hd && hd.plate) {
+      for (const gz of hd.plate.gyozas) {
+        c.setExpression('open');
+        this.sound.chomp();
+        c.body.kickAll(0, 1.6, -0.8);
+        await this.tweenP({ obj: gz.group, scale: 0.001, duration: 0.18 });
+        gz.group.visible = false;
+        c.setExpression('chew');
+        await this.wait(260);
+      }
     }
     // Rolls go two pieces a bite.
     const rollPieces = this.rolls.flatMap((r) => (r.plated ? r.pieces : []));
@@ -710,7 +773,7 @@ export class Game {
     const book = this.progress.book;
     const news = [];
     for (const b of built) {
-      const key = b.maki ? `m:${b.maki}` : `n:${b.fish}`;
+      const key = dishKey(b);
       const d = (book.dishes[key] ||= { served: 0, best: 0 });
       if (!d.served) news.push(DISHES.find((x) => x.key === key)?.name);
       d.served++;
@@ -913,17 +976,22 @@ export class Game {
         if (this.mode === 'play') return this.openPause();
       }
       if (this.mode !== 'play' || e.repeat || e.target.tagName === 'INPUT') return;
-      const i = ['1', '2', '3', '4'].indexOf(e.key);
-      if (i >= 0) this.goStation(STATIONS[i]);
-      if (e.code === 'Space' && (this.station === 'rice' || this.station === 'counter')) {
+      const i = ['1', '2', '3', '4', '5'].indexOf(e.key);
+      if (i >= 0 && this.ui.stationShown(STATIONS[i])) this.goStation(STATIONS[i]);
+      if (e.code === 'Space' && (this.station === 'rice' || this.station === 'counter' || this.station === 'stove')) {
         e.preventDefault();
         this.pointerPos = { x: window.innerWidth / 2, y: window.innerHeight * 0.45 };
         if (this.station === 'counter') this.takeOrder();
-        else this.stations.rice.down();
+        else if (this.station === 'stove') {
+          // Space lifts the noodles while they boil, like the button.
+          if (this.stations.stove.state === 'boil') this.stations.stove.lift();
+          else this.stations.stove.down({ clientX: this.pointerPos.x, clientY: this.pointerPos.y });
+        } else this.stations.rice.down();
       }
     });
     window.addEventListener('keyup', (e) => {
       if (this.mode === 'play' && e.code === 'Space' && this.station === 'rice') this.stations.rice.up();
+      if (this.mode === 'play' && e.code === 'Space' && this.station === 'stove') this.stations.stove.up();
     });
   }
 
@@ -1226,6 +1294,8 @@ export class Game {
     for (const p of this.pieces) p.update(dt);
     for (const s of this.tray) s.update(dt);
     for (const r of this.rolls) r.update(dt);
+    this.stove.update(dt);
+    if (this.hotDish) (this.hotDish.bowl || this.hotDish.plate).update(dt);
     const dragging = this.stations.build.drag;
     if (dragging) dragging.slice.update(dt);
     if (this.customer) {

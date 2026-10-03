@@ -101,6 +101,106 @@ export class BarSound extends Sound {
     }
   }
 
+  // Boiling water: a soft low blup.
+  bubble() {
+    if (!this.ready()) return;
+    const t = this.ctx.currentTime + 0.005;
+    const f = 160 + Math.random() * 140;
+    this.tone(t, 'sine', f, f * 1.9, 0.07, 0.07, 0.004);
+  }
+
+  // A crackly hiss that runs while something fries. level 0 stops it.
+  sizzle(level) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    if (level > 0 && this.ready()) {
+      if (!this.sizzleSrc) {
+        const src = ctx.createBufferSource();
+        src.buffer = this.noise;
+        src.loop = true;
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 2600;
+        const g = ctx.createGain();
+        g.gain.value = 0;
+        // Crackle: the hiss flutters at a jittery rate.
+        const lfo = ctx.createOscillator();
+        lfo.type = 'square';
+        lfo.frequency.value = 17;
+        const depth = ctx.createGain();
+        depth.gain.value = 0.35;
+        const amp = ctx.createGain();
+        amp.gain.value = 0.65;
+        lfo.connect(depth).connect(amp.gain);
+        src.connect(hp).connect(amp).connect(g).connect(this.master);
+        src.start();
+        lfo.start();
+        this.sizzleSrc = { src, lfo, g };
+      }
+      this.sizzleSrc.lfo.frequency.setTargetAtTime(11 + Math.random() * 14, t, 0.05);
+      this.sizzleSrc.g.gain.setTargetAtTime(0.11 * level, t, 0.08);
+    } else if (this.sizzleSrc) {
+      const { src, lfo, g } = this.sizzleSrc;
+      g.gain.setTargetAtTime(0, t, 0.08);
+      src.stop(t + 0.5);
+      lfo.stop(t + 0.5);
+      this.sizzleSrc = null;
+    }
+  }
+
+  // Dashi pouring from the ladle, while held.
+  pouring(on) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    if (on && this.ready() && !this.pourSrc) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 700;
+      bp.Q.value = 1.2;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.gain.setTargetAtTime(0.16, t, 0.05);
+      src.connect(bp).connect(g).connect(this.master);
+      src.start();
+      this.pourSrc = { src, g, bp };
+    } else if (!on && this.pourSrc) {
+      this.pourSrc.g.gain.setTargetAtTime(0, t, 0.05);
+      this.pourSrc.src.stop(t + 0.3);
+      this.pourSrc = null;
+    }
+    if (this.pourSrc) this.pourSrc.bp.frequency.setTargetAtTime(600 + Math.random() * 300, t, 0.05);
+  }
+
+  // Pinching a pleat in a gyoza wrapper.
+  pinch() {
+    if (!this.ready()) return;
+    const t = this.ctx.currentTime + 0.005;
+    this.tone(t, 'sine', 820, 560, 0.06, 0.12, 0.002);
+    this.noiseBurst(t, 0.05, 2600, 1400, 3, 0.08);
+  }
+
+  // A big happy slurp of udon.
+  slurp() {
+    if (!this.ready()) return;
+    const t = this.ctx.currentTime + 0.005;
+    this.noiseBurst(t, 0.32, 900, 3200, 2.5, 0.2);
+    this.tone(t, 'sine', 260, 520, 0.3, 0.08);
+  }
+
+  // The pan lid going on or off: a small metal clank.
+  lid() {
+    if (!this.ready()) return;
+    const t = this.ctx.currentTime + 0.005;
+    this.tone(t, 'triangle', 1180, 1150, 0.25, 0.08, 0.002);
+    this.tone(t, 'sine', 1720, 1700, 0.35, 0.05, 0.002);
+    this.noiseBurst(t, 0.06, 4000, 2500, 2, 0.06);
+  }
+
   whoosh() {
     if (!this.ready()) return;
     const t = this.ctx.currentTime + 0.005;

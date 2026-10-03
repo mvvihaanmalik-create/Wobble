@@ -13,7 +13,7 @@ import {
 import { FISH, KNIFE, LAYOUT, RICE } from './config.js';
 import { BLOCKS, FishBlock, FishSlice, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
-import { cutScore, makiOf, nigiriOf, scoopScore } from './orders.js';
+import { cutScore, hotOf, makiOf, nigiriOf, scoopScore } from './orders.js';
 import { FILLINGS, MAKI, MakiSheet } from './maki.js';
 import { Paw } from './critters.js';
 
@@ -23,7 +23,7 @@ const _v3 = new Vector3();
 
 const v3 = () => new Vector3();
 
-class Station {
+export class Station {
   constructor(game) {
     this.g = game;
   }
@@ -72,6 +72,9 @@ export class CounterStation extends Station {
     } else if (g.plateComplete()) {
       g.ui.hint('Plate is ready. Serve it from the build station.');
       g.ui.actions([{ label: 'Serve', primary: true, onClick: () => g.serve() }]);
+    } else if (hotOf(g.order).length) {
+      g.ui.hint('This one is cooked at the stove.');
+      g.ui.actions([{ label: 'To the stove', primary: true, onClick: () => g.goStation('stove') }]);
     } else {
       g.ui.hint('Make the order. Rice first.');
       g.ui.actions([{ label: 'To the rice', onClick: () => g.goStation('rice') }]);
@@ -920,6 +923,10 @@ export class BuildStation extends Station {
     const complete = g.plateMatches();
     g.ui.actions([{ label: 'Serve', primary: complete, disabled: !g.hasFood(), onClick: () => g.serve() }]);
     if (!g.order || !g.order.taken) return g.ui.hint('Take an order at the counter first.');
+    if (hotOf(g.order).length) {
+      g.gesture(null);
+      return g.ui.hint(complete ? 'Hot and ready. Serve it.' : 'This one is cooked at the stove.');
+    }
     if (!g.pieces.length && !g.rolls.length) return g.ui.hint('No rice yet. Make some at the rice station.');
     if (!g.pieces.length) return g.ui.hint(complete ? 'Looks ready. Serve it.' : 'The roll is on its way. Finish it at the knife.');
     if (this.drag) return g.ui.hint('Drop it on the rice.');

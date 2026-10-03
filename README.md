@@ -12,6 +12,7 @@ The game runs in the browser. The only server part is the wall: one small functi
 | 02 Rice 酢飯 | Over the rice tub | Hold to scoop, let go inside the green band. Then hold to press and let go in the green, three times. Press too hard and the rice squashes flat. |
 | 03 Knife 包丁 | Low, along the cutting board | Swipe down through the fish block along the dashed guide. Angle and thickness are scored. Salmon and tuna want a 45° cut, egg a straight one. |
 | 04 Build 盛付 | Three quarters, over the serving board | Tap the rice for wasabi (one tap per dab), drag a slice onto the rice, then add the toppings on the ticket. Serve. |
+| 05 Stove コンロ | Close over the pot or the pan (Days 8 to 10) | Udon and gyoza, step by step. See The stove below. |
 
 The guest eats it in three bites and reacts. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
 
@@ -47,7 +48,7 @@ At the end of a shift, the summary shows today's plate photos. Type a name and p
 - `npm run dev` and `npm run preview` serve the same API from memory, so the wall works locally with no setup. It resets when the server restarts.
 - Limits: names up to 16 letters, numbers, spaces and `._'-`. Photos are small JPEG data URLs (320 by 200, under 60 KB). Six posts per visitor per minute. The newest 48 plates and the best 100 shifts are kept.
 
-Seven days, each adding something:
+Ten days, each adding something:
 
 | Day | What's new |
 | --- | --- |
@@ -58,8 +59,30 @@ Seven days, each adding something:
 | 5 | Unagi, grilled and glazed, with tare and a nori belt. Salmon rolls. |
 | 6 | Rush hour: seven guests, and a rush mid shift. |
 | 7 | Omakase night: everything, two nigiri a plate. |
+| 8 | Udon: kitsune and tempura, at the new stove. |
+| 9 | Gyoza: fill, pleat and fry. |
+| 10 | Izakaya night: sushi and the stove, with a rush. |
 
 Each day has three star goals in tips, shown on its intro card. One star (or an average of 50) unlocks the next day. Stars and best tips show on the level select. Progress is kept in the browser.
+
+### The stove
+
+The left end of the counter has a little two-burner stove: a pot of water for udon, an iron pan for gyoza, a donburi in front of the pot and a folding board in front of the pan. The camera closes in on whichever dish the ticket asks for. Every step is graded, Cooking Mama style.
+
+**Udon** (kitsune with fried tofu, or tempura with a shrimp):
+1. **Drop:** tap the pot to drop the noodles in.
+2. **Stir:** draw circles over the pot, three times, so they do not stick.
+3. **Lift:** lift them when the boil timer is in the green. Too early is firm, too late is soggy. Wander off and they keep cooking.
+4. **Dashi:** hold to ladle broth into the bowl and let go at the line. Overfill it and Pochi ladles some back out.
+5. **Toppings:** add what the ticket says: kamaboko, scallion, and the aburaage or the ebi tempura.
+
+**Gyoza** (three to a plate):
+1. **Fill:** hold to spoon filling onto a wrapper and let go in the green. Overfill it and Pochi scoops some out.
+2. **Pleat:** a beat runs along the meter. Tap on each mark to pinch a pleat, five per gyoza.
+3. **Fry:** they sizzle in the pan. When the bottoms are golden, add water and the lid.
+4. **Steam:** lift the lid when the steam timer is in the green. They come out browned side up with a dish of sauce.
+
+Finished dishes slide down the counter onto the serving board, and the guest slurps or bites them away. Their score card reads Boil, Dashi and Toppings, or Filling, Pleats and Frying.
 
 ### Rolls
 
@@ -79,7 +102,7 @@ The six pieces then stand up on the serving board, cut face up. The cut faces ar
 - **Favourite:** a regular's favourite dish served at 85 or more adds 25%.
 - **Walkouts:** a guest whose patience runs out leaves without paying, and the combo breaks.
 
-Keys: `1` to `4` switch stations; hold `Space` to scoop and press; `Esc` pauses (resume, restart the day or quit to the title). The pause button in the top bar does the same on phones.
+Keys: `1` to `5` switch stations; hold `Space` to scoop and press; `Esc` pauses (resume, restart the day or quit to the title). The pause button in the top bar does the same on phones.
 
 The ticket ticks off each request as you go: wasabi and ikura show a count (`Wasabi 2/3`, `Ikura 4/5`), toppings turn green when added, and a 済 stamp lands when a piece matches. In the build station the tools switch to the next thing the ticket needs on their own, and a "!" marks the ones still missing. Guests lose patience on game time, so pausing or switching tabs costs nothing. Record makes a 6 second clip of the screen with the bar's name, the day, tips and the last plate's stars. Photo saves a PNG.
 
@@ -117,6 +140,7 @@ The bar has its own lofi band, written live in Web Audio (`src/sushi/music.js`).
 - **Never the same twice:** every eight bars it picks a new progression and makes up a new tune.
 - **Follows the game:** it is mellow on the title screen and the end-of-day card, grooves during a shift, and speeds up with extra hats in rush hour. Pausing muffles it, like a radio in the next room.
 - **Controls:** the note button in the top bar (or the "Music on" pill on the title screen) turns the music off and remembers the choice. The speaker button mutes everything. Clips you record include the music.
+- **Loud enough to hear:** the band plays straight into the limiter at about -24 dB, above the effects, and its bass and piano are left bright enough to carry on phone and laptop speakers. On iPhones it asks for media playback, so the ring/silent switch does not mute it.
 
 ### Loading
 
@@ -163,6 +187,8 @@ src/sushi/game.js      flow, customers, serving, input, capture, quality
 src/sushi/stations.js  counter, rice, knife and build stations
 src/sushi/food.js      rice, fish blocks and slices, toppings, nigiri pieces, nori belts
 src/sushi/maki.js      rolls: sheet, rolling, log, cut pieces, cut-face shader
+src/sushi/hot.js       stove, udon bowl, noodles, toppings, gyoza that fold and brown
+src/sushi/stove.js     the stove station: udon and gyoza steps
 src/sushi/critters.js  mochi animal guests, the sous chef, the chef's paw
 src/sushi/booth.js     ticket pictures and plate photos
 src/sushi/wall.js      the wall: posting, loading, local fallback

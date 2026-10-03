@@ -82,7 +82,7 @@ export class SushiSet {
     wall.position.set(0, 6, -17.4);
     this.group.add(wall);
     const slats = [];
-    for (let x = -26; x <= 26; x += 0.62) {
+    for (let x = -34; x <= 26; x += 0.62) {
       const g = new BoxGeometry(0.42, 22, 0.3);
       g.translate(x, 6, -17);
       slats.push(g);
@@ -101,11 +101,16 @@ export class SushiSet {
     slatMesh.receiveShadow = true;
     this.group.add(slatMesh);
     // Back shelf with sake bottles and cups behind the guests.
-    const shelf = shadowed(new Mesh(withFood(new BoxGeometry(30, 0.4, 2.2), 1, [0, 0, 3]), foodMaterial('geta')));
-    shelf.position.set(0, 1.9, -15.6);
-    const cabinet = shadowed(new Mesh(withFood(new BoxGeometry(30, 8, 2), 1, [0, 0, 5]), foodMaterial('walnut')), false, true);
-    cabinet.position.set(0, -2.3, -15.7);
-    this.group.add(shelf, cabinet);
+    const shelf = shadowed(new Mesh(withFood(new BoxGeometry(52, 0.4, 2.2), 1, [0, 0, 3]), foodMaterial('geta')));
+    shelf.position.set(-11, 1.9, -15.6);
+    const cabinet = shadowed(new Mesh(withFood(new BoxGeometry(52, 8, 2), 1, [0, 0, 5]), foodMaterial('walnut')), false, true);
+    cabinet.position.set(-11, -2.3, -15.7);
+    // A dark floor, so nothing past the counter's end is a void.
+    const floor = new Mesh(new PlaneGeometry(90, 40), plain.dark());
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(-8, -6.2, -4);
+    floor.receiveShadow = true;
+    this.group.add(shelf, cabinet, floor);
     const bottle = [new Vector2(0, 0), new Vector2(0.55, 0), new Vector2(0.62, 0.15), new Vector2(0.62, 1.5), new Vector2(0.3, 2.1), new Vector2(0.2, 2.7), new Vector2(0.24, 2.8), new Vector2(0, 2.8)];
     const cup = [new Vector2(0, 0), new Vector2(0.28, 0), new Vector2(0.36, 0.1), new Vector2(0.42, 0.5), new Vector2(0.38, 0.5), new Vector2(0.3, 0.14), new Vector2(0, 0.12)];
     const glazes = ['glazeIndigo', 'glazeShino', 'glazeRust', 'glazeCeladon', 'glazeTenmoku', 'glazeWhite'];

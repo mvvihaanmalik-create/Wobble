@@ -151,7 +151,7 @@ export const RECORD = {
 };
 
 export const AUDIO = {
-  volume: 0.32, // master volume
+  volume: 0.5, // master volume for effects
   squelchGapMs: 55, // minimum gap between squelches
 };
 

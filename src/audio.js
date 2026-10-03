@@ -11,9 +11,13 @@ export class Sound {
 
   unlock() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
+      // iOS can leave the context 'interrupted' after a call or a trip to
+      // the home screen; any tap brings it back.
+      if (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted') this.ctx.resume();
+      if (this.keepAlive && this.keepAlive.paused) this.keepAlive.play().catch(() => {});
       return;
     }
+    playThroughSilentSwitch(this);
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     const ctx = new AC();
@@ -139,6 +143,52 @@ export class Sound {
     this.tone(t, 'sine', 523.25, 523.25, 0.5, 0.16);
     this.tone(t + 0.12, 'sine', 783.99, 783.99, 0.7, 0.14);
   }
+}
+
+// iPhones play Web Audio on the ringer channel, which the silent switch
+// mutes. Asking for media playback (or, on older iOS, playing a silent
+// looping <audio>) moves it to the media channel like a video would.
+function playThroughSilentSwitch(sound) {
+  try {
+    if (navigator.audioSession) {
+      navigator.audioSession.type = 'playback';
+      return;
+    }
+    const apple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 0;
+    if (!apple) return;
+    const a = new Audio(silentWav());
+    a.loop = true;
+    a.setAttribute('playsinline', '');
+    a.play().catch(() => {});
+    sound.keepAlive = a;
+  } catch {
+    // Not fatal: sound still plays when the switch is off.
+  }
+}
+
+// A quarter second of silence as a WAV data URL, made here so nothing is
+// fetched.
+function silentWav() {
+  const n = 2000;
+  const b = new Uint8Array(44 + n);
+  const v = new DataView(b.buffer);
+  const str = (o, s) => [...s].forEach((c, i) => (b[o + i] = c.charCodeAt(0)));
+  str(0, 'RIFF');
+  v.setUint32(4, 36 + n, true);
+  str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true);
+  v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true);
+  v.setUint16(34, 8, true);
+  str(36, 'data');
+  v.setUint32(40, n, true);
+  b.fill(128, 44);
+  let bin = '';
+  for (const x of b) bin += String.fromCharCode(x);
+  return `data:audio/wav;base64,${btoa(bin)}`;
 }
 
 function readMuted() {

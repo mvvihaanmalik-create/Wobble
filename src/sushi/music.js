@@ -79,26 +79,28 @@ export class LofiMusic {
   }
 
   level() {
-    return 0.65 * MOODS[this.mood].level * this.duck;
+    return 0.72 * MOODS[this.mood].level * this.duck;
   }
 
   build() {
     const ctx = this.s.ctx;
-    // bus -> tape lowpass -> the game's master, so mute and clips include it.
+    // bus -> tape lowpass -> the limiter; clips include it.
     this.bus = ctx.createGain();
     this.bus.gain.value = 0;
     this.tape = ctx.createBiquadFilter();
     this.tape.type = 'lowpass';
     this.tape.frequency.value = 5200;
     this.tape.Q.value = 0.5;
-    this.bus.connect(this.tape).connect(this.s.master);
+    // Straight into the limiter, past the effects volume, so it is heard on
+    // laptop and phone speakers. Mute stops the band (see sync).
+    this.bus.connect(this.tape).connect(this.s.out);
 
     // Electric piano: warm lowpass and a slow tremolo.
     this.keysBus = ctx.createGain();
     this.keysBus.gain.value = 1;
     const keysLp = ctx.createBiquadFilter();
     keysLp.type = 'lowpass';
-    keysLp.frequency.value = 2000;
+    keysLp.frequency.value = 2800;
     this.keysBus.connect(keysLp).connect(this.bus);
     const trem = ctx.createOscillator();
     trem.frequency.value = 4.2;
@@ -132,7 +134,8 @@ export class LofiMusic {
     this.bassBus = ctx.createGain();
     const bassLp = ctx.createBiquadFilter();
     bassLp.type = 'lowpass';
-    bassLp.frequency.value = 420;
+    // Open enough that the bass's overtones reach small speakers.
+    bassLp.frequency.value = 900;
     this.bassBus.connect(bassLp).connect(this.bus);
 
     // Drums sound like they were sampled off an old record.

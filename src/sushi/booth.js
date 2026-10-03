@@ -16,7 +16,8 @@ import {
 import { BLOCKS, FishSlice, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
 import { LAYOUT } from './config.js';
-import { makiOf, nigiriOf, plateLayout } from './orders.js';
+import { hotOf, makiOf, nigiriOf, plateLayout } from './orders.js';
+import { GyozaPlate, UdonBowl } from './hot.js';
 import { platedMaki } from './maki.js';
 import { Customer } from './critters.js';
 
@@ -59,6 +60,8 @@ export class PhotoBooth {
 
   // Build the plate an order asks for, perfectly made, and photograph it.
   async orderPhoto(order, w = 480, h = 300) {
+    const hot = hotOf(order)[0];
+    if (hot) return this.hotPhoto(hot, w, h);
     const g = LAYOUT.geta;
     const layout = plateLayout(order);
     const wantNigiri = nigiriOf(order);
@@ -88,6 +91,19 @@ export class PhotoBooth {
       this.aim(count, layout);
     }, null, this.scene, () => this.scene.remove(holder));
     for (const p of pieces) p.dispose();
+    return url;
+  }
+
+  // A stove dish, made perfectly, on the board.
+  async hotPhoto(want, w, h) {
+    const dish = want.udon ? UdonBowl.ideal(want.udon) : GyozaPlate.ideal();
+    const holder = dish.group;
+    holder.position.set(-0.55, LAYOUT.geta.h, 0);
+    const url = await this.shoot(w, h, () => {
+      this.scene.add(holder);
+      frame(this.camera, new Vector3(-0.55, LAYOUT.geta.h + 0.5, 0), 1.2);
+    }, null, this.scene, () => this.scene.remove(holder));
+    dish.dispose();
     return url;
   }
 
