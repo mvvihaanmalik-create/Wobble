@@ -289,7 +289,7 @@ export class FishBlock {
       this.group.remove(this.squishy.mesh);
       this.squishy.dispose();
     }
-    const solid = extrudedSolid(this.outline(), this.D, { bevel: 0.12, bevelSegments: 4, maxEdge: 0.21, round: 0.12, smooth: 3 });
+    const solid = extrudedSolid(this.outline(), this.D, { bevel: 0.18, bevelSegments: 6, maxEdge: 0.19, round: 0.22, roundSegments: 10, smooth: 4 });
     const food = solid.pos.slice();
     const mesh = bodyMesh(solid.pos, solid.idx);
     this.shift = mesh.shift;
@@ -324,7 +324,10 @@ export class FishSlice {
   // thickness, z across.
   constructor(kind, quad, D) {
     this.kind = kind;
-    const solid = extrudedSolid(quad, D, { bevel: 0.1, bevelSegments: 4, maxEdge: 0.15, round: 0.16, smooth: 5 });
+    // Soft, pillowy edges: a deep bevel across the width, well-rounded ends
+    // and fine enough triangles that the drape stays smooth.
+    const thick = Math.hypot(quad[1][0] - quad[0][0], quad[1][1] - quad[0][1]);
+    const solid = extrudedSolid(quad, D, { bevel: Math.min(0.2, thick * 0.36), bevelSegments: 7, maxEdge: 0.105, round: 0.24, roundSegments: 12, smooth: 8 });
     const food = solid.pos.slice();
     const [p0, , , p3] = quad;
     const d = new Vector3(p3[0] - p0[0], p3[1] - p0[1], 0).normalize();

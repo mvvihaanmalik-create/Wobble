@@ -155,8 +155,12 @@ export class PhotoBooth {
     const pr = r.getPixelRatio();
     const jobs = this.jobs.splice(0);
     for (const job of jobs) {
-      const w = Math.min(job.w, canvas.width);
-      const h = Math.min(job.h, canvas.height);
+      // Render up to twice the size and scale down, for smooth edges.
+      const ss = Math.max(1, Math.min(2, canvas.width / job.w, canvas.height / job.h));
+      const w = Math.floor(Math.min(job.w * ss, canvas.width));
+      const h = Math.floor(Math.min(job.h * ss, canvas.height));
+      const ow = Math.round(w / ss);
+      const oh = Math.round(h / ss);
       if (job.aim) job.aim();
       const cam = this.camera;
       cam.aspect = w / h;
@@ -176,9 +180,12 @@ export class PhotoBooth {
       job.scene.fog = fog;
       if (job.after) job.after();
       const out = document.createElement('canvas');
-      out.width = w;
-      out.height = h;
-      out.getContext('2d').drawImage(canvas, 0, canvas.height - h, w, h, 0, 0, w, h);
+      out.width = ow;
+      out.height = oh;
+      const ctx = out.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(canvas, 0, canvas.height - h, w, h, 0, 0, ow, oh);
       r.setScissorTest(false);
       r.setViewport(0, 0, canvas.width / pr, canvas.height / pr);
       r.toneMapping = prevTone;

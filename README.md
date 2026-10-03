@@ -9,10 +9,10 @@ The game runs in the browser. The only server part is the wall: one small functi
 | Station | Angle | What you do |
 | --- | --- | --- |
 | 01 Counter 受付 | Eye level, across the bar | A guest hops in and pins an order ticket with a photo of the plate they want. Take the order. Poke the guest if you like. |
-| 02 Rice 酢飯 | Over the rice tub | Hold to scoop, let go inside the green band. Then hold to press and let go in the green, three times. Press too hard and the rice squashes flat. |
+| 02 Rice 酢飯 | Over the rice tub | Hold to scoop, let go inside the green band. Then hold to press and let go in the green, three times. Press too hard and the rice squashes flat. Onigiri are made here too: scoop, pick the filling, press it into a triangle and tap to wrap the nori. |
 | 03 Knife 包丁 | Low, along the cutting board | Swipe down through the fish block along the dashed guide. Angle and thickness are scored. Salmon and tuna want a 45° cut, egg a straight one. |
 | 04 Build 盛付 | Three quarters, over the serving board | Tap the rice for wasabi (one tap per dab), drag a slice onto the rice, then add the toppings on the ticket. Serve. |
-| 05 Stove コンロ | Close over the pot or the pan (Days 8 to 10) | Udon and gyoza, step by step. See The stove below. |
+| 05 Stove コンロ | Close over the pot or the pan (stages 6 to 10) | Udon, gyoza, ramen and takoyaki, step by step. See The stove below. |
 
 The guest eats it in three bites and reacts. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
 
@@ -28,19 +28,19 @@ Every step gets a grade stamped where the work happened: **Perfect!**, **Great!*
 
 ### The cast
 
-The guests are chibi mochi animals in the style of 2000s Japanese handheld and console games:
-- **Mochi**, a calico cat with a bell collar.
-- **Kinako**, a shiba in a blue bandana.
-- **Ume**, a bunny with a pink bow.
-- **Azuki**, a bear in a green scarf.
-- **Sasa**, a panda with a bamboo leaf.
-- **Yuzu**, a fox with a yuzu hair pin.
+The guests are round little animals in the spirit of Animal Crossing villagers, each with their own look:
+- **Mochi**, a calico cat with lashes and a bell collar, in a red and cream striped top.
+- **Kinako**, a shiba in a blue bandana and a gingham shirt.
+- **Ume**, a bunny with a pink bow and a polka dot shirt.
+- **Azuki**, a bear with button eyes, a green scarf and a plaid shirt.
+- **Sasa**, a panda with soft drooping patches, a bamboo leaf and a sunny dotted shirt.
+- **Yuzu**, a sleepy-eyed fox with a yuzu hair pin and a sailor stripe top.
 
-Each one has a big, round soft-body head that squashes and wobbles, on a small round body with a tummy, stubby arms, round paws, little feet and a tail. At the counter they sit with their paws on the ledge. They wave when poked, throw both arms up (banzai) at a great plate, hold their paws to their mouths while eating and tap a paw when they get impatient. A soft ink outline goes around every part.
+Each one has a big, round soft-body head that squashes and wobbles, on a small round body in a patterned shirt with sleeves, round paws, little feet and a tail. At the counter they sit with their paws on the ledge. They wave when poked, throw both arms up at a great plate, hold their paws to their mouths while eating and tap a paw when they get impatient. A soft ink outline goes around every part.
 
-Faces are painted textures swapped per expression, the way games of that era did them (`src/sushi/faces.js`):
-- **Eyes:** big glossy eyes with sparkle highlights, ^^ squints, heart eyes, star eyes, teary eyes, half-lidded eyes and >< eyes.
-- **The rest:** brows that move with the mood, a little ω mouth (with a fang for the cat and fox), and hatched blush (with whiskers for the cat and fox).
+Faces are painted textures swapped per expression (`src/sushi/faces.js`):
+- **Eyes:** small, glossy village eyes with one big highlight, in a different shape per guest: tall beads, button dots, lashes, a sleepy lid, or a pale rim so the panda's eyes read on its patches. They squint ^^ when happy, turn to hearts, stars or tears, and go >< when cross.
+- **The rest:** soft brows that only show when they mean something, a little ω mouth (with a fang for the cat and fox), and hatched blush (with whiskers for the cat and fox).
 - **Emotes:** ! ? ♪ ♥ 💢 💧 ✨ and gloom lines pop over their heads.
 - **Blinking:** they blink, and their ears droop when a guest waits too long.
 
@@ -49,8 +49,8 @@ Pochi, the shiba sous chef, sits on the counter in a chef's toque and a red neck
 ### The Sushi book 図鑑
 
 The Sushi book on the title screen is the bar's field guide, and it fills in as you play.
-- **Dishes:** all seven dishes, numbered. One you have never served shows as a dark silhouette (or a "?" until its day is open). Once served, it gets its photo, how many you have made and your best score.
-- **Regulars:** each guest gets a portrait once you have served them. Every regular has a favourite dish: Mochi loves salmon nigiri, Kinako tamago, Ume cucumber rolls, Azuki unagi, Sasa tuna rolls and Yuzu tuna nigiri. It shows as "Favourite: ?" until you find it.
+- **Dishes:** all fifteen dishes, numbered. One you have never served shows as a dark silhouette (or a "?" until its stage is open). Once served, it gets its photo, how many you have made and your best score.
+- **Regulars:** each guest gets a portrait once you have served them. Every regular has a favourite dish: Mochi loves salmon nigiri, Kinako shoyu ramen, Ume ume onigiri, Azuki unagi, Sasa takoyaki and Yuzu kitsune udon. It shows as "Favourite: ?" until you find it.
 - **Favourites in play:** regulars often ask for their favourite once it is on the menu, and the ticket marks it with a beating heart. Serve it with a score of 85 or more for an extra 25% tip, and the book fills in that guest's favourite.
 
 The photos come from the same photo booth as the tickets. They are rendered the first time the book opens and kept for the session. The book is saved with your progress in the browser.
@@ -64,26 +64,26 @@ At the end of a shift, the summary shows today's plate photos. Type a name and p
 - `npm run dev` and `npm run preview` serve the same API from memory, so the wall works locally with no setup. It resets when the server restarts.
 - Limits: names up to 16 letters, numbers, spaces and `._'-`. Photos are small JPEG data URLs (320 by 200, under 60 KB). Six posts per visitor per minute. The newest 48 plates and the best 100 shifts are kept.
 
-Ten days, each adding something:
+Ten stages, each with its own menu and a new dish to learn:
 
-| Day | What's new |
-| --- | --- |
-| 1 | Salmon only. Learn the counter. |
-| 2 | Tuna, sesame and scallion. |
-| 3 | Tamago nigiri in a nori belt, and ikura. |
-| 4 | Rolls: hosomaki with cucumber or tuna. |
-| 5 | Unagi, grilled and glazed, with tare and a nori belt. Salmon rolls. |
-| 6 | Rush hour: seven guests, and a rush mid shift. |
-| 7 | Omakase night: everything, two nigiri a plate. |
-| 8 | Udon: kitsune and tempura, at the new stove. |
-| 9 | Gyoza: fill, pleat and fry. |
-| 10 | Izakaya night: sushi and the stove, with a rush. |
+| Stage | Name | What's new |
+| --- | --- | --- |
+| 1 | First shift | Salmon nigiri only. Learn the counter. |
+| 2 | Tuna day | Tuna, sesame and scallion. |
+| 3 | Onigiri | Ume and salmon rice balls: fill, shape, wrap. |
+| 4 | Rolls | Hosomaki with cucumber or tuna. |
+| 5 | Sweet and glazed | Tamago in a nori belt, glazed unagi, ikura, salmon rolls. |
+| 6 | Udon | Kitsune and tempura udon at the stove. |
+| 7 | Gyoza | Fill, pleat and fry. Rush hour arrives. |
+| 8 | Ramen | Shoyu and tonkotsu ramen with all the toppings. |
+| 9 | Takoyaki | Pour, turn and top six octopus balls. |
+| 10 | Grand night | The whole menu, two nigiri a plate and a long rush. |
 
-Each day has three star goals in tips, shown on its intro card. One star (or an average of 50) unlocks the next day. Stars and best tips show on the level select. Progress is kept in the browser.
+Orders come from a shuffled menu bag for the stage, so the same dish never comes twice in a row, and the stage's new dish is always the first order. Each stage has three star goals in tips, shown on its intro card. All ten stages are open for now so testers can jump to any of them. Stars and best tips show on the level select. Progress is kept in the browser.
 
 ### The stove
 
-The left end of the counter has a little two-burner stove: a pot of water for udon, an iron pan for gyoza, a donburi in front of the pot and a folding board in front of the pan. The camera closes in on whichever dish the ticket asks for. Every step is graded, Cooking Mama style.
+The left end of the counter has a little two-burner stove: a pot of water for noodles, an iron pan for gyoza (swapped for a takoyaki iron on takoyaki orders), a donburi in front of the pot and a folding board in front of the pan. The camera closes in on whichever dish the ticket asks for. Every step is graded, Cooking Mama style.
 
 **Udon** (kitsune with fried tofu, or tempura with a shrimp):
 1. **Drop:** tap the pot to drop the noodles in.
@@ -98,7 +98,15 @@ The left end of the counter has a little two-burner stove: a pot of water for ud
 3. **Fry:** they sizzle in the pan. When the bottoms are golden, add water and the lid.
 4. **Steam:** lift the lid when the steam timer is in the green. They come out browned side up with a dish of sauce.
 
-Finished dishes slide down the counter onto the serving board, and the guest slurps or bites them away. Their score card reads Boil, Dashi and Toppings, or Filling, Pleats and Frying.
+**Ramen** (shoyu or tonkotsu) runs like udon with thin, wavy yellow noodles and a rich broth, topped with chashu, naruto, menma, a marinated egg, nori and scallion.
+
+**Takoyaki** (six to a boat):
+1. **Batter:** hold to pour batter into the iron and let go in the green. Overfill it and Pochi wipes it back.
+2. **Octopus:** tap to drop a piece into each well.
+3. **Turn:** each ball browns underneath in turn. Tap it to flip it with the pick when the underside is golden. Too pale or too dark costs points, and one left too long burns.
+4. **Toppings:** into the boat for takoyaki sauce, mayo, bonito flakes and aonori.
+
+Finished dishes slide down the counter onto the serving board, and the guest slurps or bites them away. Their score card reads Boil, Dashi (or Broth) and Toppings; Filling, Pleats and Frying; or Batter, Turning and Toppings. Onigiri read Rice, Filling and Wrap.
 
 ### Rolls
 
@@ -114,7 +122,7 @@ The six pieces then stand up on the serving board, cut face up. The cut faces ar
 
 - **Combo:** plates scoring 80 or more in a row raise the tip, up to x2. The streak shows as a flame in the top bar.
 - **Speedy:** serving well inside the guest's patience adds 20%.
-- **Rush hour:** on Days 6 and 7, a run of guests arrives in a rush. They have less patience but tip x1.5, and a banner announces them.
+- **Rush hour:** on stages 7 to 10, a run of guests arrives in a rush. They have less patience but tip x1.5, and a banner announces them.
 - **Favourite:** a regular's favourite dish served at 85 or more adds 25%.
 - **Walkouts:** a guest whose patience runs out leaves without paying, and the combo breaks.
 
@@ -151,16 +159,16 @@ Feedback while you play:
 
 ### Music
 
-The bar has its own lofi band, written live in Web Audio (`src/sushi/music.js`). No track is downloaded, so there is nothing to license and nothing to fetch.
-- **Sound:** a warm electric piano plays jazzy four-chord loops over a round bass. A music box hums little pentatonic tunes on top. A dusty, swung beat and some vinyl crackle sit behind it.
-- **Never the same twice:** every eight bars it picks a new progression and makes up a new tune.
-- **Follows the game:** it is mellow on the title screen and the end-of-day card, grooves during a shift, and speeds up with extra hats in rush hour. Pausing muffles it, like a radio in the next room.
+The bar has its own lo-fi band, written live in Web Audio (`src/sushi/music.js`). No track is downloaded, so there is nothing to license and nothing to fetch.
+- **Sound:** a warm, slightly detuned electric piano plays lush seventh and ninth chords over a round, soft bass. A breathy flute-like lead with a slow vibrato and a gentle echo sings a melody every other pass. Behind them sit a soft kick that makes the keys breathe, a rim click, quiet swung hats and vinyl crackle, all through a tape-style warmth and a rolled-off top.
+- **Two songs:** a slow evening tune for the title and the end of a shift, and a shuffling one for service. They change only at the top of the loop, so nothing jumps mid phrase.
+- **Follows the game:** mellow on the title screen, grooving during a shift, a little busier with a shaker in rush hour. Pausing muffles it, like a radio in the next room.
 - **Controls:** the note button in the top bar (or the "Music on" pill on the title screen) turns the music off and remembers the choice. The speaker button mutes everything. Clips you record include the music.
-- **Loud enough to hear:** the band plays straight into the limiter at about -24 dB, above the effects, and its bass and piano are left bright enough to carry on phone and laptop speakers. On iPhones it asks for media playback, so the ring/silent switch does not mute it.
+- **Loud enough to hear:** the band plays into the limiter at about -23 dB, below the effects. On iPhones it asks for media playback, so the ring/silent switch does not mute it.
 
 ### Loading
 
-A loading screen shows straight away, before any script arrives. Behind it the game builds one of every dish and tool, compiles every shader and runs one frame through the post chain. That way the first minutes of play never stall on a shader compiling.
+A loading screen shows straight away, before any script arrives. Behind it the game compiles only the bar itself and runs one frame through the post chain, so the title comes up quickly. While the title is showing, one of every dish, tool and the photo booth compile in the background, one dish at a time so the title never freezes. If you start a stage before that is done, it starts the moment it finishes.
 
 ### Interface
 

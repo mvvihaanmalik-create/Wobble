@@ -1,4 +1,4 @@
-import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
+import { Quaternion, Raycaster, Scene, Vector2, Vector3 } from 'three';
 import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, dishKey, usesStove } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
@@ -137,48 +137,58 @@ export class Game {
     this.resume();
   }
 
-  // Build one of everything off to the side, compile all shaders and the post
-  // chain, then throw it away. Runs behind the loading screen.
+  // Loading is two steps. Behind the loading screen: the bar itself and one
+  // frame through the post chain, so the title comes up fast. Then, while the
+  // title is showing, one of every dish compiles in the background, a piece
+  // at a time so the title never freezes. Starting a stage waits for it.
   async warmUp(progress = () => {}) {
     const r = this.stage.renderer;
-    const scene = this.stage.scene;
-    const temp = warmFoods();
-    temp.add(new Paw().group);
-    const sheet = new MakiSheet();
-    sheet.addFilling('kappa');
-    temp.add(sheet.group);
-    for (const f of ['kappa', 'tekka', 'sake']) temp.add(platedMaki(f));
-    temp.add(warmHot());
-    // Draw everything regardless of the camera, shadows included, so each
-    // material compiles in the same variants play will use.
-    temp.traverse((o) => {
-      o.visible = true;
-      o.frustumCulled = false;
-      if (o.isMesh) o.castShadow = true;
-    });
-    temp.position.set(0, 1, 0);
-    scene.add(temp);
     await progress(0.1);
     try {
-      if (r.compileAsync) {
-        await r.compileAsync(scene, this.stage.camera);
-        await progress(0.4);
-        await r.compileAsync(this.booth.scene, this.booth.camera);
-      }
+      if (r.compileAsync) await r.compileAsync(this.stage.scene, this.stage.camera);
     } catch (err) {
       console.warn('Shader warm-up skipped', err);
     }
+    performance.mark('warm-scene');
     await progress(0.7);
-    // One full frame through the post chain compiles its passes too, and a
-    // ticket photo compiles what the photo booth uses.
-    const photo = this.booth.orderPhoto({ pieces: [{ fish: 'salmon', wasabi: 1, toppings: { ikura: 5, sesame: true } }, { fish: 'tuna', wasabi: 0, toppings: { scallion: true, sauce: true } }] }, 96, 60);
     this.stage.render(1 / 60);
-    await photo;
-    // Leave the geometry to the garbage collector: some of it (toppings,
-    // grains) is shared with the real food.
-    scene.remove(temp);
+    performance.mark('warm-frame');
     await progress(1);
     this.last = performance.now();
+    this.warming = this.warmFood()
+      .catch((err) => console.warn('Food warm-up skipped', err))
+      .finally(() => {
+        this.warming = null;
+        performance.mark('warm-food');
+      });
+  }
+
+  async warmFood() {
+    const r = this.stage.renderer;
+    const frame = () => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
+    await frame();
+    const parts = [...warmFoods().children, new Paw().group, platedMaki('kappa'), platedMaki('tekka'), platedMaki('sake'), ...warmHot().children];
+    const sheet = new MakiSheet();
+    sheet.addFilling('kappa');
+    parts.push(sheet.group);
+    // Compile against the bar's lights and environment without ever adding
+    // the dishes to it, so nothing pops up on the title screen.
+    for (const part of parts) {
+      const tmp = new Scene();
+      part.traverse((o) => {
+        o.visible = true;
+        o.frustumCulled = false;
+        if (o.isMesh) o.castShadow = true;
+      });
+      tmp.add(part);
+      if (r.compileAsync) await r.compileAsync(tmp, this.stage.camera, this.stage.scene);
+      else r.compile(tmp, this.stage.camera, this.stage.scene);
+      await frame();
+    }
+    if (r.compileAsync) await r.compileAsync(this.booth.scene, this.booth.camera);
+    await frame();
+    // A ticket photo compiles what the photo booth uses.
+    await this.booth.orderPhoto({ pieces: [{ fish: 'salmon', wasabi: 1, toppings: { ikura: 5, sesame: true } }, { fish: 'tuna', wasabi: 0, toppings: { scallion: true, sauce: true } }] }, 96, 60);
   }
 
   // --- Flow ------------------------------------------------------------------
@@ -208,6 +218,19 @@ export class Game {
   }
 
   startDay(dayIndex) {
+    // The dishes are still compiling: start the moment they are ready.
+    if (this.warming) {
+      this.ui.toast('Warming the plates...', 1500);
+      if (this.pendingStart == null) {
+        this.warming.then(() => {
+          const d = this.pendingStart;
+          this.pendingStart = null;
+          if (this.mode === 'title') this.startDay(d);
+        });
+      }
+      this.pendingStart = dayIndex;
+      return;
+    }
     this.session = (this.session || 0) + 1;
     this.sound.unlock();
     this.day = dayIndex;

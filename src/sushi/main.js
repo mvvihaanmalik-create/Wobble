@@ -15,12 +15,15 @@ async function boot() {
   await step(0.15, 'Opening the shutters');
   await document.fonts.ready;
   await step(0.35, 'Lighting the lanterns');
+  performance.mark('fonts');
   const game = new Game(document.getElementById('gl'));
+  performance.mark('game');
   if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) window.game = game;
   await step(0.6, 'Washing the rice');
   // Compile every shader the bar will need now, behind this screen, so the
   // first minutes of play never hitch.
   await game.warmUp((k) => step(0.6 + k * 0.38, k < 0.5 ? 'Sharpening the knife' : 'Warming the plates'));
+  performance.mark('warm');
   await step(1, 'Irasshaimase');
   window.__boot = { ready: Math.round(performance.now() - t0) };
   const loading = document.getElementById('loading');

@@ -99,8 +99,8 @@ export function taubin(pos, idx, iterations = 4, lambda = 0.5, mu = -0.53) {
 // Extrude a 2D outline (array of [x, y]) along z with rounded edges, then
 // subdivide so it can bend smoothly. round: corner fillet radius. smooth:
 // Taubin iterations to soften everything after subdividing.
-export function extrudedSolid(points, depth, { bevel = 0.04, maxEdge = 0.1, curveSegments = 4, round = 0, smooth = 0, bevelSegments = 3 } = {}) {
-  const outline = filletOutline(points, round);
+export function extrudedSolid(points, depth, { bevel = 0.04, maxEdge = 0.1, curveSegments = 4, round = 0, roundSegments = 6, smooth = 0, bevelSegments = 3 } = {}) {
+  const outline = filletOutline(points, round, roundSegments);
   const shape = new Shape(outline.map(([x, y]) => ({ x, y })));
   const geo = new ExtrudeGeometry(shape, {
     depth: Math.max(0.01, depth - bevel * 2),
