@@ -1,6 +1,6 @@
-import { Vector3 } from 'three';
-import { DAYS, HOT, HOT_TOPPINGS, LAYOUT, UDON } from './config.js';
-import { Gyoza, GyozaPlate, UdonBowl, brothY, noodleMaterial, potNoodles, setNoodleCook } from './hot.js';
+import { Quaternion, Vector3 } from 'three';
+import { DAYS, HOT, HOT_TOPPINGS, LAYOUT, RAMEN, TAKOYAKI, UDON, menuKinds } from './config.js';
+import { Gyoza, GyozaPlate, TAKO_TOP, TAKO_WELLS, TakoBall, TakoBoat, UdonBowl, takoBit, brothY, noodleMaterial, potNoodles, setNoodleCook } from './hot.js';
 import { bandScore, hotOf } from './orders.js';
 import { Station } from './stations.js';
 
@@ -14,10 +14,16 @@ import { Station } from './stations.js';
 // Gyoza (three): hold to spoon the filling onto a wrapper, tap on the beat to
 // pinch five pleats, then into the pan. When the bottoms are golden add
 // water and the lid, and lift the lid when the steam timer is in the green.
+//
+// Ramen is the noodle run with thin wavy noodles and a rich broth.
+//
+// Takoyaki (six): hold to pour batter into the plate, tap to drop octopus in
+// each well, then turn each ball over with the pick as its underside turns
+// golden. Into the boat for sauce, mayo, bonito and aonori.
 
 const L = LAYOUT.stove;
-const U = HOT.udon;
 const G = HOT.gyoza;
+const T = HOT.takoyaki;
 const _v = new Vector3();
 const _w = new Vector3();
 const PLEAT_MARKS = Array.from({ length: G.pleats }, (_, i) => (i + 0.5) / G.pleats);
@@ -40,7 +46,7 @@ export class StoveStation extends Station {
   // Frame the dish in hand: pot and bowl for udon, pan and board for gyoza.
   view() {
     const w = this.want;
-    return w ? (w.udon ? 'stoveUdon' : 'stoveGyoza') : 'stove';
+    return w ? (w.udon || w.ramen ? 'stoveUdon' : 'stoveGyoza') : 'stove';
   }
 
   exit() {
@@ -61,20 +67,34 @@ export class StoveStation extends Station {
     this.reset();
     const g = this.g;
     this.order = g.order;
-    this.dish = want.udon ? 'udon' : 'gyoza';
+    this.dish = want.udon ? 'udon' : want.ramen ? 'ramen' : want.takoyaki ? 'takoyaki' : 'gyoza';
     this.res = {};
-    if (this.dish === 'udon') {
-      this.bowl = new UdonBowl(want.udon, 3 + g.orderIndex);
+    g.stove.useTako(this.dish === 'takoyaki');
+    if (this.dish === 'udon' || this.dish === 'ramen') {
+      this.U = HOT[this.dish];
+      this.bowl = new UdonBowl(want.udon || want.ramen, 3 + g.orderIndex);
       this.bowl.group.position.set(L.bowl[0], 0, L.bowl[1]);
       g.stage.scene.add(this.bowl.group);
-      this.noodleMat = noodleMaterial();
-      this.potNoodles = potNoodles(this.noodleMat, 7 + g.orderIndex);
+      this.noodleMat = noodleMaterial(this.dish === 'ramen');
+      this.potNoodles = potNoodles(this.noodleMat, 7 + g.orderIndex, this.dish === 'ramen');
       g.stove.pot.add(this.potNoodles);
       this.potNoodles.position.y = 1.35; // held over the pot
       this.cook = 0;
       this.stirs = 0;
       this.level = 0;
       this.state = 'drop';
+    } else if (this.dish === 'takoyaki') {
+      this.balls = TAKO_WELLS.map(([x, z]) => {
+        const b = new TakoBall();
+        b.group.position.set(L.pan[0] + x, L.top + 0.1 + TAKO_TOP, L.pan[1] + z);
+        b.setFill(0);
+        g.stage.scene.add(b.group);
+        return b;
+      });
+      this.fillV = 0;
+      this.filling = false;
+      this.dropped = 0;
+      this.state = 'batter';
     } else {
       this.gyozas = [];
       this.fills = [];
@@ -106,6 +126,7 @@ export class StoveStation extends Station {
     const st = this.state;
     const stove = g.stove;
     // Timers run wherever the player is: wander off and the noodles go soft.
+    const U = this.U || HOT.udon;
     if (st === 'boil') {
       this.cook += U.cookRate * dt;
       setNoodleCook(this.noodleMat, Math.min(1, this.cook * 1.35));
@@ -137,10 +158,29 @@ export class StoveStation extends Station {
       this.steam += G.steamRate * dt;
       g.sound.sizzle(0.35);
       if (this.steam >= 1.15) this.lidOff(true);
+    } else if (st === 'batter' && this.filling) {
+      this.fillV = Math.min(1.05, this.fillV + T.fillRate * dt);
+      for (const b of this.balls) b.setFill(this.fillV);
+      if (this.fillV >= 1.05) this.finishBatter();
+    } else if (st === 'turn') {
+      this.turnTime += dt;
+      // Each ball started a moment after the last, so they come good in turn.
+      this.balls.forEach((b, i) => {
+        if (b.turned) {
+          b.setBrown(b.bottom, Math.min(0.62, b.top + dt * 0.25));
+          return;
+        }
+        const v = Math.max(0, (this.turnTime - i * 0.55) * T.brownRate);
+        b.setBrown(v, 0);
+        if (v >= 1.25) this.turnBall(b, true);
+      });
+      g.sound.sizzle(0.55 + 0.2 * Math.sin(stove.time * 4));
     }
     stove.boil += ((st === 'boil' ? 1 : st === 'drop' ? 0.35 : 0) - stove.boil) * Math.min(1, dt * 3);
-    stove.panSteam.strength += ((st === 'steam' ? 1 : st === 'fry' ? 0.25 : 0) - stove.panSteam.strength) * Math.min(1, dt * 3);
+    stove.panSteam.strength += ((st === 'steam' ? 1 : st === 'fry' || st === 'turn' ? 0.25 : 0) - stove.panSteam.strength) * Math.min(1, dt * 3);
     if (this.bowl) this.bowl.update(dt);
+    if (this.boat) this.boat.update(dt);
+    else for (const b of this.balls || []) b.update(dt);
     for (const gz of this.gyozas || []) gz.update(dt);
     if (this.gz && !this.gyozas.includes(this.gz)) this.gz.update(dt);
     if (this.plate) this.plate.update(dt);
@@ -160,12 +200,14 @@ export class StoveStation extends Station {
       return g.gesture(null);
     }
     if (!want) {
-      ui.hint('This order is sushi. Rice, knife, build.');
+      ui.hint(g.order.pieces.some((p) => p.onigiri) && !g.order.pieces.some((p) => !p.onigiri) ? 'This order is onigiri. Shape it at the rice station.' : 'This order is sushi. Rice, knife, build.');
       ui.actions([{ label: 'To the rice', primary: true, onClick: () => g.goStation('rice') }]);
       ui.meter(null);
       return g.gesture(null);
     }
     let actions = [];
+    const U = this.U || HOT.udon;
+    const soup = this.dish === 'ramen' ? 'broth' : 'dashi';
     if (st === 'drop') {
       ui.hint('Tap the pot to drop in the noodles.');
       ui.meter(null);
@@ -178,17 +220,33 @@ export class StoveStation extends Station {
       if (!done) g.gesture('circle', potTop());
       else g.gesture(null);
     } else if (st === 'pour') {
-      ui.hint(this.pouring ? (this.level > U.pourBand[1] ? 'That is the line!' : 'Pouring...') : 'Hold to ladle in the dashi. Let go at the line.');
-      ui.meter('Dashi', this.level, U.pourBand, this.level > U.pourBand[1] + 0.06);
+      ui.hint(this.pouring ? (this.level > U.pourBand[1] ? 'That is the line!' : 'Pouring...') : `Hold to ladle in the ${soup}. Let go at the line.`);
+      ui.meter(soup === 'broth' ? 'Broth' : 'Dashi', this.level, U.pourBand, this.level > U.pourBand[1] + 0.06);
       if (!this.pouring) g.gesture('hold', _v.set(L.bowl[0] + 1.5, 1.0, L.bowl[1] + 0.3));
     } else if (st === 'top') {
       ui.meter(null);
+      const dish = this.bowl || this.boat;
       const asked = Object.keys(want.toppings || {});
-      const missing = asked.filter((t) => !this.bowl.tops[t]);
+      const missing = asked.filter((t) => !dish.tops[t]);
       ui.hint(missing.length ? `Add the toppings: ${missing.map((t) => HOT_TOPPINGS[t].label.toLowerCase()).join(', ')}.` : 'Looks lovely.');
-      const kinds = [...new Set((DAYS[g.day].hot?.udon || []).flatMap((k) => UDON[k].toppings))];
-      actions = kinds.map((t) => ({ label: HOT_TOPPINGS[t].label, primary: missing.includes(t), disabled: !!this.bowl.tops[t], onClick: () => this.addTopping(t) }));
+      actions = this.toppingKinds().map((t) => ({ label: HOT_TOPPINGS[t].label, primary: missing.includes(t), disabled: !!dish.tops[t], onClick: () => this.addTopping(t) }));
       g.gesture(null);
+    } else if (st === 'batter') {
+      ui.hint(this.filling ? 'Pouring batter...' : 'Hold to pour the batter. Let go in the green.');
+      ui.meter('Batter', this.fillV, T.fillBand, this.fillV > T.fillOver);
+      if (!this.filling) g.gesture('hold', _v.set(L.pan[0] + 1.4, 1.2, L.pan[1] + 0.4));
+    } else if (st === 'tako') {
+      ui.hint(`Tap to drop in the octopus. (${this.dropped} of ${T.count})`);
+      ui.meter(null);
+      const [x, z] = TAKO_WELLS[Math.min(T.count - 1, this.dropped)];
+      g.gesture('tap', _v.set(L.pan[0] + x, L.top + 0.9, L.pan[1] + z));
+    } else if (st === 'turn') {
+      const next = this.nextBall();
+      const left = this.balls.filter((b) => !b.turned).length;
+      ui.hint(`Turn each ball when its underside is golden. Tap it! (${left} left)`);
+      ui.meter('Golden', next ? next.bottom : 0, T.turnBand, next ? next.bottom > T.turnBand[1] + 0.1 : false, this.balls.map((b) => (b.turned ? '●' : '○')).join(''));
+      if (next && next.bottom >= T.turnBand[0]) g.gesture('tap', _v.copy(next.group.position).setY(next.group.position.y + 0.6));
+      else g.gesture(null);
     } else if (st === 'fill') {
       ui.hint(this.filling ? 'Spooning...' : `Hold to spoon in the filling. Let go in the green. (${this.k + 1} of ${G.count})`);
       ui.meter('Filling', this.fillV, G.fillBand, this.fillV > G.fillOver, this.gyozaDots());
@@ -210,7 +268,7 @@ export class StoveStation extends Station {
       actions = [{ label: 'Lid off', primary: this.steam >= G.steamBand[0], onClick: () => this.lidOff() }];
       g.gesture(null);
     } else if (st === 'done' || this.plated) {
-      ui.hint('Plated. Serve it while it is hot!');
+      ui.hint(this.dish === 'takoyaki' ? 'Plated. Careful, they are hot inside!' : 'Plated. Serve it while it is hot!');
       ui.meter(null);
       actions = [{ label: 'Serve', primary: true, onClick: () => g.serve() }];
       g.gesture(null);
@@ -239,6 +297,9 @@ export class StoveStation extends Station {
     else if (st === 'boil') this.stir = { last: this.angleOf(e), acc: 0 };
     else if (st === 'pour') this.startPour();
     else if (st === 'fill') this.startFill();
+    else if (st === 'batter') this.startBatter();
+    else if (st === 'tako') this.dropTako();
+    else if (st === 'turn') this.tapBall(e);
     else if (st === 'pleat') {
       const i = this.nextPleat();
       if (i < 0) return;
@@ -263,6 +324,7 @@ export class StoveStation extends Station {
     this.stir.last = a;
     this.stir.acc += d;
     this.swirl = Math.min(4, (this.swirl || 0) + Math.abs(d) * 1.5);
+    const U = this.U;
     if (Math.abs(this.stir.acc) >= Math.PI * 1.85) {
       this.stir.acc = 0;
       this.stirs++;
@@ -281,6 +343,16 @@ export class StoveStation extends Station {
     if (st === 'boil') this.stir = null;
     else if (st === 'pour') this.endPour();
     else if (st === 'fill' && this.filling) this.finishFill();
+    else if (st === 'batter' && this.filling) this.finishBatter();
+  }
+
+  // Toppings offered at this stage: everything any dish of this kind takes.
+  toppingKinds() {
+    const g = this.g;
+    if (this.dish === 'takoyaki') return TAKOYAKI.toppings;
+    const table = this.dish === 'ramen' ? RAMEN : UDON;
+    const kinds = menuKinds(DAYS[g.day], this.dish === 'ramen' ? 'r' : 'u');
+    return [...new Set((kinds.length ? kinds : Object.keys(table)).flatMap((k) => table[k].toppings))];
   }
 
   // Pointer angle around the pot, on screen.
@@ -305,6 +377,7 @@ export class StoveStation extends Station {
   lift(auto = false) {
     if (this.state !== 'boil') return;
     const g = this.g;
+    const U = this.U;
     const cook = Math.min(1.1, this.cook);
     const t = bandScore(cook, U.cookBand, 0.3);
     this.res.boil = t;
@@ -350,12 +423,13 @@ export class StoveStation extends Station {
     g.sound.pouring(false);
     g.stove.pour(null, false);
     if (this.state !== 'pour') return;
+    const U = this.U;
     const v = this.level;
     const s = bandScore(v, U.pourBand, 0.3);
     const at = _v.set(L.bowl[0], 1.8, L.bowl[1]);
     const over = overflow || v > U.pourOver;
     this.res.pour = over ? 0.3 : s;
-    g.grade(over ? 0.2 : s, over ? 'Over the rim!' : s >= 0.95 ? 'Right to the line' : v < U.pourBand[0] ? 'Not much dashi' : 'A touch too much', at);
+    g.grade(over ? 0.2 : s, over ? 'Over the rim!' : s >= 0.95 ? 'Right to the line' : v < U.pourBand[0] ? (this.dish === 'ramen' ? 'Not much broth' : 'Not much dashi') : 'A touch too much', at);
     if (over) {
       // Pochi ladles a little back out.
       const bowl = this.bowl;
@@ -369,25 +443,181 @@ export class StoveStation extends Station {
   }
 
   addTopping(t) {
-    if (this.state !== 'top' || this.bowl.tops[t]) return;
+    const dish = this.bowl || this.boat;
+    if (this.state !== 'top' || !dish || dish.tops[t]) return;
     const g = this.g;
     const want = this.want;
-    this.bowl.addTopping(t);
+    dish.addTopping(t);
     g.sound.plop();
     g.buzz(10);
-    const at = _v.set(L.bowl[0], 1.6, L.bowl[1]);
+    const spot = this.bowl ? L.bowl : L.prep;
+    const at = _v.set(spot[0], 1.6, spot[1]);
     const asked = Object.keys(want.toppings || {});
     if (!asked.includes(t)) g.grade(0.2, `${HOT_TOPPINGS[t].label} is not on the ticket`, at);
     else g.popupAt(HOT_TOPPINGS[t].label, at, 'good');
-    if (asked.every((k) => this.bowl.tops[k])) {
-      const extra = Object.keys(this.bowl.tops).filter((k) => !asked.includes(k)).length;
+    if (asked.every((k) => dish.tops[k])) {
+      const extra = Object.keys(dish.tops).filter((k) => !asked.includes(k)).length;
       setTimeout(() => {
         if (this.state !== 'top') return;
-        g.grade(extra ? 0.6 : 1, extra ? 'Something extra on top' : 'Everything on top', _w.set(L.bowl[0], 2, L.bowl[1]));
-        this.res.toppings = Object.fromEntries(Object.keys(this.bowl.tops).map((k) => [k, true]));
-        this.plateUp(this.bowl.group, 'udon');
+        g.grade(extra ? 0.6 : 1, extra ? 'Something extra on top' : 'Everything on top', _w.set(spot[0], 2, spot[1]));
+        this.res.toppings = Object.fromEntries(Object.keys(dish.tops).map((k) => [k, true]));
+        this.plateUp(dish.group, this.dish);
       }, 450);
     }
+  }
+
+  // --- Takoyaki ------------------------------------------------------------------
+
+  startBatter() {
+    if (this.filling || this.state !== 'batter') return;
+    this.filling = true;
+    this.g.sound.pouring(true);
+    this.g.stove.setFlame(1, true);
+  }
+
+  finishBatter() {
+    if (!this.filling) return;
+    const g = this.g;
+    this.filling = false;
+    g.sound.pouring(false);
+    const v = this.fillV;
+    const s = bandScore(v, T.fillBand, 0.3);
+    const over = v > T.fillOver;
+    const at = _v.set(L.pan[0], 1.6, L.pan[1]);
+    this.res.batter = over ? 0.35 : s;
+    g.grade(over ? 0.2 : s, over ? 'Batter everywhere!' : s >= 0.95 ? 'Nicely full' : v < T.fillBand[0] ? 'A bit shallow' : 'Brimming', at);
+    if (over) {
+      const balls = this.balls;
+      g.rescue(() => {
+        if (this.balls !== balls) return;
+        this.fillV = 0.8;
+        for (const b of balls) b.setFill(0.8);
+      }, at.clone().setY(1));
+    }
+    g.sound.sizzle(0.6);
+    this.state = 'tako';
+  }
+
+  dropTako() {
+    if (this.state !== 'tako') return;
+    const g = this.g;
+    const b = this.balls[this.dropped];
+    const bit = takoBit();
+    bit.position.set(b.group.position.x, b.group.position.y + 1.2, b.group.position.z);
+    g.stage.scene.add(bit);
+    g.tween({
+      obj: bit,
+      to: new Vector3(b.group.position.x, b.group.position.y + 0.08, b.group.position.z),
+      duration: 0.25,
+      arc: 0.3,
+      done: () => {
+        bit.removeFromParent();
+        b.poke(1);
+        g.sound.plop();
+      },
+    });
+    g.buzz(6);
+    this.dropped++;
+    if (this.dropped >= T.count) {
+      this.res.tako = 1;
+      setTimeout(() => {
+        if (this.state !== 'tako') return;
+        g.popupAt('Octopus in!', new Vector3(L.pan[0], 1.6, L.pan[1]), 'great');
+        this.state = 'turn';
+        this.turnTime = 0;
+        this.turnScores = [];
+      }, 300);
+    }
+  }
+
+  // The unturned ball that will be ready first.
+  nextBall() {
+    let best = null;
+    for (const b of this.balls) if (!b.turned && (!best || b.bottom > best.bottom)) best = b;
+    return best;
+  }
+
+  // Tap near a ball to turn it; a tap elsewhere turns the readiest one.
+  tapBall(e) {
+    const g = this.g;
+    let pick = null;
+    let bestD = 70 * 70;
+    for (const b of this.balls) {
+      if (b.turned) continue;
+      const p = g.screenOf(b.group.position);
+      const d = (p.x - e.clientX) ** 2 + (p.y - e.clientY) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        pick = b;
+      }
+    }
+    pick ||= this.nextBall();
+    if (!pick) return;
+    // Far too early does nothing but a little wobble.
+    if (pick.bottom < T.turnBand[0] - 0.3) {
+      pick.poke(0.5);
+      return;
+    }
+    this.turnBall(pick);
+  }
+
+  turnBall(b, auto = false) {
+    if (b.turned) return;
+    const g = this.g;
+    b.turned = true;
+    const v = b.bottom;
+    const s = auto ? 0.1 : bandScore(v, T.turnBand, 0.3);
+    this.turnScores.push(s);
+    const at = b.group.position.clone().setY(b.group.position.y + 0.9);
+    g.popupAt(auto ? 'Burnt!' : s >= 0.95 ? 'Golden!' : v < T.turnBand[0] ? 'Pale' : 'Dark', at, s >= 0.95 ? 'great' : s >= 0.5 ? 'good' : 'bad');
+    g.sound.pinch();
+    g.buzz(8);
+    b.poke(0.8);
+    // Flip it over: the browned underside comes up.
+    const q = new Quaternion().setFromAxisAngle(_w.set(1, 0, 0.3).normalize(), Math.PI);
+    g.tween({ obj: b.mesh, quaternion: q, duration: 0.3 });
+    if (this.balls.every((x) => x.turned)) {
+      const avg = this.turnScores.reduce((a, c) => a + c, 0) / this.turnScores.length;
+      this.res.turn = avg;
+      this.state = 'toBoat';
+      setTimeout(() => {
+        if (this.state !== 'toBoat') return;
+        g.grade(avg, avg >= 0.9 ? 'Perfectly round and golden' : avg >= 0.6 ? 'Nicely browned' : 'A bit uneven', new Vector3(L.pan[0], 1.8, L.pan[1]));
+        g.stove.setFlame(1, false);
+        g.sound.sizzle(0);
+        this.toBoat();
+      }, 600);
+    }
+  }
+
+  toBoat() {
+    const g = this.g;
+    const boat = new TakoBoat([]);
+    boat.group.position.set(L.prep[0], 0.16, L.prep[1]);
+    g.stage.scene.add(boat.group);
+    this.boat = boat;
+    const balls = this.balls;
+    balls.forEach((b, i) => {
+      const spot = boat.spot(i).add(boat.group.position);
+      setTimeout(() => {
+        if (this.boat !== boat) return;
+        g.tween({
+          obj: b.group,
+          to: spot,
+          duration: 0.35,
+          arc: 1.2,
+          done: () => {
+            if (this.boat !== boat) return;
+            b.mesh.position.y = 0;
+            boat.balls.push(b);
+            boat.group.attach(b.group);
+            b.poke(1);
+            g.sound.squelch(0.3);
+            if (boat.balls.length === balls.length) this.state = 'top';
+          },
+        });
+      }, i * 110);
+    });
   }
 
   // --- Gyoza ---------------------------------------------------------------------
@@ -539,6 +769,7 @@ export class StoveStation extends Station {
     const order = this.order;
     const bowl = this.bowl;
     const plate = this.plate;
+    const boat = this.boat;
     const count = (this.gyozas || []).length;
     const geta = g.set.geta;
     const local = new Vector3(-0.55, LAYOUT.geta.h, 0);
@@ -556,6 +787,7 @@ export class StoveStation extends Station {
           group.removeFromParent();
           if (bowl) bowl.dispose();
           if (plate) plate.dispose();
+          if (boat) boat.dispose();
           return;
         }
         geta.attach(group);
@@ -563,16 +795,19 @@ export class StoveStation extends Station {
         g.sound.tap();
         this.plated = true;
         const res = { ...this.res };
-        g.hotDish = {
-          kind,
-          group,
-          built: kind === 'udon' ? { udon: bowl.kind, boil: res.boil ?? 0.5, stir: res.stir ?? 0, pour: res.pour ?? 0.5, toppings: res.toppings || {} } : { gyoza: count, fill: res.fill ?? 0.5, pleat: res.pleat ?? 0.5, fry: res.fry ?? 0.5 },
-          bowl: kind === 'udon' ? bowl : null,
-          plate: kind === 'gyoza' ? plate : null,
-        };
+        // Every dish scores as three steps; toppings fold into the third.
+        const noodle = kind === 'udon' || kind === 'ramen';
+        const built = noodle
+          ? { key: `${kind[0]}:${bowl.kind}`, parts: [(res.boil ?? 0.5) * 0.8 + (res.stir ?? 0) * 0.2, res.pour ?? 0.5, 1], toppings: res.toppings || {} }
+          : kind === 'takoyaki'
+            ? { key: 't:takoyaki', parts: [(res.batter ?? 0.5) * 0.8 + (res.tako ?? 1) * 0.2, res.turn ?? 0.5, 1], toppings: res.toppings || {} }
+            : { key: 'g:gyoza', parts: [res.fill ?? 0.5, res.pleat ?? 0.5, res.fry ?? 0.5], count };
+        g.hotDish = { kind, group, built, bowl: noodle ? bowl : null, plate: kind === 'gyoza' ? plate : null, boat: kind === 'takoyaki' ? boat : null };
         // The station lets go of it; the game owns it until it is eaten.
         this.bowl = null;
         this.plate = null;
+        this.boat = null;
+        this.balls = [];
         this.gyozas = [];
         if (g.station === 'stove') setTimeout(() => g.station === 'stove' && g.goStation('counter'), 900);
       },
@@ -598,9 +833,19 @@ export class StoveStation extends Station {
       gz.dispose();
     }
     if (this.plate) this.plate.group.removeFromParent();
+    if (this.boat) {
+      this.boat.group.removeFromParent();
+      this.boat.dispose();
+    }
+    for (const b of this.balls || []) {
+      if (this.boat && this.boat.balls.includes(b)) continue;
+      b.group.removeFromParent();
+      b.dispose();
+    }
     if (g.stove) {
       g.stove.setFlame(0, false);
       g.stove.setFlame(1, false);
+      g.stove.useTako(false);
       g.stove.lid.visible = false;
       g.stove.lid.position.copy(g.stove.lidHome);
       g.stove.pour(null, false);
@@ -611,6 +856,8 @@ export class StoveStation extends Station {
     this.gyozas = [];
     this.gz = null;
     this.plate = null;
+    this.boat = null;
+    this.balls = [];
     this.plated = false;
     this.pouring = false;
     this.filling = false;

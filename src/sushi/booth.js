@@ -13,11 +13,11 @@ import {
   SpotLight,
   Vector3,
 } from 'three';
-import { BLOCKS, FishSlice, Piece, RiceMound } from './food.js';
+import { BLOCKS, FishSlice, Onigiri, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
-import { LAYOUT } from './config.js';
-import { hotOf, makiOf, nigiriOf, plateLayout } from './orders.js';
-import { GyozaPlate, UdonBowl } from './hot.js';
+import { LAYOUT, ONIGIRI } from './config.js';
+import { hotOf, makiOf, nigiriOf, onigiriOf, plateLayout } from './orders.js';
+import { GyozaPlate, TakoBoat, UdonBowl } from './hot.js';
 import { platedMaki } from './maki.js';
 import { Customer } from './critters.js';
 
@@ -62,6 +62,8 @@ export class PhotoBooth {
   async orderPhoto(order, w = 480, h = 300) {
     const hot = hotOf(order)[0];
     if (hot) return this.hotPhoto(hot, w, h);
+    const oni = onigiriOf(order)[0];
+    if (oni) return this.hotPhoto(oni, w, h);
     const g = LAYOUT.geta;
     const layout = plateLayout(order);
     const wantNigiri = nigiriOf(order);
@@ -96,7 +98,8 @@ export class PhotoBooth {
 
   // A stove dish, made perfectly, on the board.
   async hotPhoto(want, w, h) {
-    const dish = want.udon ? UdonBowl.ideal(want.udon) : GyozaPlate.ideal();
+    const dish = want.udon || want.ramen ? UdonBowl.ideal(want.udon || want.ramen) : want.takoyaki ? TakoBoat.ideal() : want.onigiri ? Onigiri.ideal(want.onigiri, ONIGIRI[want.onigiri].color, 4) : GyozaPlate.ideal();
+    if (want.onigiri) for (let k = 0; k < 30; k++) dish.update(1 / 30);
     const holder = dish.group;
     holder.position.set(-0.55, LAYOUT.geta.h, 0);
     const url = await this.shoot(w, h, () => {

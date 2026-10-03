@@ -1,9 +1,9 @@
 import { Quaternion, Raycaster, Vector2, Vector3 } from 'three';
-import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, dishKey } from './config.js';
+import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, dishKey, usesStove } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
 import { contactShadow, Customer, Paw, SousChef } from './critters.js';
-import { hotOf, makeOrders, makiOf, nigiriOf, orderSize, perfectDay, plateLayout, rankFor, scorePlate, starsFor, tipFor } from './orders.js';
+import { hotOf, makeOrders, makiOf, nigiriOf, onigiriOf, orderSize, scoopScore, perfectDay, plateLayout, rankFor, scorePlate, starsFor, tipFor } from './orders.js';
 import { MAKI, makiSpots, MakiSheet, platedMaki } from './maki.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
 import { StoveStation } from './stove.js';
@@ -28,6 +28,9 @@ const SHOWCASE = {
   unagi: { name: 'Unagi nigiri', jp: '鰻', pieces: [{ fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } }] },
   udon: { name: 'Kitsune udon', jp: 'きつねうどん', pieces: [{ udon: 'kitsune', toppings: { kamaboko: true, scallion: true, aburaage: true } }] },
   gyoza: { name: 'Gyoza', jp: '餃子', pieces: [{ gyoza: 3 }] },
+  onigiri: { name: 'Ume onigiri', jp: '梅おにぎり', pieces: [{ onigiri: 'ume' }] },
+  ramen: { name: 'Shoyu ramen', jp: '醤油ラーメン', pieces: [{ ramen: 'shoyu', toppings: { chashu: true, naruto: true, menma: true, scallion: true } }] },
+  takoyaki: { name: 'Takoyaki', jp: 'たこ焼き', pieces: [{ takoyaki: 6, toppings: { sauce: true, mayo: true, katsuobushi: true, aonori: true } }] },
 };
 const ENTRANCE = new Vector3(-17, LAYOUT.customer.y, LAYOUT.customer.z);
 
@@ -83,6 +86,7 @@ export class Game {
     this.pieces = [];
     this.tray = [];
     this.rolls = [];
+    this.onigiri = [];
     this.progress = loadProgress();
     this.quality = { slowFor: 0, avg: 16, fixed: new URLSearchParams(location.search).has('fixed') || new URLSearchParams(location.search).has('tier') };
 
@@ -223,7 +227,7 @@ export class Game {
     this.mode = 'intro';
     this.placeSous(LAYOUT.sous, true);
     this.ui.setDay(dayIndex, 0, this.orders.length, 0);
-    this.ui.showStations(DAYS[dayIndex].hot ? STATIONS : STATIONS.filter((s) => s !== 'stove'));
+    this.ui.showStations(usesStove(DAYS[dayIndex]) ? STATIONS : STATIONS.filter((s) => s !== 'stove'));
     this.stage.goTo('counter');
     const go = () => {
       this.ui.hideCard();
@@ -353,6 +357,30 @@ export class Game {
     });
   }
 
+  // A finished onigiri hops onto the serving board, standing up.
+  addOnigiri(oni) {
+    const k = this.onigiri.length;
+    const n = onigiriOf(this.order).length;
+    this.onigiri.push(oni);
+    const local = new Vector3(-0.55 + (k - (n - 1) / 2) * 1.9, LAYOUT.geta.h, 0);
+    const target = this.set.geta.localToWorld(local.clone());
+    this.tween({
+      obj: oni.group,
+      to: target,
+      duration: 0.55,
+      arc: 2,
+      done: () => {
+        if (!this.onigiri.includes(oni)) return;
+        this.set.geta.attach(oni.group);
+        oni.group.position.copy(local);
+        oni.group.rotation.set(0, 0, 0);
+        oni.rice.body.kickAll(0, 2.2, 0);
+        this.sound.squelch(0.6);
+        if (this.station === 'rice' && this.stations.rice.needed <= 0 && !nigiriOf(this.order || { pieces: [] }).length) setTimeout(() => this.station === 'rice' && this.goStation('counter'), 700);
+      },
+    });
+  }
+
   toTray(slice) {
     if (!this.tray.includes(slice)) this.tray.push(slice);
     this.stage.scene.attach(slice.group);
@@ -410,17 +438,27 @@ export class Game {
     if (!this.order) return [];
     let n = 0;
     let m = 0;
+    let k = 0;
     const stove = this.stations.stove;
     return this.order.pieces.map((want) => {
-      if (want.udon || want.gyoza) {
+      if (want.udon || want.ramen || want.gyoza || want.takoyaki) {
         const st = stove.order === this.order ? stove.state : 'none';
         const plated = !!this.hotDish;
-        if (want.udon) {
-          const tops = plated ? this.hotDish.built.toppings : stove.bowl ? Object.fromEntries(Object.keys(stove.bowl.tops).map((k) => [k, true])) : {};
-          return { hot: true, boiled: plated || ['pour', 'top', 'done'].includes(st), dashi: plated || ['top', 'done'].includes(st), tops, plated };
+        const dish = stove.order === this.order ? stove.bowl || stove.boat : null;
+        const tops = plated ? this.hotDish.built.toppings || {} : dish ? Object.fromEntries(Object.keys(dish.tops).map((k) => [k, true])) : {};
+        if (want.udon || want.ramen) return { hot: true, boiled: plated || ['pour', 'top', 'done'].includes(st), dashi: plated || ['top', 'done'].includes(st), tops, plated };
+        if (want.takoyaki) {
+          const turned = plated ? want.takoyaki : st === 'turn' ? stove.balls.filter((b) => b.turned).length : ['toBoat', 'top', 'done'].includes(st) ? want.takoyaki : 0;
+          return { hot: true, batter: plated || ['tako', 'turn', 'toBoat', 'top', 'done'].includes(st), turned, tops, plated };
         }
         const made = plated ? want.gyoza : stove.order === this.order ? stove.k || 0 : 0;
         return { hot: true, made, fried: plated, plated };
+      }
+      if (want.onigiri) {
+        const o = this.onigiri[k++];
+        if (o) return { rice: true, filling: o.filling, wrapped: true, plated: true };
+        const live = k === this.onigiri.length + 1 ? this.stations.rice.oni : null;
+        return live ? { rice: true, filling: live.filling || null, wrapped: !!live.nori, plated: false } : { rice: false };
       }
       if (want.maki) {
         const r = this.rolls[m++];
@@ -439,10 +477,13 @@ export class Game {
     if (!this.plateComplete()) return false;
     const hot = hotOf(this.order)[0];
     if (hot) {
-      if (hot.gyoza) return true;
-      const given = Object.keys(this.hotDish.built.toppings || {});
-      return hot.udon === this.hotDish.built.udon && given.length === Object.keys(hot.toppings).length && given.every((t) => hot.toppings[t]);
+      const b = this.hotDish.built;
+      if (b.key !== dishKey(hot)) return false;
+      if (!hot.toppings) return true;
+      const given = Object.keys(b.toppings || {});
+      return given.length === Object.keys(hot.toppings).length && given.every((t) => hot.toppings[t]);
     }
+    if (!onigiriOf(this.order).every((want, i) => this.onigiri[i] && this.onigiri[i].filling === want.onigiri)) return false;
     const rollsOk = makiOf(this.order).every((want, i) => this.rolls[i] && this.rolls[i].filling === want.maki);
     return (
       rollsOk &&
@@ -458,6 +499,8 @@ export class Game {
   plateComplete() {
     if (!this.order) return false;
     if (hotOf(this.order).length) return !!this.hotDish;
+    const o = onigiriOf(this.order).length;
+    if (o && this.onigiri.length < o) return false;
     const n = nigiriOf(this.order).length;
     const m = makiOf(this.order).length;
     return this.pieces.length >= n && this.pieces.every((p) => p.slice) && this.rolls.filter((r) => r.plated).length >= m;
@@ -465,7 +508,7 @@ export class Game {
 
   // Something on the board to serve.
   hasFood() {
-    return !!this.hotDish || this.pieces.some((p) => p.slice) || this.rolls.some((r) => r.plated);
+    return !!this.hotDish || this.onigiri.length > 0 || this.pieces.some((p) => p.slice) || this.rolls.some((r) => r.plated);
   }
 
   // --- Rolls -------------------------------------------------------------------
@@ -551,10 +594,16 @@ export class Game {
       r.group.removeFromParent();
       for (const p of r.pieces) p.removeFromParent();
     }
+    for (const o of this.onigiri) {
+      o.group.removeFromParent();
+      o.dispose();
+    }
+    this.onigiri = [];
     if (this.hotDish) {
       this.hotDish.group.removeFromParent();
       if (this.hotDish.bowl) this.hotDish.bowl.dispose();
       if (this.hotDish.plate) this.hotDish.plate.dispose();
+      if (this.hotDish.boat) this.hotDish.boat.dispose();
       this.hotDish = null;
     }
     this.pieces = [];
@@ -585,6 +634,7 @@ export class Game {
     }));
     for (const r of this.rolls.filter((x) => x.plated)) built.push({ maki: r.filling, scoop: r.scoop, shape: r.spreadQuality, cut: r.cutScore, wasabi: 0, dx: 0, toppings: {} });
     if (this.hotDish) built.push(this.hotDish.built);
+    for (const o of this.onigiri) built.push({ key: `o:${o.filling}`, parts: [scoopScore(o.rice.scoop) * 0.4 + o.rice.shapeScore() * 0.6, o.fillScore ?? 0.5, 1] });
     const score = scorePlate(this.order, built, this.order.waited || 0);
     // Tip: the plate, then rush, combo and speed on top.
     const bonuses = [];
@@ -638,6 +688,17 @@ export class Game {
       }
       p.group.visible = false;
     }
+    // Onigiri in three bites each.
+    for (const o of this.onigiri) {
+      for (let bite = 0; bite < 3; bite++) {
+        c.setExpression(bite % 2 ? 'chew' : 'open');
+        this.sound.chomp();
+        c.body.kickAll(0, 1.6, -0.8);
+        await this.tweenP({ obj: o.group, scale: Math.max(0.001, 1 - (bite + 1) / 3), duration: 0.16 });
+        await this.wait(200);
+      }
+      o.group.visible = false;
+    }
     // Udon in three big slurps; gyoza one at a time.
     const hd = this.hotDish;
     if (hd && hd.bowl) {
@@ -651,6 +712,17 @@ export class Game {
           await this.wait(40);
         }
         await this.wait(260);
+      }
+    } else if (hd && hd.boat) {
+      // Takoyaki: one at a time, hot, hot, hot.
+      const n = hd.boat.balls.length;
+      for (let k = 1; k <= n; k++) {
+        c.setExpression(k % 2 ? 'open' : 'chew');
+        this.sound.chomp();
+        c.body.kickAll(0, 1.5, -0.8);
+        hd.boat.eat(k / n);
+        await this.wait(k === 1 ? 420 : 230);
+        if (k === 1) c.emote && c.emote('sweat');
       }
     } else if (hd && hd.plate) {
       for (const gz of hd.plate.gyozas) {
@@ -781,7 +853,7 @@ export class Game {
     const book = this.progress.book;
     const news = [];
     for (const b of built) {
-      const key = dishKey(b);
+      const key = b.key || dishKey(b);
       const d = (book.dishes[key] ||= { served: 0, best: 0 });
       if (!d.served) news.push(DISHES.find((x) => x.key === key)?.name);
       d.served++;
@@ -1310,7 +1382,8 @@ export class Game {
     for (const s of this.tray) s.update(dt);
     for (const r of this.rolls) r.update(dt);
     this.stove.update(dt);
-    if (this.hotDish) (this.hotDish.bowl || this.hotDish.plate).update(dt);
+    if (this.hotDish) (this.hotDish.bowl || this.hotDish.plate || this.hotDish.boat).update(dt);
+    for (const o of this.onigiri) o.update(dt);
     const dragging = this.stations.build.drag;
     if (dragging) dragging.slice.update(dt);
     if (this.customer) {
@@ -1434,11 +1507,11 @@ function saveTier(t) {
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(`${GAME.storageKey}.progress`));
-    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, best: p.best || [], stars: p.stars || [], book: { dishes: {}, guests: {}, ...(p.book || {}) } };
+    if (p && typeof p.unlocked === 'number') return { unlocked: UNLOCK_ALL ? DAYS.length - 1 : Math.min(p.unlocked, DAYS.length - 1), best: p.best || [], stars: p.stars || [], book: { dishes: {}, guests: {}, ...(p.book || {}) } };
   } catch {
     // No saved progress.
   }
-  return { unlocked: 0, best: [], stars: [], book: { dishes: {}, guests: {} } };
+  return { unlocked: UNLOCK_ALL ? DAYS.length - 1 : 0, best: [], stars: [], book: { dishes: {}, guests: {} } };
 }
 
 function saveProgress(p) {

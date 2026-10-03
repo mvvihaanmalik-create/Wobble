@@ -1,4 +1,4 @@
-import { DAYS, FISH, HOT_TOPPINGS, TOPPINGS, UDON, dishKey } from './config.js';
+import { DAYS, FISH, HOT_TOPPINGS, ONIGIRI, RAMEN, TOPPINGS, UDON, dishKey, menuKinds, usesStove } from './config.js';
 import { FILLINGS } from './maki.js';
 import { describePiece } from './orders.js';
 import { ICONS, star } from './icons.js';
@@ -86,7 +86,9 @@ export class GameUI {
     $('title').hidden = false;
     const list = $('dayList');
     list.innerHTML = '';
-    this.selectedDay = Math.min(progress.unlocked, DAYS.length - 1);
+    // Start on the first stage not yet played.
+    const fresh = DAYS.findIndex((_, i) => !progress.best[i]);
+    this.selectedDay = Math.min(progress.unlocked, fresh < 0 ? DAYS.length - 1 : fresh);
     DAYS.forEach((d, i) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -100,7 +102,7 @@ export class GameUI {
           : '<span class="day-foot new">New</span>';
       const got = (progress.stars || [])[i] || 0;
       const stars = locked ? '' : `<span class="day-stars" aria-label="${got} of 3 stars">${[0, 1, 2].map((k) => `<i class="${k < got ? 'on' : ''}">★</i>`).join('')}</span>`;
-      const tag = d.dish ? `<span class="day-tag">${{ tuna: 'Tuna', tamago: 'Tamago', maki: 'Rolls', unagi: 'Unagi', udon: 'Udon', gyoza: 'Gyoza' }[d.dish]}</span>` : d.rush ? '<span class="day-tag rush">Rush</span>' : '';
+      const tag = `<span class="day-tag${d.rush ? ' rush' : ''}">${d.name}</span>`;
       b.innerHTML = `<span class="day-num"><b>${i + 1}</b><span lang="ja">${JP_DAYS[i].replace(/^\d+/, '')}</span>${tag}</span><span class="day-note">${d.note}</span>${stars}${foot}`;
       b.disabled = locked;
       b.setAttribute('aria-label', `${d.title}. ${d.note}${locked ? ' Locked.' : ''}`);
@@ -274,7 +276,8 @@ export class GameUI {
       .map((p, i) => {
         const [main] = describePiece(p);
         const fav = order.look.fav === dishKey(p) ? `<span class="fav-heart ico" title="${esc(order.look.name)}'s favourite">${ICONS.heart}</span>` : '';
-        if (p.udon || p.gyoza) return hotLine(p, progress[i] || {}, main + fav);
+        if (p.udon || p.ramen || p.gyoza || p.takoyaki) return hotLine(p, progress[i] || {}, main + fav);
+        if (p.onigiri) return oniLine(p, progress[i] || {}, main + fav);
         if (p.maki) return makiLine(p, progress[i] || {}, main + fav);
         const pr = progress[i] || { rice: false, fish: false, wasabi: 0, tops: {} };
         const chips = [];
@@ -420,9 +423,15 @@ export class GameUI {
     const goals = extra.goals ? `<div class="goals">${extra.goals.map((g, k) => `<span class="goal"><span class="mini-stars">${'★'.repeat(k + 1)}</span>${yen(g)}</span>`).join('')}</div>` : '';
     const show = extra.showcase ? `<figure class="showcase"><img src="${extra.showcase.img}" alt="${esc(extra.showcase.name)}" /><figcaption><span class="new-tag">New</span>${esc(extra.showcase.name)}<span lang="ja">${esc(extra.showcase.jp || '')}</span></figcaption></figure>` : '';
     const rush = d.rush ? `<p class="rush-line"><span class="ico">${ICONS.flame}</span>Rush hour comes mid shift. Less patience, bigger tips.</p>` : '';
-    const stove = d.hot
-      ? [...(d.hot.udon || []).map((u) => `<span class="ingredient"><span class="ico">${ICONS.udon}</span>${UDON[u].label}</span>`), ...(d.hot.gyoza ? [`<span class="ingredient"><span class="ico">${ICONS.gyoza}</span>Gyoza</span>`] : [])].join('')
-      : '';
+    const item = (ico, label) => `<span class="ingredient"><span class="ico">${ICONS[ico]}</span>${label}</span>`;
+    const stove = [
+      ...menuKinds(d, 'u').map((u) => item('udon', UDON[u].label)),
+      ...menuKinds(d, 'r').map((r) => item('ramen', RAMEN[r].label)),
+      ...(menuKinds(d, 'g').length ? [item('gyoza', 'Gyoza')] : []),
+      ...(menuKinds(d, 't').length ? [item('takoyaki', 'Takoyaki')] : []),
+    ].join('');
+    const sushi = menuKinds(d, 'n').length > 0;
+    const oni = menuKinds(d, 'o').map((o) => item('onigiri', ONIGIRI[o].label)).join('');
     const fish = d.fish.map((f) => `<span class="ingredient"><span class="ico">${ICONS[FISH_ICON[f]]}</span>${FISH[f].label}</span>`).join('');
     const tops = d.toppings.length
       ? d.toppings.map((t) => `<span class="ingredient"><span class="ico">${ICONS[t]}</span>${TOPPINGS[t].label}</span>`).join('')
@@ -432,13 +441,14 @@ export class GameUI {
        <p class="panel-lead">${d.note}</p>
        ${show}
        <div class="guests"><span class="ico">${ICONS.pochi}</span><span><b>${d.customers}</b> guests tonight</span></div>
-       <div class="shelf"><span class="shelf-label">Nigiri</span><div class="ingredients">${fish}</div></div>
+       ${sushi ? `<div class="shelf"><span class="shelf-label">Nigiri</span><div class="ingredients">${fish}</div></div>` : ''}
        ${rolls ? `<div class="shelf"><span class="shelf-label">Rolls</span><div class="ingredients">${rolls}</div></div>` : ''}
-       <div class="shelf"><span class="shelf-label">Toppings</span><div class="ingredients">${tops}</div></div>
+       ${oni ? `<div class="shelf"><span class="shelf-label">Onigiri</span><div class="ingredients">${oni}</div></div>` : ''}
+       ${sushi ? `<div class="shelf"><span class="shelf-label">Toppings</span><div class="ingredients">${tops}</div></div>` : ''}
        ${stove ? `<div class="shelf"><span class="shelf-label">Stove</span><div class="ingredients">${stove}</div></div>` : ''}
        ${rush}
        ${goals}
-       <p class="tip-line">${d.hot ? 'Sushi goes rice, knife, build. Udon and gyoza are made at the stove.' : 'Match the photo on each ticket. Rice, knife, build, serve.'}</p>`,
+       <p class="tip-line">${usesStove(d) ? 'Sushi goes rice, knife, build. Hot dishes are made at the stove.' : oni ? 'Onigiri are shaped at the rice station. Sushi goes rice, knife, build.' : 'Match the photo on each ticket. Rice, knife, build, serve.'}</p>`,
       [{ label: 'Open the door', primary: true, onClick: onGo }],
       'intro',
     );
@@ -448,7 +458,7 @@ export class GameUI {
     this.card(
       `<div class="ribbon"><h2>Paused</h2><span lang="ja">休憩</span></div>
        <p class="panel-lead">${DAYS[dayIndex].title}. The guest will wait.</p>
-       <p class="tip-line">Esc to resume. 1 to ${DAYS[dayIndex].hot ? 5 : 4} switch stations. Hold Space to scoop and press.</p>`,
+       <p class="tip-line">Esc to resume. 1 to ${usesStove(DAYS[dayIndex]) ? 5 : 4} switch stations. Hold Space to scoop and press.</p>`,
       [
         { label: 'Resume', primary: true, onClick: onResume },
         { label: 'Restart day', onClick: onRestart },
@@ -751,14 +761,22 @@ function hotLine(p, pr, main) {
   const chip = (text, state) => chips.push(`<span class="chip${state ? ` ${state}` : ''}">${state === 'ok' ? '✓ ' : ''}${text}</span>`);
   let done;
   let steps;
-  if (p.udon) {
+  if (p.udon || p.ramen) {
     chip('Boiled', pr.boiled ? 'ok' : '');
-    chip('Dashi', pr.dashi ? 'ok' : '');
+    chip(p.ramen ? 'Broth' : 'Dashi', pr.dashi ? 'ok' : '');
     const tops = pr.tops || {};
     for (const t of Object.keys(p.toppings)) chip(HOT_TOPPINGS[t].label, tops[t] ? 'ok' : '');
     for (const t of Object.keys(tops)) if (!p.toppings[t]) chip(HOT_TOPPINGS[t].label, 'over');
     done = pr.plated && Object.keys(p.toppings).every((t) => tops[t]) && Object.keys(tops).every((t) => p.toppings[t]);
     steps = `<i class="${pr.boiled ? 'on' : ''}"></i><i class="${pr.dashi ? 'on' : ''}"></i><i class="${pr.plated ? 'on' : ''}"></i>`;
+  } else if (p.takoyaki) {
+    chip('Batter', pr.batter ? 'ok' : '');
+    chip(`Turned ${pr.turned || 0}/${p.takoyaki}`, (pr.turned || 0) >= p.takoyaki ? 'ok' : '');
+    const tops = pr.tops || {};
+    for (const t of Object.keys(p.toppings)) chip(HOT_TOPPINGS[t].label, tops[t] ? 'ok' : '');
+    for (const t of Object.keys(tops)) if (!p.toppings[t]) chip(HOT_TOPPINGS[t].label, 'over');
+    done = pr.plated && Object.keys(p.toppings).every((t) => tops[t]) && Object.keys(tops).every((t) => p.toppings[t]);
+    steps = `<i class="${pr.batter ? 'on' : ''}"></i><i class="${(pr.turned || 0) >= p.takoyaki ? 'on' : ''}"></i><i class="${pr.plated ? 'on' : ''}"></i>`;
   } else {
     chip(`Folded ${pr.made || 0}/${p.gyoza}`, (pr.made || 0) >= p.gyoza ? 'ok' : '');
     chip('Fried', pr.fried ? 'ok' : '');
@@ -766,8 +784,24 @@ function hotLine(p, pr, main) {
     steps = `<i class="${pr.made ? 'on' : ''}"></i><i class="${(pr.made || 0) >= p.gyoza ? 'on' : ''}"></i><i class="${pr.plated ? 'on' : ''}"></i>`;
   }
   return `<div class="piece${done ? ' done' : ''}">
-    <span class="piece-ico ico">${ICONS[p.udon ? 'udon' : 'gyoza']}</span>
+    <span class="piece-ico ico">${ICONS[p.udon ? 'udon' : p.ramen ? 'ramen' : p.takoyaki ? 'takoyaki' : 'gyoza']}</span>
     <div class="piece-text"><b>${main}<span class="steps" aria-hidden="true">${steps}</span></b><span class="chips">${chips.join('')}</span></div>
+    ${done ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
+  </div>`;
+}
+
+// An onigiri on the ticket: rice shaped, filling in, wrapped in nori.
+function oniLine(p, pr, main) {
+  const chips = [];
+  const chip = (text, state) => chips.push(`<span class="chip${state ? ` ${state}` : ''}">${state === 'ok' ? '✓ ' : ''}${text}</span>`);
+  const right = pr.filling === p.onigiri;
+  chip(ONIGIRI[p.onigiri].filling, pr.filling ? (right ? 'ok' : 'over') : '');
+  chip('Wrapped', pr.wrapped ? 'ok' : '');
+  const done = pr.plated && right;
+  const steps = `<span class="steps" aria-hidden="true"><i class="${pr.rice ? 'on' : ''}"></i><i class="${pr.filling ? 'on' : ''}"></i><i class="${pr.plated ? 'on' : ''}"></i></span>`;
+  return `<div class="piece${done ? ' done' : ''}">
+    <span class="piece-ico ico">${ICONS.onigiri}</span>
+    <div class="piece-text"><b>${main}${steps}</b><span class="chips">${chips.join('')}</span></div>
     ${done ? '<span class="stamp" lang="ja" aria-label="Done">済</span>' : ''}
   </div>`;
 }

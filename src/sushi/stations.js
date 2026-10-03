@@ -10,10 +10,10 @@ import {
   IcosahedronGeometry,
   BufferAttribute,
 } from 'three';
-import { FISH, KNIFE, LAYOUT, RICE } from './config.js';
-import { BLOCKS, FishBlock, FishSlice, Piece, RiceMound } from './food.js';
+import { DAYS, FISH, KNIFE, LAYOUT, ONIGIRI, RICE, menuKinds } from './config.js';
+import { BLOCKS, FishBlock, FishSlice, Onigiri, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
-import { cutScore, hotOf, makiOf, nigiriOf, scoopScore } from './orders.js';
+import { cutScore, hotOf, makiOf, nigiriOf, onigiriOf, scoopScore } from './orders.js';
 import { FILLINGS, MAKI, MakiSheet } from './maki.js';
 import { Paw } from './critters.js';
 
@@ -177,8 +177,20 @@ export class RiceStation extends Station {
     return makiOf(g.order).length - g.rolls.length - (this.sheet && this.sheet.riceLayer.visible ? 1 : 0);
   }
 
+  get onigiriNeeded() {
+    const g = this.g;
+    if (!g.order || !g.order.taken) return 0;
+    return onigiriOf(g.order).length - g.onigiri.length - (this.oni ? 1 : 0);
+  }
+
+  // The filling the next onigiri wants.
+  get wantedOnigiri() {
+    const want = onigiriOf(this.g.order)[this.g.onigiri.length];
+    return want ? want.onigiri : null;
+  }
+
   get needed() {
-    return this.nigiriNeeded + this.makiNeeded;
+    return this.nigiriNeeded + this.makiNeeded + this.onigiriNeeded;
   }
 
   // Which roll the ticket wants next, for the fill step.
@@ -203,7 +215,8 @@ export class RiceStation extends Station {
 
   update(dt) {
     const g = this.g;
-    if (this.rice) this.rice.update(dt);
+    if (this.oni) this.oni.update(dt);
+    else if (this.rice) this.rice.update(dt);
     if (!this.sheet && this.state === 'idle' && g.station === 'rice' && this.nigiriNeeded <= 0 && this.makiNeeded > 0) this.ensureSheet();
     if (this.sheet) this.sheet.update(dt);
     this.updatePaw(dt);
@@ -237,22 +250,31 @@ export class RiceStation extends Station {
     if (!g.order || !g.order.taken) g.ui.hint('Take an order at the counter first.');
     else if (this.state === 'idle' && this.needed > 0) {
       const n = nigiriOf(g.order).length;
-      g.ui.hint(makingMaki ? 'Roll time. Hold to scoop rice onto the nori.' : `Hold to scoop rice. Let go in the green. (${g.pieces.length + 1} of ${n})`);
+      const oniTime = this.nigiriNeeded <= 0 && this.onigiriNeeded > 0;
+      g.ui.hint(makingMaki ? 'Roll time. Hold to scoop rice onto the nori.' : oniTime ? 'Onigiri time. Hold to scoop rice. Let go in the green.' : `Hold to scoop rice. Let go in the green. (${g.pieces.length + 1} of ${n})`);
     } else if (this.state === 'scooping') g.ui.hint('Let go in the green band.');
     else if (this.state === 'ready') g.ui.hint(this.sheet ? 'Hold to spread the rice. Let go in the green.' : 'Hold to press. Let go in the green.');
     else if (this.state === 'pressing') g.ui.hint(this.value > RICE.pressOver ? 'Too hard!' : this.sheet ? 'Spread...' : 'Press...');
     else if (this.state === 'fill') g.ui.hint(`Lay the filling. The ticket wants ${FILLINGS[this.wantedFilling]?.label.toLowerCase() || 'a filling'}.`);
     else if (this.state === 'roll') g.ui.hint('Swipe up across the mat to roll it.');
+    else if (this.state === 'stuff') g.ui.hint(`Press in the filling. The ticket wants ${ONIGIRI[this.wantedOnigiri]?.filling.toLowerCase() || 'a filling'}.`);
+    else if (this.state === 'wrap') g.ui.hint('Tap to wrap the nori round it.');
     else if (this.state === 'rolling') g.ui.hint('Rolling...');
-    else if (this.needed <= 0 && !this.rice && !this.sheet) g.ui.hint('Rice is done. On to the knife.');
+    else if (this.needed <= 0 && !this.rice && !this.sheet) g.ui.hint(g.order && !nigiriOf(g.order).length && !makiOf(g.order).length ? 'Plated. Serve it at the counter.' : 'Rice is done. On to the knife.');
     const taken = g.order && g.order.taken;
     if (taken && this.state === 'idle' && this.needed > 0) g.gesture('hold', _v.set(LAYOUT.tub.x, LAYOUT.tub.height + 0.5, LAYOUT.tub.z));
     else if (this.state === 'ready') g.gesture('hold', _v.set(LAYOUT.mat.x, 0.9, LAYOUT.mat.z));
+    else if (this.state === 'wrap') g.gesture('tap', _v.set(LAYOUT.mat.x + 1.2, 0.8, LAYOUT.mat.z + 0.4));
     else if (this.state === 'roll') g.gesture('stroke', _v.set(LAYOUT.mat.x, 0.4, LAYOUT.mat.z + 1.1), _v2.set(LAYOUT.mat.x, 0.4, LAYOUT.mat.z - 1.1));
     else g.gesture(null);
-    if (this.state === 'fill') {
+    if (this.state === 'stuff') {
+      g.ui.actions(menuKinds(DAYS[g.day], 'o').map((k) => ({ label: ONIGIRI[k].filling, primary: k === this.wantedOnigiri, onClick: () => this.stuff(k) })));
+    } else if (this.state === 'fill') {
       g.ui.actions(g.dayFillings().map((k) => ({ label: FILLINGS[k].label, primary: k === this.wantedFilling, onClick: () => this.fill(k) })));
-    } else g.ui.actions(this.needed <= 0 && !this.rice && !this.sheet && g.order && g.order.taken ? [{ label: 'To the knife', primary: true, onClick: () => g.goStation('knife') }] : []);
+    } else if (this.needed <= 0 && !this.rice && !this.sheet && g.order && g.order.taken) {
+      const onlyOni = !nigiriOf(g.order).length && !makiOf(g.order).length;
+      g.ui.actions([onlyOni ? { label: 'Serve', primary: true, onClick: () => g.serve() } : { label: 'To the knife', primary: true, onClick: () => g.goStation('knife') }]);
+    } else g.ui.actions([]);
   }
 
   dots() {
@@ -267,6 +289,7 @@ export class RiceStation extends Station {
       this.rollFrom = { x: g.pointerPos.x, y: g.pointerPos.y };
       return;
     }
+    if (this.state === 'wrap') return this.wrapOnigiri();
     if (this.state === 'idle' && this.needed > 0) {
       // Nigiri rice first; once those are on the board, the roll.
       if (this.nigiriNeeded <= 0 && this.makiNeeded > 0) this.ensureSheet();
@@ -344,7 +367,8 @@ export class RiceStation extends Station {
     g.stage.scene.remove(this.ball);
     this.ball = null;
     this.state = 'flying';
-    const rice = new RiceMound(scoop, 1 + Math.floor(Math.random() * 1000));
+    const onigiri = this.nigiriNeeded <= 0 && this.onigiriNeeded > 0;
+    const rice = new RiceMound(scoop, 1 + Math.floor(Math.random() * 1000), onigiri ? 'onigiri' : 'nigiri');
     rice.group.position.copy(from);
     rice.group.scale.setScalar(0.6);
     g.stage.scene.add(rice.group);
@@ -360,6 +384,15 @@ export class RiceStation extends Station {
         rice.body.kickAll(0, 2.5, 0);
         g.sound.squelch(0.6);
         this.state = 'ready';
+        if (onigiri) {
+          // An onigiri gets its filling before it is shaped.
+          const oni = new Onigiri(rice);
+          oni.group.position.copy(rice.group.position);
+          rice.group.position.set(0, 0, 0);
+          g.stage.scene.add(oni.group);
+          this.oni = oni;
+          this.state = 'stuff';
+        }
         const at = new Vector3(LAYOUT.mat.x, 0.6, LAYOUT.mat.z);
         g.fx.burst('grain', at, 14, { speed: 2.2, up: 3, life: 0.9 });
         const sc = scoopScore(scoop);
@@ -442,8 +475,43 @@ export class RiceStation extends Station {
     if (this.rice.presses.length >= RICE.presses) this.finishPiece();
   }
 
+  // Press the filling in: the button picks it.
+  stuff(kind) {
+    if (this.state !== 'stuff' || !this.oni) return;
+    const g = this.g;
+    this.oni.addFilling(kind, ONIGIRI[kind].color);
+    g.sound.plop();
+    g.buzz(10);
+    const at = new Vector3(LAYOUT.mat.x, 1.5, LAYOUT.mat.z);
+    const right = kind === this.wantedOnigiri;
+    this.oni.fillScore = right ? 1 : 0.2;
+    g.grade(right ? 1 : 0.2, right ? `${ONIGIRI[kind].filling}, as ordered` : 'Not what the ticket says', at);
+    this.state = 'ready';
+  }
+
+  // Wrap the nori round the bottom and send it to the board.
+  wrapOnigiri() {
+    if (this.state !== 'wrap' || !this.oni) return;
+    const g = this.g;
+    const oni = this.oni;
+    oni.wrap();
+    g.sound.plop();
+    g.sound.squelch(0.4);
+    g.buzz(14);
+    g.grade(1, 'Wrapped snug', new Vector3(LAYOUT.mat.x, 1.7, LAYOUT.mat.z));
+    this.oni = null;
+    this.rice = null;
+    this.state = 'idle';
+    g.ui.meter(null);
+    g.addOnigiri(oni);
+  }
+
   finishPiece() {
     const g = this.g;
+    if (this.oni) {
+      this.state = 'wrap';
+      return;
+    }
     const rice = this.rice;
     this.rice = null;
     this.state = 'idle';
@@ -458,6 +526,8 @@ export class RiceStation extends Station {
       this.rice.dispose();
     }
     if (this.sheet) this.g.stage.scene.remove(this.sheet.group);
+    if (this.oni) this.oni.group.removeFromParent();
+    this.oni = null;
     this.sheet = null;
     this.rice = null;
     this.cancelScoop();
@@ -926,6 +996,10 @@ export class BuildStation extends Station {
     if (hotOf(g.order).length) {
       g.gesture(null);
       return g.ui.hint(complete ? 'Hot and ready. Serve it.' : 'This one is cooked at the stove.');
+    }
+    if (!nigiriOf(g.order).length && !makiOf(g.order).length) {
+      g.gesture(null);
+      return g.ui.hint(complete ? 'Onigiri on the board. Serve it.' : 'Onigiri are shaped at the rice station.');
     }
     if (!g.pieces.length && !g.rolls.length) return g.ui.hint('No rice yet. Make some at the rice station.');
     if (!g.pieces.length) return g.ui.hint(complete ? 'Looks ready. Serve it.' : 'The roll is on its way. Finish it at the knife.');

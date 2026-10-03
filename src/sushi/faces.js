@@ -163,11 +163,88 @@ function openEye(x, iris, { lashes, sparkle, tear, lid } = {}) {
   }
 }
 
+// Village-style eyes, the Animal Crossing way: small, dark and glossy, one
+// big highlight. Each guest gets their own shape.
+//   bead: a tall oval. dot: small and round. lash: bead with lashes.
+//   ringed: bead with a pale rim, so it reads on a dark eye patch.
+//   sleepy: bead under a heavy lid.
+const BEAD = { bead: [56, 74], lash: [56, 72], dot: [44, 48], ringed: [50, 62], sleepy: [58, 70] };
+
+function beadEye(x, iris, style, { sparkle, tear, lid } = {}) {
+  const [cx, cy0] = EC;
+  const [rx, ry] = BEAD[style] || BEAD.bead;
+  const cy = cy0 + 14;
+  if (style === 'ringed') {
+    ellipse(x, cx, cy, rx + 15, ry + 15);
+    x.fillStyle = '#fffaf2';
+    x.fill();
+  }
+  x.save();
+  if (lid || style === 'sleepy') {
+    x.beginPath();
+    x.rect(0, cy - ry * (lid ? 0.05 : 0.35), EW, EH);
+    x.clip();
+  }
+  ellipse(x, cx, cy, rx, ry);
+  const g = x.createLinearGradient(0, cy - ry, 0, cy + ry);
+  g.addColorStop(0, INK);
+  g.addColorStop(0.6, mix(INK, iris, 0.25));
+  g.addColorStop(1, mix(INK, iris, 0.6));
+  x.fillStyle = g;
+  x.fill();
+  x.fillStyle = '#ffffff';
+  if (sparkle) {
+    star(x, cx + 16, cy - 26, 34);
+    x.fill();
+  } else {
+    ellipse(x, cx + 18, cy - ry * 0.42, rx * 0.34, ry * 0.32);
+    x.fill();
+    ellipse(x, cx - rx * 0.4, cy + ry * 0.5, 9, 9);
+    x.fill();
+  }
+  if (tear) {
+    x.fillStyle = 'rgba(160,220,255,0.85)';
+    x.beginPath();
+    x.ellipse(cx, cy + ry - 8, rx - 4, 16, 0, 0, Math.PI);
+    x.fill();
+  }
+  x.restore();
+  if (lid || style === 'sleepy') {
+    x.strokeStyle = INK;
+    x.lineWidth = 15;
+    x.beginPath();
+    const ly = cy - ry * (lid ? 0.05 : 0.35);
+    x.moveTo(cx - rx - 6, ly + 6);
+    x.quadraticCurveTo(cx, ly - 10, cx + rx + 4, ly + 2);
+    x.stroke();
+  }
+  if (style === 'lash') {
+    x.strokeStyle = INK;
+    x.lineWidth = 10;
+    x.beginPath();
+    x.moveTo(cx - rx * 0.55, cy - ry * 0.82);
+    x.quadraticCurveTo(cx - rx * 0.9, cy - ry * 1.05, cx - rx * 1.25, cy - ry * 0.98);
+    x.moveTo(cx - rx * 0.88, cy - ry * 0.5);
+    x.quadraticCurveTo(cx - rx * 1.2, cy - ry * 0.62, cx - rx * 1.48, cy - ry * 0.48);
+    x.stroke();
+  }
+}
+
+// The closed shapes, drawn smaller for village eyes.
+function scaled(x, k, draw) {
+  x.save();
+  x.translate(EC[0], EC[1] + 14);
+  x.scale(k, k);
+  x.translate(-EC[0], -EC[1]);
+  draw();
+  x.restore();
+}
+
 const EYES = {
-  open: (x, iris, o) => openEye(x, iris, o),
-  star: (x, iris, o) => openEye(x, mix(iris, '#ffffff', 0.2), { ...o, sparkle: true }),
-  sad: (x, iris, o) => openEye(x, iris, { ...o, tear: true }),
-  half: (x, iris, o) => openEye(x, iris, { ...o, lid: true }),
+  open: (x, iris, o) => (o.style && o.style !== 'anime' ? beadEye(x, iris, o.style, o) : openEye(x, iris, o)),
+  star: (x, iris, o) => (o.style && o.style !== 'anime' ? beadEye(x, iris, o.style, { ...o, sparkle: true }) : openEye(x, mix(iris, '#ffffff', 0.2), { ...o, sparkle: true })),
+  sad: (x, iris, o) => (o.style && o.style !== 'anime' ? beadEye(x, iris, o.style, { ...o, tear: true }) : openEye(x, iris, { ...o, tear: true })),
+  half: (x, iris, o) => (o.style && o.style !== 'anime' ? beadEye(x, iris, o.style, { ...o, lid: true }) : openEye(x, iris, { ...o, lid: true })),
   // ^ : the happy squint.
   happy: (x) => {
     x.strokeStyle = INK;
@@ -207,10 +284,36 @@ const EYES = {
   },
 };
 
-export function eyeTexture(kind, browKind, iris, { lashes = false, brow: browColor = INK } = {}) {
-  return tex(`eye|${kind}|${browKind}|${iris}|${lashes}|${browColor}`, EW, EH, (x) => {
-    brow(x, browKind, browColor);
-    EYES[kind](x, iris, { lashes });
+export function eyeTexture(kind, browKind, iris, { lashes = false, brow: browColor = INK, style = 'anime' } = {}) {
+  return tex(`eye|${kind}|${browKind}|${iris}|${lashes}|${browColor}|${style}`, EW, EH, (x) => {
+    const village = style !== 'anime';
+    if (village) {
+      // Thin, soft brows that only show when they mean something.
+      x.globalAlpha = browKind === 'neutral' ? 0 : 0.9;
+      x.save();
+      x.translate(EW / 2, 30);
+      x.scale(0.8, 0.8);
+      x.translate(-EW / 2, -30);
+      brow(x, browKind, browColor);
+      x.restore();
+      x.globalAlpha = 1;
+    } else brow(x, browKind, browColor);
+    if (village && (kind === 'happy' || kind === 'closed' || kind === 'angry' || kind === 'heart')) {
+      if (style === 'ringed' && kind !== 'heart') {
+        // Dark lines vanish on a dark eye patch: paint them cream there.
+        const c = document.createElement('canvas');
+        c.width = EW;
+        c.height = EH;
+        const y = c.getContext('2d');
+        y.lineCap = 'round';
+        y.lineJoin = 'round';
+        scaled(y, 0.72, () => EYES[kind](y, iris, { lashes }));
+        y.globalCompositeOperation = 'source-atop';
+        y.fillStyle = '#fffaf2';
+        y.fillRect(0, 0, EW, EH);
+        x.drawImage(c, 0, 0);
+      } else scaled(x, 0.72, () => EYES[kind](x, iris, { lashes }));
+    } else EYES[kind](x, iris, { lashes, style });
   });
 }
 

@@ -89,6 +89,8 @@ export const TOPPINGS = {
 
 // Stove dishes. Rates are per second; bands are where to stop for a clean step.
 export const HOT = {
+  ramen: { cookRate: 1 / 5.5, cookBand: [0.58, 0.78], stirs: 3, pourRate: 0.45, pourBand: [0.66, 0.84], pourOver: 0.95 },
+  takoyaki: { count: 6, fillRate: 0.6, fillBand: [0.6, 0.85], fillOver: 0.95, brownRate: 1 / 5, turnBand: [0.5, 0.8] },
   udon: { cookRate: 1 / 7, cookBand: [0.6, 0.8], stirs: 3, pourRate: 0.42, pourBand: [0.66, 0.84], pourOver: 0.95 },
   gyoza: { count: 3, fillRate: 0.75, fillBand: [0.5, 0.72], fillOver: 0.9, pleats: 5, pleatTime: 2.8, brownRate: 1 / 6.5, brownBand: [0.55, 0.78], steamRate: 1 / 4.5, steamBand: [0.6, 0.85] },
 };
@@ -98,31 +100,61 @@ export const UDON = {
   tempura: { label: 'Tempura udon', jp: '天ぷらうどん', toppings: ['kamaboko', 'scallion', 'tempura'] },
 };
 
+export const RAMEN = {
+  shoyu: { label: 'Shoyu ramen', jp: '醤油ラーメン', broth: '#a8641e', toppings: ['chashu', 'naruto', 'menma', 'scallion'] },
+  tonkotsu: { label: 'Tonkotsu ramen', jp: '豚骨ラーメン', broth: '#efe0c4', toppings: ['chashu', 'egg', 'nori', 'scallion'] },
+};
+
+export const ONIGIRI = {
+  ume: { label: 'Ume onigiri', jp: '梅おにぎり', filling: 'Umeboshi', color: '#d63a4a' },
+  sake: { label: 'Salmon onigiri', jp: '鮭おにぎり', filling: 'Salmon', color: '#ff8a5c' },
+};
+
+export const TAKOYAKI = { label: 'Takoyaki', jp: 'たこ焼き', count: 6, toppings: ['sauce', 'mayo', 'katsuobushi', 'aonori'] };
+
 export const HOT_TOPPINGS = {
   kamaboko: { label: 'Kamaboko' },
   scallion: { label: 'Scallion' },
   aburaage: { label: 'Aburaage' },
   tempura: { label: 'Ebi tempura' },
+  chashu: { label: 'Chashu' },
+  naruto: { label: 'Naruto' },
+  menma: { label: 'Menma' },
+  egg: { label: 'Ajitama egg' },
+  nori: { label: 'Nori' },
+  sauce: { label: 'Takoyaki sauce' },
+  mayo: { label: 'Mayo' },
+  katsuobushi: { label: 'Bonito flakes' },
+  aonori: { label: 'Aonori' },
 };
 
-// Each day adds something. pieces: [min, max] per order.
+// Ten stages. Each has its own menu: dishes and how often they come up.
+// Orders are dealt from a shuffled bag of the menu, so no dish repeats back
+// to back. Keys: n:<fish> nigiri, m:<filling> roll, o:<filling> onigiri,
+// u:<kind> udon, r:<kind> ramen, g:gyoza, t:takoyaki.
+// fish, toppings and maki: what the knife, build and roll steps offer.
+// pieces: nigiri per sushi order. rush: guests (by index) who arrive in a
+// rush. dish: what the stage introduces, shown on its intro card.
 export const DAYS = [
-  // fish: nigiri on the menu. maki: roll fillings, with makiChance per order.
-  // rush: guests (by index) who arrive in a rush: less patience, bigger tips.
-  // dish: what the day introduces, shown on its intro card.
-  { title: 'Day 1', note: 'Salmon only. Learn the counter.', customers: 3, fish: ['salmon'], toppings: [], pieces: [1, 1], patience: 150 },
-  { title: 'Day 2', note: 'Tuna arrives. So do toppings.', customers: 4, fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], pieces: [1, 2], patience: 170, dish: 'tuna' },
-  { title: 'Day 3', note: 'Egg nigiri in a nori belt. Ikura too.', customers: 4, fish: ['salmon', 'tuna', 'tamago'], toppings: ['sesame', 'scallion', 'ikura', 'nori'], pieces: [1, 2], patience: 185, dish: 'tamago' },
-  { title: 'Day 4', note: 'Rolls. Spread, fill, roll and cut.', customers: 4, fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], maki: ['kappa', 'tekka'], makiChance: 0.65, pieces: [1, 1], patience: 230, dish: 'maki' },
-  { title: 'Day 5', note: 'Unagi, grilled and glazed.', customers: 5, fish: ['salmon', 'unagi', 'tamago'], toppings: ['sesame', 'scallion', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.3, pieces: [1, 2], patience: 210, dish: 'unagi' },
-  { title: 'Day 6', note: 'Rush hour. They keep coming.', customers: 7, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.25, pieces: [1, 2], patience: 175, rush: [2, 5] },
-  { title: 'Day 7', note: 'Omakase night. Anything goes.', customers: 6, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.4, pieces: [2, 2], patience: 240, rush: [3, 4] },
-  // hot: stove dishes. udon: kinds on the menu; gyoza: on the menu; chance per
-  // order; first: the dish the first guest of the day orders.
-  { title: 'Day 8', note: 'Udon. Boil, stir and pour.', customers: 5, fish: ['salmon', 'tuna', 'tamago'], toppings: ['sesame', 'scallion', 'ikura', 'nori'], maki: ['kappa', 'tekka'], makiChance: 0.2, pieces: [1, 2], patience: 230, hot: { udon: ['kitsune', 'tempura'], chance: 0.5, first: 'udon' }, dish: 'udon' },
-  { title: 'Day 9', note: 'Gyoza. Fill, pleat and fry.', customers: 5, fish: ['salmon', 'tuna', 'unagi'], toppings: ['sesame', 'scallion', 'sauce', 'nori'], maki: ['kappa', 'sake'], makiChance: 0.2, pieces: [1, 2], patience: 250, hot: { udon: ['kitsune', 'tempura'], gyoza: true, chance: 0.55, first: 'gyoza' }, dish: 'gyoza' },
-  { title: 'Day 10', note: 'Izakaya night. Everything, fast.', customers: 7, fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], makiChance: 0.25, pieces: [1, 2], patience: 230, hot: { udon: ['kitsune', 'tempura'], gyoza: true, chance: 0.4 }, rush: [3, 5] },
+  { title: 'Stage 1', name: 'First shift', note: 'Salmon nigiri. Learn the counter.', customers: 3, patience: 170, pieces: [1, 1], fish: ['salmon'], toppings: [], menu: [['n:salmon', 1]] },
+  { title: 'Stage 2', name: 'Tuna day', note: 'Tuna arrives, with sesame and scallion.', customers: 4, patience: 175, pieces: [1, 2], fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], menu: [['n:tuna', 3], ['n:salmon', 2]], dish: 'tuna' },
+  { title: 'Stage 3', name: 'Onigiri', note: 'Rice balls: fill, shape, wrap.', customers: 4, patience: 185, pieces: [1, 1], fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], menu: [['o:ume', 2], ['o:sake', 2], ['n:salmon', 1], ['n:tuna', 1]], dish: 'onigiri' },
+  { title: 'Stage 4', name: 'Rolls', note: 'Spread, fill, roll and cut.', customers: 5, patience: 220, pieces: [1, 1], fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], maki: ['kappa', 'tekka'], menu: [['m:kappa', 2], ['m:tekka', 2], ['n:tuna', 1], ['o:ume', 1]], dish: 'maki' },
+  { title: 'Stage 5', name: 'Sweet and glazed', note: 'Tamago in a nori belt, glazed unagi, ikura.', customers: 5, patience: 200, pieces: [1, 2], fish: ['salmon', 'tamago', 'unagi'], toppings: ['sesame', 'ikura', 'sauce', 'nori'], maki: ['sake'], menu: [['n:unagi', 2], ['n:tamago', 2], ['n:salmon', 1], ['m:sake', 1]], dish: 'unagi' },
+  { title: 'Stage 6', name: 'Udon', note: 'Boil, stir and pour.', customers: 5, patience: 220, pieces: [1, 1], fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], maki: ['kappa'], menu: [['u:kitsune', 2], ['u:tempura', 2], ['n:salmon', 1], ['m:kappa', 1]], dish: 'udon' },
+  { title: 'Stage 7', name: 'Gyoza', note: 'Fill, pleat and fry. First rush.', customers: 6, patience: 230, pieces: [1, 2], fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], menu: [['g:gyoza', 3], ['u:kitsune', 1], ['n:tuna', 1], ['o:sake', 1]], dish: 'gyoza', rush: [3, 4] },
+  { title: 'Stage 8', name: 'Ramen', note: 'Noodles, broth and all the toppings.', customers: 6, patience: 230, pieces: [1, 1], fish: ['salmon', 'tuna'], toppings: ['sesame', 'scallion'], menu: [['r:shoyu', 2], ['r:tonkotsu', 2], ['g:gyoza', 1], ['o:ume', 1]], dish: 'ramen', rush: [3, 4] },
+  { title: 'Stage 9', name: 'Takoyaki', note: 'Pour, turn, top. Keep them round.', customers: 6, patience: 225, pieces: [1, 2], fish: ['tuna', 'unagi'], toppings: ['sesame', 'sauce', 'nori'], maki: ['tekka'], menu: [['t:takoyaki', 3], ['r:shoyu', 1], ['n:unagi', 1], ['m:tekka', 1]], dish: 'takoyaki', rush: [2, 4] },
+  { title: 'Stage 10', name: 'Grand night', note: 'The whole menu, and a long rush.', customers: 8, patience: 210, pieces: [2, 2], fish: ['salmon', 'tuna', 'tamago', 'unagi'], toppings: ['sesame', 'scallion', 'ikura', 'sauce', 'nori'], maki: ['kappa', 'tekka', 'sake'], menu: [['n:salmon', 1], ['n:tuna', 1], ['n:unagi', 1], ['n:tamago', 1], ['m:kappa', 1], ['m:tekka', 1], ['o:sake', 1], ['u:tempura', 1], ['r:tonkotsu', 1], ['g:gyoza', 1], ['t:takoyaki', 1]], rush: [3, 6] },
 ];
+
+// While people are testing, every stage is open.
+export const UNLOCK_ALL = true;
+
+// Kinds of a dish type on a stage's menu, for example udon -> ['kitsune'].
+export const menuKinds = (d, type) => [...new Set(d.menu.filter(([k]) => k.startsWith(`${type}:`)).map(([k]) => k.split(':')[1]))];
+// Does a stage use the stove?
+export const usesStove = (d) => d.menu.some(([k]) => /^[urgt]:/.test(k));
 
 // Rush hour, combos and speed.
 export const RUSH = {
@@ -148,12 +180,12 @@ export const SCORE = {
 export const CUSTOMER_LOOKS = [
   // species picks the animal in critters.js. fav: the dish they love; nail
   // it and they tip more, and the Sushi book notes it.
-  { name: 'Mochi', species: 'cat', kind: 'Calico cat', fav: 'n:salmon' },
-  { name: 'Kinako', species: 'shiba', kind: 'Shiba', fav: 'n:tamago' },
-  { name: 'Ume', species: 'bunny', kind: 'Bunny', fav: 'm:kappa' },
-  { name: 'Azuki', species: 'bear', kind: 'Bear', fav: 'n:unagi' },
-  { name: 'Sasa', species: 'panda', kind: 'Panda', fav: 'm:tekka' },
-  { name: 'Yuzu', species: 'fox', kind: 'Fox', fav: 'u:kitsune' }, // a fox who loves kitsune udon, of course
+  { name: 'Mochi', species: 'cat', kind: 'Calico cat', shirt: { color: '#e86a5c', alt: '#fff4e6', pattern: 'stripes' }, fav: 'n:salmon' },
+  { name: 'Kinako', species: 'shiba', kind: 'Shiba', shirt: { color: '#6fa3d8', alt: '#ffffff', pattern: 'gingham' }, fav: 'r:shoyu' },
+  { name: 'Ume', species: 'bunny', kind: 'Bunny', shirt: { color: '#ff9cb8', alt: '#fffaf6', pattern: 'dots' }, fav: 'o:ume' }, // Ume loves ume onigiri
+  { name: 'Azuki', species: 'bear', kind: 'Bear', shirt: { color: '#d9824a', alt: '#7a3f22', pattern: 'plaid' }, fav: 'n:unagi' },
+  { name: 'Sasa', species: 'panda', kind: 'Panda', shirt: { color: '#ffd25e', alt: '#ff9a3c', pattern: 'dots' }, fav: 't:takoyaki' },
+  { name: 'Yuzu', species: 'fox', kind: 'Fox', shirt: { color: '#3d5a8a', alt: '#f6f2ea', pattern: 'stripes' }, fav: 'u:kitsune' }, // a fox who loves kitsune udon, of course
 ];
 
 // Every dish in the Sushi book. key: n:<fish> for nigiri, m:<filling> for
@@ -161,17 +193,23 @@ export const CUSTOMER_LOOKS = [
 export const DISHES = [
   { key: 'n:salmon', name: 'Salmon nigiri', jp: '鮭', day: 0, piece: { fish: 'salmon', wasabi: 1, toppings: {} } },
   { key: 'n:tuna', name: 'Tuna nigiri', jp: '鮪', day: 1, piece: { fish: 'tuna', wasabi: 1, toppings: {} } },
-  { key: 'n:tamago', name: 'Tamago nigiri', jp: '玉子', day: 2, piece: { fish: 'tamago', wasabi: 0, toppings: { nori: true } } },
+  { key: 'o:ume', name: 'Ume onigiri', jp: '梅おにぎり', day: 2, piece: { onigiri: 'ume' } },
+  { key: 'o:sake', name: 'Salmon onigiri', jp: '鮭おにぎり', day: 2, piece: { onigiri: 'sake' } },
   { key: 'm:kappa', name: 'Cucumber roll', jp: '河童巻き', day: 3, piece: { maki: 'kappa', wasabi: 0, toppings: {} } },
   { key: 'm:tekka', name: 'Tuna roll', jp: '鉄火巻き', day: 3, piece: { maki: 'tekka', wasabi: 0, toppings: {} } },
+  { key: 'n:tamago', name: 'Tamago nigiri', jp: '玉子', day: 4, piece: { fish: 'tamago', wasabi: 0, toppings: { nori: true } } },
   { key: 'n:unagi', name: 'Unagi nigiri', jp: '鰻', day: 4, piece: { fish: 'unagi', wasabi: 0, toppings: { sauce: true, nori: true, sesame: true } } },
   { key: 'm:sake', name: 'Salmon roll', jp: '鮭巻き', day: 4, piece: { maki: 'sake', wasabi: 0, toppings: {} } },
-  { key: 'u:kitsune', name: 'Kitsune udon', jp: 'きつねうどん', day: 7, piece: { udon: 'kitsune' } },
-  { key: 'u:tempura', name: 'Tempura udon', jp: '天ぷらうどん', day: 7, piece: { udon: 'tempura' } },
-  { key: 'g:gyoza', name: 'Gyoza', jp: '餃子', day: 8, piece: { gyoza: 3 } },
+  { key: 'u:kitsune', name: 'Kitsune udon', jp: 'きつねうどん', day: 5, piece: { udon: 'kitsune' } },
+  { key: 'u:tempura', name: 'Tempura udon', jp: '天ぷらうどん', day: 5, piece: { udon: 'tempura' } },
+  { key: 'g:gyoza', name: 'Gyoza', jp: '餃子', day: 6, piece: { gyoza: 3 } },
+  { key: 'r:shoyu', name: 'Shoyu ramen', jp: '醤油ラーメン', day: 7, piece: { ramen: 'shoyu' } },
+  { key: 'r:tonkotsu', name: 'Tonkotsu ramen', jp: '豚骨ラーメン', day: 7, piece: { ramen: 'tonkotsu' } },
+  { key: 't:takoyaki', name: 'Takoyaki', jp: 'たこ焼き', day: 8, piece: { takoyaki: 6 } },
 ];
-// u:<kind> for udon, g:gyoza, m:<filling> for rolls, n:<fish> for nigiri.
-export const dishKey = (p) => (p.udon ? `u:${p.udon}` : p.gyoza ? 'g:gyoza' : p.maki ? `m:${p.maki}` : `n:${p.fish}`);
+// u:<kind> udon, r:<kind> ramen, g:gyoza, t:takoyaki, o:<filling> onigiri,
+// m:<filling> rolls, n:<fish> nigiri.
+export const dishKey = (p) => (p.udon ? `u:${p.udon}` : p.ramen ? `r:${p.ramen}` : p.gyoza ? 'g:gyoza' : p.takoyaki ? 't:takoyaki' : p.onigiri ? `o:${p.onigiri}` : p.maki ? `m:${p.maki}` : `n:${p.fish}`);
 
 export const PERF = {
   slowFrameMs: 22, // average frame time that counts as slow

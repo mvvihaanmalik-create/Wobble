@@ -1,5 +1,6 @@
 import {
   PlaneGeometry,
+  RepeatWrapping,
   BackSide,
   BufferAttribute,
   CanvasTexture,
@@ -36,8 +37,9 @@ import { cheekTexture, emoteTexture, eyeTexture, mouthTexture } from './faces.js
 // hatched blush. Manga emotes pop over their heads.
 
 const CRITTER_SIM = {
-  sim: { spring: 110, damping: 2.6, coupling: 2200, pressure: 90, maxDisplacement: 0.4, softLimit: 0.22 },
-  modes: { shearSpring: 38, squashSpring: 60, damping: 2.2, maxShear: 0.35, maxSquash: 0.42, breathing: 0.02, breathingRate: 2.1, tremble: 0.004 },
+  // Stiff enough that a big hop never folds the face over itself.
+  sim: { spring: 170, damping: 3.6, coupling: 2200, pressure: 110, maxDisplacement: 0.28, softLimit: 0.16 },
+  modes: { shearSpring: 52, squashSpring: 80, damping: 3, maxShear: 0.26, maxSquash: 0.32, breathing: 0.02, breathingRate: 2.1, tremble: 0.003 },
 };
 
 // Head shapes from a unit sphere: round, a touch wider than tall.
@@ -63,7 +65,7 @@ export const SPECIES = {
     inner: '#ffb3c1',
     nose: '#ff8ea4',
     iris: '#d08a1a',
-    lashes: true,
+    eyes: 'lash',
     fang: true,
     whiskers: '#8d7a72',
     patches: [
@@ -82,6 +84,7 @@ export const SPECIES = {
     inner: '#fff1de',
     nose: '#2b1d18',
     iris: '#6a3a1a',
+    eyes: 'bead',
     brow: '#fff4e4', // the shiba's pale eyebrow spots
     patches: [{ c: [0, 0.22, 0.95], r: [0.78, 0.32, 0.55], col: '#fff4e4' }],
     body: '#eb9c56',
@@ -97,7 +100,7 @@ export const SPECIES = {
     inner: '#ffbccb',
     nose: '#ff99b1',
     iris: '#c2405a',
-    lashes: true,
+    eyes: 'lash',
     patches: [{ c: [0, 0.26, 0.95], r: [0.42, 0.22, 0.4], col: '#ffffff' }],
     body: '#fff3f5',
     belly: '#ffffff',
@@ -111,6 +114,7 @@ export const SPECIES = {
     inner: '#ecd0b0',
     nose: '#3b241a',
     iris: '#5b3420',
+    eyes: 'dot',
     patches: [{ c: [0, 0.26, 0.95], r: [0.42, 0.24, 0.45], col: '#f3dec6' }],
     body: '#b88760',
     belly: '#f3dec6',
@@ -124,9 +128,11 @@ export const SPECIES = {
     earColor: '#2a2527',
     inner: '#2a2527',
     nose: '#2a2527',
-    iris: '#4a4060',
-    brow: '#2a2527',
-    patches: [{ c: [0.42, 0.43, 0.9], r: [0.24, 0.22, 0.4], col: '#2e292b', mirror: true, tilt: 0.45 }],
+    iris: '#6a4a3a',
+    eyes: 'ringed',
+    brow: '#6a5a60',
+    // Small, soft teardrop patches that droop outward: sleepy, not spooky.
+    patches: [{ c: [0.4, 0.45, 0.9], r: [0.2, 0.15, 0.4], col: '#4a4146', mirror: true, tilt: 0.55 }],
     body: '#fbfaf6',
     arms: '#2a2527',
     feet: '#2a2527',
@@ -140,6 +146,7 @@ export const SPECIES = {
     inner: '#fff3e6',
     nose: '#2b1d18',
     iris: '#e08a2a',
+    eyes: 'sleepy',
     fang: true,
     whiskers: '#5a3b2b',
     patches: [
@@ -156,6 +163,57 @@ export const SPECIES = {
 };
 
 const MAX_PATCHES = 4;
+
+// Shirt fabric, painted once per pattern: stripes, gingham, polka dots or
+// plaid, in the guest's colors.
+const shirtCache = new Map();
+function shirtTexture({ color, alt = '#fffaf0', pattern = 'plain' }) {
+  const key = `${color}|${alt}|${pattern}`;
+  if (shirtCache.has(key)) return shirtCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = color;
+  x.fillRect(0, 0, 256, 256);
+  x.fillStyle = alt;
+  if (pattern === 'stripes') {
+    for (let y = 0; y < 256; y += 32) x.fillRect(0, y, 256, 14);
+  } else if (pattern === 'gingham') {
+    x.globalAlpha = 0.5;
+    for (let k = 0; k < 256; k += 32) {
+      x.fillRect(k, 0, 16, 256);
+      x.fillRect(0, k, 256, 16);
+    }
+    x.globalAlpha = 1;
+  } else if (pattern === 'dots') {
+    for (let y = 0; y < 8; y++) {
+      for (let k = 0; k < 8; k++) {
+        x.beginPath();
+        x.arc(k * 32 + (y % 2) * 16 + 8, y * 32 + 16, 6.5, 0, Math.PI * 2);
+        x.fill();
+      }
+    }
+  } else if (pattern === 'plaid') {
+    x.globalAlpha = 0.35;
+    for (let k = 0; k < 256; k += 64) {
+      x.fillRect(k, 0, 24, 256);
+      x.fillRect(0, k, 256, 24);
+    }
+    x.globalAlpha = 0.8;
+    for (let k = 40; k < 256; k += 64) {
+      x.fillRect(k, 0, 4, 256);
+      x.fillRect(0, k, 256, 4);
+    }
+    x.globalAlpha = 1;
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.repeat.set(4, 2);
+  t.anisotropy = 4;
+  shirtCache.set(key, t);
+  return t;
+}
 
 // Fur material: soft satin with a velvet sheen and a little glow from inside,
 // like mochi. Markings are mixed in per pixel from baked body coordinates.
@@ -524,25 +582,27 @@ export class Critter {
     return m;
   }
 
-  // Round little body, stubby arms with paws, feet and a tail.
+  // Round little body, stubby arms with paws, feet and a tail. Guests wear
+  // a patterned shirt with little sleeves, the way village folk do.
   buildBody() {
     const sp = this.sp;
     const geo = bodyGeo();
     const furCol = sp.body || sp.fur;
-    const bodyMat = this.soft(furCol);
+    const shirt = sp.shirt;
+    const bodyMat = shirt ? this.soft('#ffffff', { map: shirtTexture(shirt), sheen: 0.6, sheenRoughness: 0.6, clearcoat: 0.05, roughness: 0.75, emissive: new Color(shirt.color).multiplyScalar(0.04) }) : this.soft(furCol);
     this.torso = new Group();
     const torso = inked(geo.torso, bodyMat, 0.022);
     torso.position.y = TORSO.y;
     this.torso.add(torso);
-    if (sp.belly) {
+    if (sp.belly && !shirt) {
       const belly = new Mesh(geo.belly, this.soft(sp.belly));
       belly.position.set(0, TORSO.y - 0.04, TORSO.r * TORSO.sz - 0.17);
       belly.receiveShadow = true;
       this.torso.add(belly);
     }
     this.inner.add(this.torso);
-    const armMat = sp.arms ? this.soft(sp.arms) : bodyMat;
-    const pawMat = sp.paws ? this.soft(sp.paws) : armMat;
+    const armMat = shirt ? bodyMat : sp.arms ? this.soft(sp.arms) : bodyMat;
+    const pawMat = sp.paws ? this.soft(sp.paws) : shirt ? this.soft(sp.arms || furCol) : armMat;
     this.arms = [-1, 1].map((side) => {
       const g = new Group();
       g.position.set(side * 0.5, 0.74, 0.1);
@@ -554,7 +614,7 @@ export class Critter {
       this.inner.add(g);
       return g;
     });
-    const footMat = sp.feet ? this.soft(sp.feet) : sp.paws ? pawMat : bodyMat;
+    const footMat = sp.feet ? this.soft(sp.feet) : sp.paws ? pawMat : shirt ? this.soft(furCol) : bodyMat;
     this.feet = [-1, 1].map((side) => {
       const f = inked(geo.foot, footMat, 0.016);
       f.position.set(side * 0.27, 0.07, 0.38);
@@ -710,7 +770,7 @@ export class Critter {
     // Big eyes, set low and wide: the baby face that made the era.
     const eyeX = W * 0.22;
     const eyeY = H * 0.47;
-    const blank = eyeTexture('open', 'neutral', sp.iris || '#5a3420');
+    const blank = eyeTexture('open', 'neutral', sp.iris || '#5a3420', { style: sp.eyes || 'anime' });
     this.eyes = [-1, 1].map((side) => {
       const m = new Mesh(decalGeometry(0.5, 0.625, R * 0.92), decalMaterial(blank));
       m.renderOrder = 3;
@@ -779,7 +839,7 @@ export class Critter {
 
   paintEyes(kind) {
     const sp = this.sp;
-    const t = eyeTexture(kind, this.face.brow, sp.iris || '#5a3420', { lashes: !!sp.lashes, brow: sp.brow || '#2a160f' });
+    const t = eyeTexture(kind, this.face.brow, sp.iris || '#5a3420', { lashes: !!sp.lashes, brow: sp.brow || '#2a160f', style: sp.eyes || 'anime' });
     for (const m of this.eyes) m.material.map = t;
     this.eyeKind = kind;
   }
@@ -980,7 +1040,7 @@ export class Critter {
 // A guest at the counter.
 export class Customer extends Critter {
   constructor(look, seed = 1) {
-    super(look.species, seed);
+    super({ ...SPECIES[look.species], shirt: look.shirt }, seed);
     this.look = look;
   }
 }

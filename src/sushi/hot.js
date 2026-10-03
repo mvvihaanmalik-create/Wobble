@@ -29,7 +29,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { LAYOUT, UDON } from './config.js';
+import { LAYOUT, RAMEN, TAKOYAKI, UDON } from './config.js';
 import { bakeFoodCoords, foodMaterial, plain } from './materials.js';
 import { mulberry } from './set.js';
 
@@ -56,6 +56,20 @@ function hm() {
     batter: new MeshPhysicalMaterial({ color: '#f0bf62', roughness: 0.6, sheen: 0.6, sheenColor: new Color('#fff0b8'), clearcoat: 0.25, clearcoatRoughness: 0.4 }),
     tail: new MeshPhysicalMaterial({ color: '#ec4b2a', roughness: 0.3, clearcoat: 0.9 }),
     scallion: plain.scallion(),
+    chashu: new MeshPhysicalMaterial({ color: '#e7ad8e', roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, sheen: 0.4, sheenColor: new Color('#ffd8c4') }),
+    chashuRim: new MeshPhysicalMaterial({ color: '#8a4322', roughness: 0.35, clearcoat: 0.9, clearcoatRoughness: 0.15 }),
+    menma: new MeshPhysicalMaterial({ color: '#c99a52', roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.2 }),
+    eggWhite: new MeshPhysicalMaterial({ color: '#e9b77c', roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 }),
+    eggCut: new MeshPhysicalMaterial({ color: '#fbf5ea', roughness: 0.35, clearcoat: 0.4 }),
+    yolk: new MeshPhysicalMaterial({ color: '#f39a1e', roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, emissive: '#5a2500', emissiveIntensity: 0.15 }),
+    nori: new MeshPhysicalMaterial({ color: '#1f2a1c', roughness: 0.55, sheen: 0.6, sheenColor: new Color('#4c6a3a'), side: DoubleSide }),
+    naruto: new MeshPhysicalMaterial({ color: '#fdfaf5', roughness: 0.3, clearcoat: 0.5 }),
+    tako: new MeshPhysicalMaterial({ color: '#b8384c', roughness: 0.3, clearcoat: 0.8 }),
+    takoSauce: new MeshPhysicalMaterial({ color: '#5a2610', roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.04 }),
+    mayo: new MeshPhysicalMaterial({ color: '#fff6dc', roughness: 0.25, clearcoat: 0.8 }),
+    bonito: new MeshPhysicalMaterial({ color: '#d99a7e', roughness: 0.7, side: DoubleSide, sheen: 0.6, sheenColor: new Color('#ffe2d2') }),
+    aonori: new MeshPhysicalMaterial({ color: '#4f8a2a', roughness: 0.8 }),
+    boat: new MeshPhysicalMaterial({ color: '#ecd6a8', roughness: 0.75, sheen: 0.3, sheenColor: new Color('#fff2d6') }),
     ringGeo: new TorusGeometry(0.07, 0.022, 8, 22),
     filling: new MeshPhysicalMaterial({ color: '#d99a84', roughness: 0.55, sheen: 0.3, sheenColor: new Color('#ffd9c8') }),
     steel: plain.steel(),
@@ -90,38 +104,48 @@ function shade(mesh, cast = true, receive = true) {
 // Udon noodles: thick, glossy, a little translucent once cooked. raw -> 0,
 // cooked -> 1 moves the color from floury to glossy white.
 
-export function noodleMaterial() {
-  return new MeshPhysicalMaterial({ color: '#e8d9b8', roughness: 0.7, clearcoat: 0.1, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: new Color('#ffffff'), sheenRoughness: 0.4 });
+// Ramen noodles are thin, wavy and yellow from the kansui.
+export function noodleMaterial(ramen = false) {
+  const m = new MeshPhysicalMaterial({ color: '#e8d9b8', roughness: 0.7, clearcoat: 0.1, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: new Color('#ffffff'), sheenRoughness: 0.4 });
+  if (ramen) {
+    m.userData.raw = new Color('#e3c97a');
+    m.userData.cooked = new Color('#f5d66a');
+  }
+  return m;
 }
 
 const RAW = new Color('#e8d9b8');
 const COOKED = new Color('#fbf6ea');
 export function setNoodleCook(mat, k) {
-  mat.color.copy(RAW).lerp(COOKED, Math.min(1, k));
+  mat.color.copy(mat.userData.raw || RAW).lerp(mat.userData.cooked || COOKED, Math.min(1, k));
   mat.roughness = 0.7 - 0.45 * Math.min(1, k);
   mat.clearcoat = 0.1 + 0.75 * Math.min(1, k);
 }
 
 // A nest of noodles inside a radius profile: rOf(y) is the space available
 // at height y. Each noodle is a lazy spiral.
-function noodleNest(seed, { count, rOf, y0, y1, radius = 0.055, turns = 1.2 }) {
+function noodleNest(seed, { count, rOf, y0, y1, radius = 0.055, turns = 1.2, wave = 0 }) {
   const rand = mulberry(seed);
   const geos = [];
   for (let i = 0; i < count; i++) {
     const pts = [];
     const a0 = rand() * Math.PI * 2;
     const dir = rand() < 0.5 ? -1 : 1;
-    const steps = 8;
+    const steps = wave ? 28 : 8;
     const r0 = 0.25 + rand() * 0.55;
+    const yb = 0.3 + 0.6 * rand();
+    const ph = rand() * 6;
     for (let k = 0; k <= steps; k++) {
       const t = k / steps;
-      const y = y0 + (y1 - y0) * (0.25 + 0.75 * rand()) * (0.6 + 0.4 * Math.sin(t * Math.PI));
+      // Wavy noodles rise and fall smoothly and kink side to side.
+      const h = wave ? Math.max(0.05, Math.min(1, yb + 0.28 * Math.sin(t * 5 + ph))) : (0.25 + 0.75 * rand()) * (0.6 + 0.4 * Math.sin(t * Math.PI));
+      const y = y0 + (y1 - y0) * h;
       const room = Math.max(0.1, rOf(y) - radius * 2.2);
-      const r = Math.min(room, room * (r0 + 0.35 * Math.sin(t * 5 + i)));
+      const r = Math.min(room, room * (r0 + 0.35 * Math.sin(t * 5 + i)) + (wave ? wave * Math.sin(t * steps * 1.6) : 0));
       const a = a0 + dir * t * turns * Math.PI * 2 * 0.5;
       pts.push(new Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
     }
-    geos.push(new TubeGeometry(new CatmullRomCurve3(pts), 36, radius, 6));
+    geos.push(new TubeGeometry(new CatmullRomCurve3(pts), wave ? 90 : 36, radius, 6));
   }
   const g = mergeGeometries(geos);
   for (const x of geos) x.dispose();
@@ -129,8 +153,9 @@ function noodleNest(seed, { count, rOf, y0, y1, radius = 0.055, turns = 1.2 }) {
 }
 
 // The noodles in the pot: a loose tangle that swirls when stirred.
-export function potNoodles(mat, seed = 7) {
-  return shade(new Mesh(noodleNest(seed, { count: 14, rOf: () => 1.15, y0: 0.35, y1: 1.05, turns: 1.6 }), mat), true, false);
+export function potNoodles(mat, seed = 7, ramen = false) {
+  const opts = ramen ? { count: 22, radius: 0.03, wave: 0.05 } : { count: 14 };
+  return shade(new Mesh(noodleNest(seed, { ...opts, rOf: () => 1.15, y0: 0.35, y1: 1.05, turns: 1.6 }), mat), true, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +229,77 @@ function sharedGeo() {
   tail.scale(1, 1, 0.35);
   tail.rotateZ(-Math.PI / 2);
   tail.translate(0.86, 0.02, 0.22);
-  SHARED = { kamaboko: body, rind: pink, age, shrimp, tail };
+  // Chashu: a round slice of rolled pork with a dark, glazed rim.
+  const chashu = new CylinderGeometry(0.4, 0.4, 0.07, 36);
+  const chashuRim = new TorusGeometry(0.4, 0.04, 8, 36);
+  chashuRim.rotateX(Math.PI / 2);
+  // Naruto: a frilly-edged fish cake disc with a pink swirl.
+  const naruto = new CylinderGeometry(0.27, 0.27, 0.06, 48);
+  const np = naruto.attributes.position.array;
+  for (let i = 0; i < np.length; i += 3) {
+    const r = Math.hypot(np[i], np[i + 2]);
+    if (r > 0.2) {
+      const a = Math.atan2(np[i + 2], np[i]);
+      const k = 1 + 0.06 * Math.sin(a * 14);
+      np[i] *= k;
+      np[i + 2] *= k;
+    }
+  }
+  naruto.computeVertexNormals();
+  const menma = new RoundedBoxGeometry(0.48, 0.07, 0.12, 2, 0.03);
+  // Ajitama: half a marinated egg, cut face up.
+  const egg = new SphereGeometry(0.26, 28, 14, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+  egg.scale(1, 0.75, 1.3);
+  const eggCut = new CircleGeometry(0.255, 28);
+  eggCut.rotateX(-Math.PI / 2);
+  eggCut.scale(1, 1, 1.3);
+  const yolk = new SphereGeometry(0.14, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+  yolk.scale(1, 0.25, 1.15);
+  const noriSheet = new RoundedBoxGeometry(0.62, 0.9, 0.012, 1, 0.005);
+  SHARED = { kamaboko: body, rind: pink, age, shrimp, tail, chashu, chashuRim, naruto, menma, egg, eggCut, yolk, noriSheet };
   return SHARED;
+}
+
+let NARUTO_TEX = null;
+function narutoTexture() {
+  if (NARUTO_TEX) return NARUTO_TEX;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fdfaf5';
+  x.fillRect(0, 0, 256, 256);
+  x.strokeStyle = '#ff5c8a';
+  x.lineWidth = 16;
+  x.lineCap = 'round';
+  x.beginPath();
+  for (let t = 0; t <= 1; t += 0.005) {
+    const a = t * Math.PI * 5.2;
+    const r = 8 + t * 92;
+    const px = 128 + Math.cos(a) * r;
+    const py = 128 + Math.sin(a) * r;
+    if (t === 0) x.moveTo(px, py);
+    else x.lineTo(px, py);
+  }
+  x.stroke();
+  NARUTO_TEX = new CanvasTexture(c);
+  NARUTO_TEX.colorSpace = 'srgb';
+  return NARUTO_TEX;
+}
+
+const BROTHS = {};
+function brothMaterial(kind) {
+  const r = RAMEN[kind];
+  if (!r) return hm().dashi;
+  if (BROTHS[kind]) return BROTHS[kind];
+  const m = hm().dashi.clone();
+  m.color.set(r.broth);
+  if (kind === 'tonkotsu') {
+    m.opacity = 0.96;
+    m.roughness = 0.12;
+    m.sheen = 0.6;
+    m.sheenColor = new Color('#ffffff');
+  }
+  return (BROTHS[kind] = m);
 }
 
 // A bowl of udon. Starts empty; noodles, dashi and toppings go in as the
@@ -215,13 +309,15 @@ export class UdonBowl {
     this.kind = kind;
     this.seed = seed;
     this.group = new Group();
-    this.group.add(glazed(bowlGeometry().clone(), kind === 'kitsune' ? 'glazeTenmoku' : 'glazeIndigo'));
-    this.noodleMat = noodleMaterial();
+    this.ramen = !!RAMEN[kind];
+    this.group.add(glazed(bowlGeometry().clone(), { kitsune: 'glazeTenmoku', tempura: 'glazeIndigo', shoyu: 'glazeRust', tonkotsu: 'glazeCeladon' }[kind] || 'glazeIndigo'));
+    this.noodleMat = noodleMaterial(this.ramen);
     setNoodleCook(this.noodleMat, 1);
-    this.noodles = shade(new Mesh(noodleNest(seed, { count: 16, rOf: innerRadius, y0: 0.24, y1: 0.78 }), this.noodleMat));
+    const nest = this.ramen ? { count: 30, radius: 0.03, wave: 0.045, turns: 1.6 } : { count: 16 };
+    this.noodles = shade(new Mesh(noodleNest(seed, { ...nest, rOf: innerRadius, y0: 0.24, y1: 0.78 }), this.noodleMat));
     this.noodles.visible = false;
     this.group.add(this.noodles);
-    this.broth = new Mesh(new CircleGeometry(1, 48), hm().dashi);
+    this.broth = new Mesh(new CircleGeometry(1, 48), brothMaterial(kind));
     this.broth.rotation.x = -Math.PI / 2;
     this.broth.visible = false;
     this.broth.receiveShadow = true;
@@ -290,6 +386,48 @@ export class UdonBowl {
       s.position.set(-0.05, y + 0.14, 0.05);
       s.rotation.set(0.08, -0.55, 0.06);
       grp.add(s);
+    } else if (k === 'chashu') {
+      for (const [x, z, tilt, ry] of [[0.42, -0.22, -0.28, 0.4], [0.58, 0.22, -0.4, 1.2]]) {
+        const s = new Group();
+        s.add(shade(new Mesh(g.chashu, m.chashu)), shade(new Mesh(g.chashuRim, m.chashuRim)));
+        s.position.set(x, y + 0.08, z);
+        s.rotation.set(0, ry, tilt);
+        grp.add(s);
+      }
+    } else if (k === 'naruto') {
+      m.narutoTop ||= new MeshPhysicalMaterial({ map: narutoTexture(), roughness: 0.3, clearcoat: 0.5 });
+      for (const [x, z, r] of [[-0.42, 0.42, 0.2], [-0.12, 0.58, -0.3]]) {
+        const n = shade(new Mesh(g.naruto, [m.naruto, m.narutoTop, m.naruto]));
+        n.position.set(x, y + 0.05, z);
+        n.rotation.set(0.15 * Math.sign(r), r * 3, r);
+        grp.add(n);
+      }
+    } else if (k === 'menma') {
+      const rand = mulberry(this.seed * 5 + 11);
+      for (let i = 0; i < 5; i++) {
+        const b = shade(new Mesh(g.menma, m.menma));
+        b.position.set(-0.5 + (rand() - 0.5) * 0.25, y + 0.04 + i * 0.025, -0.3 + (rand() - 0.5) * 0.3);
+        b.rotation.set((rand() - 0.5) * 0.3, 0.4 + (rand() - 0.5) * 0.6, (rand() - 0.5) * 0.3);
+        grp.add(b);
+      }
+    } else if (k === 'egg') {
+      for (const [x, z, ry] of [[0.18, 0.5, 0.3], [-0.2, 0.55, -0.5]]) {
+        const e = new Group();
+        e.add(shade(new Mesh(g.egg, m.eggWhite)), shade(new Mesh(g.eggCut, m.eggCut), false, true), shade(new Mesh(g.yolk, m.yolk), false, true));
+        e.children[1].position.y = 0.002;
+        e.children[2].position.y = 0.004;
+        e.position.set(x, y + 0.1, z);
+        e.rotation.set(-0.2, ry, 0.05);
+        grp.add(e);
+      }
+    } else if (k === 'nori') {
+      // Two sheets tucked against the back of the bowl, standing up.
+      for (const [x, ry] of [[-0.3, 0.25], [0.2, -0.2]]) {
+        const n = shade(new Mesh(g.noriSheet, m.nori));
+        n.position.set(x, y + 0.3, -0.82);
+        n.rotation.set(-0.35, ry, 0);
+        grp.add(n);
+      }
     } else return false;
     this.tops[k] = grp;
     this.group.add(grp);
@@ -328,7 +466,7 @@ export class UdonBowl {
     const b = new UdonBowl(kind, seed);
     b.showNoodles(1);
     b.setLevel(0.76);
-    for (const t of UDON[kind].toppings) b.addTopping(t, true);
+    for (const t of (RAMEN[kind] || UDON[kind]).toppings) b.addTopping(t, true);
     return b;
   }
 }
@@ -561,6 +699,283 @@ export class GyozaPlate {
 }
 
 // ---------------------------------------------------------------------------
+// Takoyaki: six balls of batter in an iron plate. They fill, get a bit of
+// octopus, brown underneath and are turned over one by one with a pick,
+// then go into a little wooden boat for sauce, mayo, bonito and aonori.
+
+const TAKO_R = 0.3;
+// Wells in the plate, plate-local, in a 3 by 2 grid.
+export const TAKO_WELLS = [[-0.7, -0.36], [0, -0.36], [0.7, -0.36], [-0.7, 0.36], [0, 0.36], [0.7, 0.36]];
+export const TAKO_TOP = 0.3; // plate surface above the burner
+
+function takoMaterial() {
+  const m = new MeshPhysicalMaterial({ color: '#f4dfa6', roughness: 0.55, clearcoat: 0.35, clearcoatRoughness: 0.35, sheen: 0.5, sheenColor: new Color('#fff3c8') });
+  const u = { uBottom: { value: 0 }, uTop: { value: 0 } };
+  m.userData.u = u;
+  m.onBeforeCompile = (s) => {
+    Object.assign(s.uniforms, u);
+    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;');
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;\nuniform float uBottom;\nuniform float uTop;').replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+{
+  // Whichever half sits in the hot well browns, in little patches.
+  float h = vLocal.y / ${TAKO_R.toFixed(2)};
+  float b = mix(uTop, uBottom, smoothstep(0.25, -0.35, h));
+  vec3 cell = floor(vLocal * 40.0);
+  float n = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  b *= 0.85 + 0.3 * n;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.43, 0.13), smoothstep(0.1, 0.75, b));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.08, 0.02), smoothstep(0.95, 1.4, b));
+}`,
+    );
+  };
+  m.customProgramCacheKey = () => 'takoyaki-ball';
+  return m;
+}
+
+let TAKO_GEO = null;
+function takoGeo() {
+  if (TAKO_GEO) return TAKO_GEO;
+  const ball = new SphereGeometry(TAKO_R, 32, 20);
+  // A little lumpy, the way the batter sets.
+  const p = ball.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    const k = 1 + 0.03 * Math.sin(p[i] * 31 + p[i + 1] * 17) * Math.cos(p[i + 2] * 23);
+    p[i] *= k;
+    p[i + 1] *= k;
+    p[i + 2] *= k;
+  }
+  ball.computeVertexNormals();
+  const bit = new IcosahedronGeometry(0.1, 2);
+  // Sauce: a glossy cap on top of each ball.
+  const cap = new SphereGeometry(TAKO_R * 1.04, 28, 10, 0, Math.PI * 2, 0, 1.0);
+  const flake = new CircleGeometry(0.07, 5);
+  const speck = new CircleGeometry(0.018, 5);
+  // Mayo: a zigzag drizzle across the boat.
+  const pts = [];
+  for (let i = 0; i <= 10; i++) pts.push(new Vector3(-1.05 + i * 0.21, 0, (i % 2 ? 1 : -1) * 0.55));
+  const mayo = new TubeGeometry(new CatmullRomCurve3(pts, false, 'catmullrom', 0.35), 120, 0.035, 8);
+  TAKO_GEO = { ball, bit, cap, flake, speck, mayo };
+  return TAKO_GEO;
+}
+
+// A bit of octopus, dropped into each well.
+export function takoBit() {
+  const m = shade(new Mesh(takoGeo().bit, hm().tako), true, false);
+  m.scale.set(1, 0.8, 1.2);
+  return m;
+}
+
+export class TakoBall {
+  constructor() {
+    this.material = takoMaterial();
+    this.mesh = shade(new Mesh(takoGeo().ball, this.material));
+    this.group = new Group();
+    this.group.add(this.mesh);
+    this.bottom = 0;
+    this.top = 0;
+    this.turned = false;
+    this.wob = 0;
+  }
+
+  // Batter level in the well, 0..1.
+  setFill(v) {
+    const k = Math.max(0.001, Math.min(1.05, v));
+    this.mesh.scale.set(k, k, k);
+    this.mesh.position.y = -TAKO_R * (1 - k);
+  }
+
+  setBrown(bottom, top = this.top) {
+    this.bottom = bottom;
+    this.top = top;
+    this.material.userData.u.uBottom.value = bottom;
+    this.material.userData.u.uTop.value = top;
+  }
+
+  poke(a = 1) {
+    this.wob = a;
+  }
+
+  update(dt) {
+    if (this.wob > 0.001) {
+      this.wob *= Math.exp(-dt * 6);
+      const s = 1 + Math.sin(this.wob * 30) * 0.08 * this.wob;
+      this.group.scale.set(s, 2 - s, s);
+    }
+  }
+
+  dispose() {
+    this.material.dispose();
+  }
+}
+
+// The boat the six balls are served in, with toppings over the lot.
+export class TakoBoat {
+  constructor(balls) {
+    const m = hm();
+    this.group = new Group();
+    const base = shade(new Mesh(new RoundedBoxGeometry(2.5, 0.1, 1.6, 2, 0.04), m.boat));
+    base.position.y = 0.05;
+    this.group.add(base);
+    for (const [x, z, w, d] of [[0, -0.78, 2.5, 0.06], [0, 0.78, 2.5, 0.06], [-1.22, 0, 0.06, 1.6], [1.22, 0, 0.06, 1.6]]) {
+      const wall = shade(new Mesh(new RoundedBoxGeometry(w, 0.24, d, 1, 0.02), m.boat));
+      wall.position.set(x, 0.17, z);
+      this.group.add(wall);
+    }
+    this.balls = balls;
+    this.tops = {};
+    this.pops = [];
+    balls.forEach((b, i) => this.seat(b, i));
+  }
+
+  spot(i) {
+    return new Vector3((i % 3 - 1) * 0.72, 0.1 + TAKO_R * 0.95, (Math.floor(i / 3) - 0.5) * 0.7);
+  }
+
+  seat(b, i) {
+    b.group.position.copy(this.spot(i));
+    b.mesh.position.y = 0;
+    b.mesh.scale.setScalar(1);
+    this.group.add(b.group);
+  }
+
+  addTopping(k, instant = false) {
+    if (this.tops[k]) return false;
+    const m = hm();
+    const g = takoGeo();
+    const grp = new Group();
+    const rand = mulberry(31 + Object.keys(this.tops).length * 7);
+    if (k === 'sauce') {
+      for (let i = 0; i < this.balls.length; i++) {
+        const c = shade(new Mesh(g.cap, m.takoSauce), false, false);
+        c.position.copy(this.spot(i));
+        c.rotation.set((rand() - 0.5) * 0.3, rand() * 6, (rand() - 0.5) * 0.3);
+        grp.add(c);
+      }
+    } else if (k === 'mayo') {
+      const t = shade(new Mesh(g.mayo, m.mayo), true, false);
+      t.position.y = 0.1 + TAKO_R * 1.9;
+      t.scale.set(1, 1, 0.75);
+      grp.add(t);
+    } else if (k === 'katsuobushi') {
+      const n = 40;
+      const f = new InstancedMesh(g.flake, m.bonito, n);
+      for (let i = 0; i < n; i++) {
+        const s = this.spot(i % this.balls.length);
+        const a = rand() * Math.PI * 2;
+        const r = Math.sqrt(rand()) * TAKO_R * 0.8;
+        _o.position.set(s.x + Math.cos(a) * r, s.y + TAKO_R * 0.95 + rand() * 0.03, s.z + Math.sin(a) * r);
+        _o.rotation.set(-Math.PI / 2 + (rand() - 0.5) * 1.6, (rand() - 0.5) * 1.2, rand() * 6);
+        _o.scale.set(1 + rand(), 0.5 + rand() * 0.5, 1);
+        _o.updateMatrix();
+        f.setMatrixAt(i, _o.matrix);
+      }
+      f.castShadow = true;
+      grp.add(f);
+    } else if (k === 'aonori') {
+      const n = 120;
+      const f = new InstancedMesh(g.speck, m.aonori, n);
+      for (let i = 0; i < n; i++) {
+        const s = this.spot(i % this.balls.length);
+        const a = rand() * Math.PI * 2;
+        const r = Math.sqrt(rand()) * TAKO_R * 0.75;
+        _o.position.set(s.x + Math.cos(a) * r, s.y + Math.sqrt(Math.max(0, TAKO_R * TAKO_R - r * r)) + 0.05, s.z + Math.sin(a) * r);
+        _o.rotation.set(-Math.PI / 2, 0, rand() * 6);
+        _o.scale.setScalar(1);
+        _o.updateMatrix();
+        f.setMatrixAt(i, _o.matrix);
+      }
+      grp.add(f);
+    } else return false;
+    this.tops[k] = grp;
+    this.group.add(grp);
+    if (!instant) {
+      grp.scale.setScalar(0.01);
+      this.pops.push({ obj: grp, t: 0 });
+    }
+    return true;
+  }
+
+  // Popped in one at a time.
+  eat(frac) {
+    const n = Math.floor(frac * this.balls.length + 0.001);
+    this.balls.forEach((b, i) => (b.group.visible = i >= n));
+    const k = Math.max(0.001, 1 - frac);
+    for (const t of Object.values(this.tops)) t.scale.setScalar(k);
+  }
+
+  update(dt) {
+    for (const b of this.balls) b.update(dt);
+    for (const p of this.pops) {
+      p.t = Math.min(1, p.t + dt / 0.35);
+      const k = p.t;
+      p.obj.scale.setScalar(Math.max(0.01, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2));
+    }
+    this.pops = this.pops.filter((p) => p.t < 1);
+  }
+
+  dispose() {
+    for (const b of this.balls) b.dispose();
+  }
+
+  static ideal() {
+    const balls = Array.from({ length: TAKOYAKI.count }, () => {
+      const b = new TakoBall();
+      b.setBrown(0.6, 0.62);
+      return b;
+    });
+    const boat = new TakoBoat(balls);
+    for (const t of TAKOYAKI.toppings) boat.addTopping(t, true);
+    return boat;
+  }
+}
+
+// The takoyaki iron: a heavy black plate with six round wells.
+function takoPlate() {
+  const m = hm();
+  const grp = new Group();
+  const shape = new Shape();
+  const W = 1.25;
+  const D = 0.85;
+  const r = 0.18;
+  shape.moveTo(-W + r, -D);
+  shape.lineTo(W - r, -D);
+  shape.quadraticCurveTo(W, -D, W, -D + r);
+  shape.lineTo(W, D - r);
+  shape.quadraticCurveTo(W, D, W - r, D);
+  shape.lineTo(-W + r, D);
+  shape.quadraticCurveTo(-W, D, -W, D - r);
+  shape.lineTo(-W, -D + r);
+  shape.quadraticCurveTo(-W, -D, -W + r, -D);
+  for (const [x, z] of TAKO_WELLS) {
+    const h = new Shape();
+    h.absarc(x, -z, TAKO_R + 0.02, 0, Math.PI * 2, true);
+    shape.holes.push(h);
+  }
+  const top = new ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2, curveSegments: 28 });
+  top.rotateX(-Math.PI / 2);
+  top.translate(0, TAKO_TOP - 0.14, 0);
+  grp.add(shade(new Mesh(top, m.iron)));
+  const wellMat = m.iron.clone();
+  wellMat.side = DoubleSide;
+  const well = new SphereGeometry(TAKO_R + 0.02, 24, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+  for (const [x, z] of TAKO_WELLS) {
+    const w = shade(new Mesh(well, wellMat));
+    w.position.set(x, TAKO_TOP, z);
+    grp.add(w);
+  }
+  const arm = shade(new Mesh(new CylinderGeometry(0.07, 0.07, 0.9, 10), m.iron));
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set(W + 0.45, TAKO_TOP - 0.06, 0);
+  const grip = shade(new Mesh(new CylinderGeometry(0.11, 0.11, 0.7, 14), m.wood));
+  grip.rotation.z = Math.PI / 2;
+  grip.position.set(W + 1.1, TAKO_TOP - 0.06, 0);
+  grp.add(arm, grip);
+  return grp;
+}
+
+// ---------------------------------------------------------------------------
 // The stove: a cream enamel two-burner with a pot of water on the left and
 // an iron pan on the right, a board for folding gyoza, a ladle and a lid.
 
@@ -691,6 +1106,11 @@ export class Stove {
     pan.position.set(L.pan[0], top + 0.12, L.pan[1]);
     this.pan = pan;
     this.group.add(pan);
+    // The takoyaki plate swaps in for the pan on takoyaki days.
+    this.takoPlate = takoPlate();
+    this.takoPlate.position.set(L.pan[0], top + 0.1, L.pan[1]);
+    this.takoPlate.visible = false;
+    this.group.add(this.takoPlate);
     // Lid, waiting above the pan.
     this.lid = new Group();
     // A glass lid with a steel rim, so the steam shows inside.
@@ -740,6 +1160,12 @@ export class Stove {
 
   setFlame(i, on) {
     this.flames[i].visible = on;
+  }
+
+  // Pan or takoyaki plate on the right burner.
+  useTako(on) {
+    this.takoPlate.visible = on;
+    this.pan.visible = !on;
   }
 
   update(dt) {
@@ -793,6 +1219,6 @@ export class Stove {
 // Everything a stove dish needs compiled before play, for the warm-up pass.
 export function warmHot() {
   const g = new Group();
-  g.add(UdonBowl.ideal('tempura').group, UdonBowl.ideal('kitsune').group, GyozaPlate.ideal().group);
+  g.add(UdonBowl.ideal('tempura').group, UdonBowl.ideal('kitsune').group, UdonBowl.ideal('shoyu').group, UdonBowl.ideal('tonkotsu').group, GyozaPlate.ideal().group, TakoBoat.ideal().group);
   return g;
 }

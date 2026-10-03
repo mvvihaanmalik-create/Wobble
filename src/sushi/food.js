@@ -1,4 +1,5 @@
 import {
+  MeshPhysicalMaterial,
   CylinderGeometry,
   BufferAttribute,
   CapsuleGeometry,
@@ -76,9 +77,12 @@ const RICE_SIM = {
 };
 
 export class RiceMound {
-  constructor(scoop, seed = 1) {
+  // kind: 'nigiri' presses into a long mound; 'onigiri' into a puffy
+  // triangle that stands up.
+  constructor(scoop, seed = 1, kind = 'nigiri') {
     const m = mats();
     this.scoop = scoop;
+    this.kind = kind;
     const s = 0.8 + scoop * 0.45;
     this.size = s;
     const base = unitSphere(13);
@@ -90,11 +94,18 @@ export class RiceMound {
         const yy = Math.max(-0.55, y * r);
         return [x * r * 0.74 * s, yy > 0 ? yy * 0.72 * s : yy * 0.45 * s, z * r * 0.62 * s];
       }),
-      formed: shapeFrom(base.pos, (x, y, z) => [
-        sp(x, 0.84) * 1.06 * s,
-        y > 0 ? Math.pow(y, 0.9) * 0.74 * s : y * 0.1 * s,
-        sp(z, 0.84) * 0.52 * s,
-      ]),
+      formed:
+        kind === 'onigiri'
+          ? shapeFrom(base.pos, (x, y, z) => {
+              // A rounded triangle, apex up, puffy front and back.
+              const a = Math.atan2(y, x);
+              const rho = Math.hypot(x, y);
+              const k = (((a - Math.PI / 2) % ((2 * Math.PI) / 3)) + (2 * Math.PI) / 3) % ((2 * Math.PI) / 3);
+              const tri = Math.cos(Math.PI / 3) / Math.cos(k - Math.PI / 3);
+              const r = (0.62 * tri + 0.38) * 1.02 * s;
+              return [Math.cos(a) * rho * r, Math.sin(a) * rho * r * 1.02, sp(z, 0.75) * 0.5 * s];
+            })
+          : shapeFrom(base.pos, (x, y, z) => [sp(x, 0.84) * 1.06 * s, y > 0 ? Math.pow(y, 0.9) * 0.74 * s : y * 0.1 * s, sp(z, 0.84) * 0.52 * s]),
       flat: shapeFrom(base.pos, (x, y, z) => [sp(x, 0.62) * 1.3 * s, y > 0 ? Math.pow(y, 0.7) * 0.36 * s : y * 0.05 * s, sp(z, 0.62) * 0.64 * s]),
     };
     const start = this.shapes.clump.slice();
@@ -547,6 +558,79 @@ export function wasabiDab(seed) {
 }
 
 // One nigiri being assembled on the serving board.
+// An onigiri: shaped rice with a filling pressed in and a nori wrap round
+// the bottom. A peek of the filling shows at the top, so you can tell them
+// apart.
+export class Onigiri {
+  constructor(rice) {
+    this.rice = rice;
+    this.filling = null;
+    this.group = new Group();
+    this.group.add(rice.group);
+    this.nori = null;
+  }
+
+  addFilling(kind, color) {
+    this.filling = kind;
+    const ball = new Mesh(new IcosahedronGeometry(0.2, 3), new MeshPhysicalMaterial({ color, roughness: 0.35, clearcoat: 0.7, sheen: 0.3 }));
+    ball.castShadow = true;
+    ball.position.set(0, this.rice.body.height + 0.12, 0);
+    ball.userData.born = performance.now();
+    this.ball = ball;
+    this.group.add(ball);
+  }
+
+  wrap() {
+    if (this.nori) return false;
+    const b = this.rice.body;
+    const geo = new CylinderGeometry(1, 1, b.width * 0.62, 48, 1, true);
+    geo.rotateZ(Math.PI / 2);
+    geo.scale(1, b.height * 0.34, b.depth / 2 + 0.035);
+    geo.translate(0, b.height * 0.22, 0);
+    geo.setAttribute('aFood', new BufferAttribute(bakeFoodCoords(geo, 1), 3));
+    const band = new Mesh(geo, mats().nori);
+    band.material.side = 2;
+    band.castShadow = true;
+    band.userData.born = performance.now();
+    this.nori = band;
+    this.group.add(band);
+    return true;
+  }
+
+  update(dt) {
+    this.rice.update(dt);
+    // The filling sinks into the rice as it is pressed, leaving a peek on top.
+    if (this.ball) {
+      const f = this.rice.formed;
+      const top = this.rice.body.height;
+      const sink = Math.min(1, f * 1.2);
+      this.ball.position.y = top + 0.12 - sink * 0.2;
+      this.ball.scale.set(1 - sink * 0.35, 1 - sink * 0.6, 1 - sink * 0.35);
+    }
+    if (this.nori) {
+      const a = Math.min(1, (performance.now() - this.nori.userData.born) / 260);
+      this.nori.scale.set(1, 0.6 + 0.4 * a, 0.6 + 0.4 * a);
+    }
+  }
+
+  dispose() {
+    this.rice.dispose();
+  }
+
+  static ideal(kind, color, seed = 21) {
+    const rice = new RiceMound(0.65, seed, 'onigiri');
+    rice.formed = 1;
+    rice.body.setRest(rice.targetShape(1, 0));
+    rice.presses = [{ quality: 1, over: 0 }];
+    const o = new Onigiri(rice);
+    o.addFilling(kind, color);
+    o.wrap();
+    o.nori.userData.born = -1e9;
+    o.update(0);
+    return o;
+  }
+}
+
 export class Piece {
   constructor(rice) {
     this.rice = rice;
