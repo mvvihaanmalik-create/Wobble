@@ -188,7 +188,10 @@ export class Game {
     if (r.compileAsync) await r.compileAsync(this.booth.scene, this.booth.camera);
     await frame();
     // A ticket photo compiles what the photo booth uses.
-    await this.booth.orderPhoto({ pieces: [{ fish: 'salmon', wasabi: 1, toppings: { ikura: 5, sesame: true } }, { fish: 'tuna', wasabi: 0, toppings: { scallion: true, sauce: true } }] }, 96, 60);
+    // Draw the frame ourselves: the main loop may be paused.
+    const photo = this.booth.orderPhoto({ pieces: [{ fish: 'salmon', wasabi: 1, toppings: { ikura: 5, sesame: true } }, { fish: 'tuna', wasabi: 0, toppings: { scallion: true, sauce: true } }] }, 96, 60);
+    this.stage.render(1 / 60);
+    await photo;
   }
 
   // --- Flow ------------------------------------------------------------------
