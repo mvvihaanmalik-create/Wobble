@@ -3374,3 +3374,35 @@ body {
     font-size: 17px;
   }
 }
+
+/* iOS lets the page itself scroll a little under the browser bars, which
+   nudges the whole game. Pin the page: only cards and lists scroll. */
+html,
+body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.card-screen,
+.wall-body,
+.days,
+.book-body {
+  touch-action: pan-x pan-y;
+}
+
+/* A stage intro with no new-dish photo still uses both columns: the
+   welcome and goals on the left, the menu on the right. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #card.intro:not(:has(.showcase)) > .panel-lead,
+  #card.intro:not(:has(.showcase)) > .guests,
+  #card.intro:not(:has(.showcase)) > .goals,
+  #card.intro:not(:has(.showcase)) > .tip-line {
+    grid-column: 1;
+  }
+  #card.intro:not(:has(.showcase)) > .shelf,
+  #card.intro:not(:has(.showcase)) > .rush-line {
+    grid-column: 2;
+  }
+}

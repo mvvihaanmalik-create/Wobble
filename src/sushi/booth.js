@@ -1,17 +1,23 @@
 import {
-  ACESFilmicToneMapping,
   BoxGeometry,
   BufferAttribute,
   Color,
   DirectionalLight,
   Group,
+  HalfFloatType,
   HemisphereLight,
+  LinearFilter,
   Mesh,
-  NoToneMapping,
+  OrthographicCamera,
+  ShaderMaterial,
+  UnsignedByteType,
   PerspectiveCamera,
+  PlaneGeometry,
+  PointLight,
   Scene,
   SpotLight,
   Vector3,
+  WebGLRenderTarget,
 } from 'three';
 import { BLOCKS, FishSlice, Onigiri, Piece, RiceMound } from './food.js';
 import { bakeFoodCoords, foodMaterial } from './materials.js';
@@ -25,8 +31,13 @@ import { Customer } from './critters.js';
 // Used for the picture on each ticket (what the plate should look like) and
 // for a photo of every plate served, which goes to the gallery.
 //
-// Jobs run at the start of a frame, straight to the canvas, and are copied
-// out before the main pass draws over them, so nothing ever flashes.
+// Jobs run at the start of a frame. Each shot renders into its own
+// multisampled buffer exactly the way the bar renders into the post chain
+// (linear, untoned, the same lights and fog), so a photo never needs shader
+// variants of its own: on phones, where every new shader stalls the frame,
+// that is the difference between a smooth serve and a long freeze. The shot
+// is then toned and copied out of the canvas corner before the main pass
+// draws over it, so nothing ever flashes.
 export class PhotoBooth {
   constructor(stage, set) {
     this.stage = stage;
@@ -36,16 +47,55 @@ export class PhotoBooth {
     this.scene.background = new Color('#2a1b13');
     this.scene.environment = stage.scene.environment;
     this.scene.environmentIntensity = 0.7;
+    this.scene.fog = stage.scene.fog;
     this.camera = new PerspectiveCamera(30, 1.6, 0.5, 60);
-    const key = new SpotLight('#fff1dc', 34, 30, 0.6, 0.7, 1.4);
+    // The same kinds and numbers of lights as the bar (three directional,
+    // the first with a shadow, five spots, a sky light and two points), so
+    // every material shares its shader with the bar. The extras are dark.
+    const key = new DirectionalLight('#fff1dc', 2.6);
     key.position.set(-3, 9, 6);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
+    Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 30 });
     key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.02;
     key.shadow.radius = 4;
     const rim = new DirectionalLight('#ffd2a8', 1.2);
     rim.position.set(4, 3, -6);
-    this.scene.add(key, key.target, rim, new HemisphereLight('#fff4e6', '#3a2416', 0.5));
+    const fill = new DirectionalLight('#ffe6cc', 0.35);
+    fill.position.set(0, 4, 10);
+    this.scene.add(key, key.target, rim, fill, new HemisphereLight('#fff4e6', '#3a2416', 0.5));
+    // A soft pool from above, like the bar's pin spots; four more stay off.
+    for (let i = 0; i < 5; i++) {
+      const s = new SpotLight('#fff1dc', i === 0 ? 14 : 0, 30, 0.6, 0.7, 1.4);
+      s.position.set(-2, 10, 4);
+      this.scene.add(s, s.target);
+    }
+    for (let i = 0; i < 2; i++) this.scene.add(new PointLight('#ff9f45', 0, 10, 1.7));
+    // Tone and encode a finished shot into a small 8-bit buffer that is read
+    // back without stalling: ACES, the photo exposure, then sRGB.
+    this.quadMat = new ShaderMaterial({
+      uniforms: { map: { value: null }, exposure: { value: 0.92 } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D map; uniform float exposure; varying vec2 vUv;
+vec3 rrtOdt(vec3 v) { vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+vec3 aces(vec3 c) {
+  const mat3 inM = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
+  const mat3 outM = mat3(vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602));
+  c *= exposure / 0.6;
+  c = inM * c; c = rrtOdt(c); c = outM * c;
+  return clamp(c, 0.0, 1.0);
+}
+vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+void main() { vec3 c = texture2D(map, vUv).rgb; gl_FragColor = vec4(toSRGB(aces(max(c, 0.0))), 1.0); }`,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    this.quad = new Mesh(new PlaneGeometry(2, 2), this.quadMat);
+    this.quadScene = new Scene();
+    this.quadScene.add(this.quad);
+    this.quadCam = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     // A strip of counter under the board.
     const wood = new BoxGeometry(30, 0.4, 14);
     wood.setAttribute('aFood', new BufferAttribute(bakeFoodCoords(wood, 1, [0, 0, 0]), 3));
@@ -147,51 +197,48 @@ export class PhotoBooth {
     return new Promise((resolve) => this.jobs.push({ w, h, aim, aimCam, scene, after, resolve }));
   }
 
-  // Called by the stage right before the main pass.
+  // A reusable multisampled, half float shot buffer, and an 8-bit one the
+  // toned shot is read back from.
+  target(w, h) {
+    if (!this.rt) {
+      this.rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, samples: 4, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false });
+      this.ldr = new WebGLRenderTarget(w, h, { type: UnsignedByteType, depthBuffer: false, generateMipmaps: false });
+    } else if (this.rt.width !== w || this.rt.height !== h) {
+      this.rt.setSize(w, h);
+      this.ldr.setSize(w, h);
+    }
+    return this.rt;
+  }
+
+  // Called by the stage right before the main pass. Nothing here waits on
+  // the GPU: each shot is read back asynchronously and encoded when ready.
   flush() {
     if (!this.jobs.length) return;
     const r = this.stage.renderer;
-    const canvas = r.domElement;
-    const pr = r.getPixelRatio();
     const jobs = this.jobs.splice(0);
+    const prevTarget = r.getRenderTarget();
     for (const job of jobs) {
-      // Render up to twice the size and scale down, for smooth edges.
-      const ss = Math.max(1, Math.min(2, canvas.width / job.w, canvas.height / job.h));
-      const w = Math.floor(Math.min(job.w * ss, canvas.width));
-      const h = Math.floor(Math.min(job.h * ss, canvas.height));
-      const ow = Math.round(w / ss);
-      const oh = Math.round(h / ss);
+      const w = Math.max(8, Math.floor(job.w));
+      const h = Math.max(8, Math.floor(job.h));
       if (job.aim) job.aim();
       const cam = this.camera;
       cam.aspect = w / h;
       if (job.aimCam) job.aimCam(cam);
       cam.updateProjectionMatrix();
-      const prevTone = r.toneMapping;
-      const prevExposure = r.toneMappingExposure;
-      r.setRenderTarget(null);
-      r.toneMapping = ACESFilmicToneMapping;
-      r.toneMappingExposure = 0.92;
-      r.setViewport(0, 0, w / pr, h / pr);
-      r.setScissor(0, 0, w / pr, h / pr);
-      r.setScissorTest(true);
-      const fog = job.scene.fog;
-      job.scene.fog = null;
+      // 4x MSAA into a linear buffer, the way the bar renders into its post chain.
+      const rt = this.target(w, h);
+      r.setRenderTarget(rt);
       r.render(job.scene, cam);
-      job.scene.fog = fog;
       if (job.after) job.after();
-      const out = document.createElement('canvas');
-      out.width = ow;
-      out.height = oh;
-      const ctx = out.getContext('2d');
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(canvas, 0, canvas.height - h, w, h, 0, 0, ow, oh);
-      r.setScissorTest(false);
-      r.setViewport(0, 0, canvas.width / pr, canvas.height / pr);
-      r.toneMapping = prevTone;
-      r.toneMappingExposure = prevExposure;
-      job.resolve(out.toDataURL('image/jpeg', 0.82));
+      // Tone and encode into the 8-bit buffer, then read it back.
+      this.quadMat.uniforms.map.value = rt.texture;
+      r.setRenderTarget(this.ldr);
+      r.render(this.quadScene, this.quadCam);
+      const px = new Uint8Array(w * h * 4);
+      const read = r.readRenderTargetPixelsAsync ? r.readRenderTargetPixelsAsync(this.ldr, 0, 0, w, h, px) : Promise.resolve(r.readRenderTargetPixels(this.ldr, 0, 0, w, h, px));
+      read.then(() => job.resolve(encode(px, w, h))).catch(() => job.resolve(encode(px, w, h)));
     }
+    r.setRenderTarget(prevTarget);
   }
 }
 
@@ -241,4 +288,17 @@ function dress(p, want) {
     p.nori.userData.born = -1e9;
   }
   for (const list of Object.values(t.items)) for (const it of list) it.born = old();
+}
+
+// GL rows run bottom to top: flip them into a 2D canvas and encode a JPEG.
+function encode(px, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const x = c.getContext('2d');
+  const img = x.createImageData(w, h);
+  const row = w * 4;
+  for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+  x.putImageData(img, 0, 0);
+  return c.toDataURL('image/jpeg', 0.84);
 }

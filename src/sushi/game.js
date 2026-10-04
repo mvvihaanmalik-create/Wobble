@@ -1,5 +1,5 @@
-import { Frustum, Matrix4, Quaternion, Raycaster, Scene, Vector2, Vector3 } from 'three';
-import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, dishKey, usesStove } from './config.js';
+import { Frustum, Group, Matrix4, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
+import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, VIEWS, dishKey, usesStove } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
 import { contactShadow, Customer, Paw, SousChef } from './critters.js';
@@ -125,9 +125,9 @@ export class Game {
     this.station = 'counter';
     this.bindInput();
     this.stage.resize();
-    window.addEventListener('resize', () => this.stage.resize());
+    window.addEventListener('resize', () => this.stage.ensureSize());
     // Phones rotate in stages: check again once the browser has settled.
-    const settle = () => [60, 250, 600].forEach((ms) => setTimeout(() => this.stage.ensureSize(), ms));
+    const settle = () => [60, 300, 700].forEach((ms) => setTimeout(() => this.stage.ensureSize(), ms));
     window.addEventListener('orientationchange', settle);
     window.visualViewport?.addEventListener('resize', settle);
     if (window.ResizeObserver) new ResizeObserver(() => this.stage.ensureSize()).observe(canvas);
@@ -167,7 +167,6 @@ export class Game {
       const inView = shown && (!o.frustumCulled || (o.isSprite ? frustum.intersectsSprite(o) : frustum.intersectsObject(o)));
       (inView ? seen : rest).push(o);
     });
-    this.warmRest = rest;
     await this.compileChunks(seen, (k) => progress(0.05 + k * 0.75));
     performance.mark('warm-scene');
     await progress(0.85);
@@ -180,7 +179,6 @@ export class Game {
       .catch((err) => console.warn('Background warm-up skipped', err))
       .finally(() => {
         this.warming = null;
-        this.warmRest = null;
         this.ui.warming(false);
         performance.mark('warm-food');
       });
@@ -214,38 +212,79 @@ export class Game {
     }
   }
 
+  // While the title shows, draw every station once, offstage, with one of
+  // every dish, tool and particle in front of the camera and every hidden
+  // prop (stove lid, ladle, flames, takoyaki plate) switched on. Drawing for
+  // real compiles exactly the shader variants play will use, shadows and the
+  // see-through pass included, so nothing compiles mid-game. That matters
+  // most on iPhones, where each new shader freezes the frame. Each offstage
+  // frame is drawn over by the title in the same task, so it never shows.
   async warmFood() {
-    const r = this.stage.renderer;
     const frame = () => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
     await frame();
-    // The stations off camera first: they are what a stage needs right away.
-    if (this.warmRest) await this.compileChunks(this.warmRest, (k) => this.ui.warming(true, k * 0.5));
-    const parts = [...warmFoods().children, new Paw().group, platedMaki('kappa'), platedMaki('tekka'), platedMaki('sake'), ...warmHot().children];
+    const props = new Group();
+    props.add(...warmFoods().children, new Paw().group, platedMaki('kappa'), platedMaki('tekka'), platedMaki('sake'), ...warmHot().children);
     const sheet = new MakiSheet();
     sheet.addFilling('kappa');
-    parts.push(sheet.group);
-    // Compile against the bar's lights and environment without ever adding
-    // the dishes to it, so nothing pops up on the title screen.
-    for (const part of parts) {
-      const tmp = new Scene();
-      part.traverse((o) => {
-        o.visible = true;
-        o.frustumCulled = false;
-        if (o.isMesh) o.castShadow = true;
-      });
-      tmp.add(part);
-      if (r.compileAsync) await r.compileAsync(tmp, this.stage.camera, this.stage.scene);
-      else r.compile(tmp, this.stage.camera, this.stage.scene);
-      this.ui.warming(true, 0.5 + (0.45 * (parts.indexOf(part) + 1)) / parts.length);
+    props.add(sheet.group);
+    props.traverse((o) => {
+      o.visible = true;
+      o.frustumCulled = false;
+      if (o.isMesh) o.castShadow = true;
+    });
+    props.scale.setScalar(0.5);
+    this.stage.dropGlass(props);
+    const views = ['counter', 'rice', 'knife', 'build', 'stove', 'stoveUdon', 'stoveGyoza'];
+    for (let i = 0; i < views.length; i++) {
       await frame();
+      this.renderOffstage(views[i], props, i === 1);
+      this.ui.warming(true, (0.9 * (i + 1)) / views.length);
     }
-    if (r.compileAsync) await r.compileAsync(this.booth.scene, this.booth.camera);
+    props.clear();
     await frame();
-    // A ticket photo compiles what the photo booth uses.
-    // Draw the frame ourselves: the main loop may be paused.
+    // A ticket photo compiles the photo booth's last bits (its tone pass).
     const photo = this.booth.orderPhoto({ pieces: [{ fish: 'salmon', wasabi: 1, toppings: { ikura: 5, sesame: true } }, { fish: 'tuna', wasabi: 0, toppings: { scallion: true, sauce: true } }] }, 96, 60);
     this.stage.render(1 / 60);
     await photo;
+  }
+
+  renderOffstage(name, props, particles = false) {
+    const stage = this.stage;
+    const cam = stage.camera;
+    const saved = { pos: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov };
+    const v = stage.viewFor(VIEWS[name]);
+    const target = new Vector3().fromArray(v.target);
+    cam.position.fromArray(v.pos);
+    cam.lookAt(target);
+    cam.fov = v.fov;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    props.position.copy(target);
+    stage.scene.add(props);
+    if (particles) for (const kind of Object.keys(this.fx.pools)) this.fx.burst(kind, target, 3, { life: 0.05 });
+    if (particles) this.fx.update(0.001);
+    // Everything hidden comes out for this one frame.
+    const hidden = [];
+    stage.scene.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    try {
+      stage.composer.render(1 / 60);
+    } catch (err) {
+      console.warn('Offstage warm-up frame skipped', err);
+    }
+    for (const o of hidden) o.visible = false;
+    stage.scene.remove(props);
+    if (particles) this.fx.update(1);
+    cam.position.copy(saved.pos);
+    cam.quaternion.copy(saved.q);
+    cam.fov = saved.fov;
+    cam.updateProjectionMatrix();
+    // The title again, over the top, before the browser shows anything.
+    stage.render(1 / 60);
   }
 
   // --- Flow ------------------------------------------------------------------

@@ -186,8 +186,11 @@ While the title is showing, the stations off camera and one of every dish compil
 The game is built to be played sideways on a phone:
 - **Landscape layout:** on a short, wide screen (under 500 px tall) the top bar slims down, the ticket shrinks to three quarters on the left, the station bar becomes a compact row of icons at the bottom, actions stack down the right edge and Pochi's tips sit between them. The title puts the logo and buttons on the left and the stages on the right. Cards scroll, with their buttons stuck to the bottom. Notches are kept clear with the safe areas.
 - **Upright:** still playable. Starting a stage upright suggests turning the phone sideways.
-- **Rotation:** the canvas is re-measured every frame and again as the rotation settles, so the picture never stays stretched.
 - **Sharp on retina:** phones render at up to 1.6x to 2x, and the automatic resolution never drops below one rendered pixel per point, so the picture never turns blocky.
+- **No freezes mid-game:** while the title shows, every station is drawn once offstage with one of every dish, tool, particle and hidden stove prop, which compiles exactly the shaders play will use. Phones (iPhones above all) stall on every new shader, so nothing new compiles during a shift. Shader error logs are only read back while developing.
+- **Photos without stalls:** ticket and plate photos render with the bar's own lights and fog into a 4x multisampled buffer (so they share the bar's shaders), then are toned, read back asynchronously and encoded when ready. The game never waits on the GPU for a photo.
+- **Clean pixels on iPhone and iPad:** a guard pass right after the scene clamps any broken pixel before bloom or depth of field can smear it into black blocks, and on iPhones and iPads the food drops see-through glass, rainbow sheen and near-mirror coats, the shader corners those GPUs get wrong.
+- **Rotation:** the canvas resizes at once on the first change, then again only when the size holds still, so a rotation does not rebuild the post chain on every frame. The page itself is pinned so iOS cannot scroll it under the browser bars.
 
 ### Interface
 

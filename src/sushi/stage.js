@@ -26,6 +26,7 @@ import {
   BloomEffect,
   BrightnessContrastEffect,
   DepthOfFieldEffect,
+  Effect,
   EffectComposer,
   EffectPass,
   HueSaturationEffect,
@@ -73,12 +74,39 @@ export function guessTier(coarse) {
 }
 export const TIER_ORDER = ['high', 'medium', 'low', 'minimal'];
 
+// iPhones and iPads. Their GPUs turn some edge cases of the glossy food
+// shaders (see-through fish, rainbow sheen, near-mirror coats) into
+// garbage pixels, and every shader they meet mid-game stalls the frame.
+export const APPLE_MOBILE = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// A pixel guard: a broken pixel (not a number, or infinitely bright) from a
+// glossy highlight would otherwise be smeared by bloom and depth of field
+// into big black blocks. Clamped before any of them read the frame.
+class SafePixels extends Effect {
+  constructor() {
+    super(
+      'SafePixels',
+      `void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+  vec3 c = inputColor.rgb;
+  // Metal's min and max drop a NaN operand, so the clamp alone fixes most;
+  // the explicit test catches the rest.
+  c = clamp(c, vec3(0.0), vec3(48.0));
+  if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+  outputColor = vec4(c, inputColor.a);
+}`,
+    );
+  }
+}
+
 export class Stage {
   constructor(canvas, tier = 'high') {
     this.canvas = canvas;
     // Antialiasing comes from SMAA in the post chain, so no MSAA here.
     const r = (this.renderer = new WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' }));
     r.outputColorSpace = SRGBColorSpace;
+    // Reading back each shader's log on first use forces the GPU to finish
+    // compiling right then: a stall on phones. Only worth it while developing.
+    r.debug.checkShaderErrors = !!import.meta.env.DEV;
     r.toneMapping = NoToneMapping;
     r.shadowMap.enabled = true;
     r.shadowMap.type = PCFShadowMap;
@@ -153,6 +181,7 @@ export class Stage {
     const r = this.renderer;
     this.composer = new EffectComposer(r, { frameBufferType: HalfFloatType });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.composer.addPass(new EffectPass(this.camera, new SafePixels()));
 
     this.ao = new N8AOPostPass(this.scene, this.camera, 1, 1);
     Object.assign(this.ao.configuration, {
@@ -195,8 +224,8 @@ export class Stage {
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, phone ? t.phoneRatio : t.pixelRatio);
     this.renderScale = 1;
     this.renderer.setPixelRatio(this.pixelRatio);
-    this.glass = t.glass;
-    if (!t.glass) this.dropGlass();
+    this.glass = t.glass && !APPLE_MOBILE;
+    this.dropGlass();
     this.renderer.transmissionResolutionScale = t.transmission;
     this.ao.enabled = t.ao;
     this.ao.configuration.halfRes = t.aoHalf;
@@ -217,18 +246,35 @@ export class Stage {
     if (this.width) this.resize();
   }
 
-  // Turn off transmission on every material in the scene. Called on the
-  // lowest tier, and again now and then for food made since.
-  dropGlass() {
-    this.scene.traverse((o) => {
+  // Make materials safe for this device: no see-through food where glass is
+  // off (the lowest tier, and iPhones and iPads), and on iPhones and iPads
+  // no rainbow sheen and no near-mirror coats. Called on a tier change, on
+  // the warm-up dishes before they compile, and now and then for food made
+  // since. Materials are shared, so each is touched once.
+  dropGlass(root = this.scene) {
+    root.traverse((o) => {
       const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
-      for (const m of mats) {
-        if (m.transmission > 0) {
-          m.transmission = 0;
-          m.needsUpdate = true;
-        }
-      }
+      for (const m of mats) this.tame(m);
     });
+  }
+
+  tame(m) {
+    if (!m.isMeshPhysicalMaterial || m.userData.tamed === this.tierName) return;
+    m.userData.tamed = this.tierName;
+    let changed = false;
+    if (!this.glass && m.transmission > 0) {
+      m.transmission = 0;
+      changed = true;
+    }
+    if (APPLE_MOBILE) {
+      if (m.iridescence > 0) {
+        m.iridescence = 0;
+        changed = true;
+      }
+      m.roughness = Math.max(m.roughness, 0.08);
+      m.clearcoatRoughness = Math.max(m.clearcoatRoughness, 0.08);
+    }
+    if (changed) m.needsUpdate = true;
   }
 
   // Narrow portrait screens get their own framing where a view defines one.
@@ -265,10 +311,26 @@ export class Stage {
 
   // Rotating a phone changes the canvas size in steps (and Safari reports the
   // new size late), so this runs every frame and only resizes on a change.
+  // Rebuilding the post chain's buffers is not free, and a rotation sends a
+  // burst of sizes. Resize at once on the first change (so nothing looks cut
+  // off), then again only when the size has held still for a moment.
   ensureSize() {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
-    if (w && h && (w !== this.width || h !== this.height)) this.resize();
+    if (!w || !h || (w === this.width && h === this.height)) {
+      this.pendingSize = null;
+      return;
+    }
+    const now = performance.now();
+    const key = `${w}x${h}`;
+    if (!this.pendingSize || this.pendingSize.key !== key) {
+      const quiet = now - (this.lastResize || 0) > 400;
+      this.pendingSize = { key, at: now };
+      if (!quiet) return;
+    } else if (now - this.pendingSize.at < 250) return;
+    this.pendingSize = null;
+    this.lastResize = now;
+    this.resize();
   }
 
   resize() {
@@ -357,7 +419,7 @@ export class Stage {
 
   render(dt = 1 / 60) {
     if (this.beforeRender) this.beforeRender();
-    if (!this.glass && (this.glassCheck = (this.glassCheck || 0) + 1) % 60 === 0) this.dropGlass();
+    if ((!this.glass || APPLE_MOBILE) && (this.glassCheck = (this.glassCheck || 0) + 1) % 60 === 0) this.dropGlass();
     // If the post chain fails (a driver bug, a lost resource), draw the scene
     // plainly rather than leaving a frozen frame, and tell the game.
     try {
