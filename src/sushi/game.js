@@ -8,7 +8,7 @@ import { MAKI, makiSpots, MakiSheet, platedMaki } from './maki.js';
 import { BuildStation, CounterStation, KnifeStation, RiceStation } from './stations.js';
 import { StoveStation } from './stove.js';
 import { Stove, warmHot } from './hot.js';
-import { GameUI } from './ui.js';
+import { GameUI, KEYBOARD } from './ui.js';
 import { BarSound } from './audio.js';
 import { LofiMusic } from './music.js';
 import { Recorder, canShareFile, download, shareOrDownload } from '../record.js';
@@ -1208,6 +1208,7 @@ export class Game {
         return;
       }
       if (this.mode !== 'play' || this.serving) return;
+      this.noteAction();
       this.stations[this.station].down(e);
     });
     c.addEventListener('pointermove', (e) => {
@@ -1244,6 +1245,7 @@ export class Game {
       if (i >= 0 && this.ui.stationShown(STATIONS[i])) this.goStation(STATIONS[i]);
       if (e.code === 'Space' && (this.station === 'rice' || this.station === 'counter' || this.station === 'stove')) {
         e.preventDefault();
+        this.noteAction(true);
         this.pointerPos = { x: window.innerWidth / 2, y: window.innerHeight * 0.45 };
         if (this.station === 'counter') this.takeOrder();
         else if (this.station === 'stove') {
@@ -1483,8 +1485,32 @@ export class Game {
   }
 
   // The paw that shows what to do, once the player has been still a moment.
+  // Cues fade as the player learns: the paw waits longer once they have
+  // done a good few things, and the Space key in Pochi's bubble retires
+  // after a handful of presses (or a lot of clicking).
+  get learned() {
+    return (this.learn ||= loadLearn());
+  }
+
+  noteAction(viaSpace = false) {
+    const l = this.learned;
+    l.actions++;
+    if (viaSpace) l.space++;
+    if (l.actions % 5 === 0 || viaSpace) saveLearn(l);
+  }
+
   gesture(kind, from, to = null) {
-    const idle = performance.now() - (this.lastInput || 0) > 1600 && this.activePointer == null && this.mode === 'play' && !this.serving;
+    const l = this.learned;
+    // Space can do this step when it is a hold or a tap at the rice, the
+    // counter or the stove (and it lifts boiling noodles, like the button).
+    const stove = this.stations.stove;
+    let cue = kind;
+    if (this.station === 'stove' && stove.state === 'boil' && stove.stirs >= (stove.U || {}).stirs) cue = 'tap';
+    const spaceStation = this.station === 'rice' || this.station === 'counter' || this.station === 'stove';
+    const keyCue = spaceStation && l.space < 4 && l.actions < 30 && this.mode === 'play' && !this.serving;
+    this.ui.cue(keyCue ? cue : null);
+    const wait = l.actions < 40 ? 1600 : 4000;
+    const idle = performance.now() - (this.lastInput || 0) > wait && this.activePointer == null && this.mode === 'play' && !this.serving;
     if (!kind || !idle || !from) return this.ui.gesture(null);
     const a = this.screenOf(from);
     const b = to ? this.screenOf(to) : a;
@@ -1722,6 +1748,25 @@ function stamp() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+// How much the player has done, so the guidance can step back.
+const LEARN_KEY = `${GAME.storageKey}.learn`;
+function loadLearn() {
+  try {
+    const l = JSON.parse(localStorage.getItem(LEARN_KEY));
+    if (l && typeof l.actions === 'number') return { actions: l.actions, space: l.space || 0 };
+  } catch {
+    // Private mode or bad JSON: start fresh.
+  }
+  return { actions: 0, space: 0 };
+}
+function saveLearn(l) {
+  try {
+    localStorage.setItem(LEARN_KEY, JSON.stringify(l));
+  } catch {
+    // Storage full or blocked: the cues just stay a little longer.
+  }
 }
 
 // The lowest tier this browser needed, so the next visit starts there.

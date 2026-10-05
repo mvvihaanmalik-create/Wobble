@@ -19,6 +19,10 @@ const TOOL_LIST = [
 ];
 const FISH_ICON = { salmon: 'fish', tuna: 'tuna', tamago: 'tamago', unagi: 'unagi' };
 const STATION_KEYS = ['counter', 'rice', 'knife', 'build', 'stove'];
+// A mouse and a keyboard (not a touch screen): hints say click and drag, and
+// can show the Space key.
+export const KEYBOARD = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+const forDevice = (text) => (KEYBOARD && text ? text.replace(/\bTap\b/g, 'Click').replace(/\btap\b/g, 'click').replace(/\bSwipe\b/g, 'Drag').replace(/\bswipe\b/g, 'drag') : text);
 const JP_DAYS = DAYS.map((_, i) => `${i + 1}日目`);
 
 // Count a number up (or down) inside an element.
@@ -82,6 +86,7 @@ export class GameUI {
   // --- Title -----------------------------------------------------------------
 
   showTitle(progress) {
+    if (KEYBOARD) $('footText').textContent = 'Click, hold and drag, or hold Space.';
     this.hud.hidden = true;
     $('cardScreen').hidden = true;
     $('title').hidden = false;
@@ -192,6 +197,7 @@ export class GameUI {
   }
 
   hint(text) {
+    text = forDevice(text);
     this.pendingHint = text;
     if (this.sayUntil > performance.now()) return;
     if (text === this.lastHint) return;
@@ -200,6 +206,17 @@ export class GameUI {
     $('hint').textContent = text || '';
     wrap.hidden = !text;
     if (text) bump(wrap, 'talk');
+  }
+
+  // The Space key in Pochi's bubble, for a step Space can do: 'hold' (it
+  // sinks and rises slowly) or 'tap' (a quick press). Keyboards only.
+  cue(kind) {
+    const k = KEYBOARD && (kind === 'hold' || kind === 'tap') ? kind : '';
+    if (k === this.cueKind) return;
+    this.cueKind = k;
+    const wrap = $('hintWrap');
+    if (k) wrap.dataset.cue = k;
+    else delete wrap.dataset.cue;
   }
 
   // Pochi speaks up in the hint bubble for a moment, then the hint returns.

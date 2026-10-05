@@ -126,6 +126,8 @@ The six pieces then stand up on the serving board, cut face up. The cut faces ar
 - **Favourite:** a regular's favourite dish served at 85 or more adds 25%.
 - **Walkouts:** a guest whose patience runs out leaves without paying, and the combo breaks.
 
+First-time cues stay inside what is already on screen. Pochi's hint bubble names each step, and if you pause for a moment a paw shows where and how to touch. On a computer the hints say click and drag, and for steps the Space bar can do (scooping, pressing, pouring, tapping the pot, taking an order) a small Space key sits at the start of the hint, sinking slowly for a hold or tapping for a tap. The cues step back as you learn: the Space key retires after a few presses, and the paw waits longer once you have done a good few things. This is remembered in the browser.
+
 Keys: `1` to `5` switch stations; hold `Space` to scoop and press; `Esc` pauses (resume, restart the day or quit to the title). The pause button in the top bar does the same on phones.
 
 The ticket ticks off each request as you go: wasabi and ikura show a count (`Wasabi 2/3`, `Ikura 4/5`), toppings turn green when added, and a 済 stamp lands when a piece matches. In the build station the tools switch to the next thing the ticket needs on their own, and a "!" marks the ones still missing. Guests lose patience on game time, so pausing or switching tabs costs nothing. Record makes a 6 second clip of the screen with the bar's name, the day, tips and the last plate's stars. Photo saves a PNG.

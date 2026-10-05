@@ -67,7 +67,7 @@ export class CounterStation extends Station {
     } else if (!g.order.taken) {
       const c = g.customer;
       g.gesture('tap', c.group.position.clone().add(new Vector3(c.width * c.group.scale.x * 0.3, c.height * c.group.scale.y * 0.3, 1)));
-      g.ui.hint(`${g.order.look.name} is ready to order.`);
+      g.ui.hint(`${g.order.look.name} is ready. Take the order.`);
       g.ui.actions([{ label: 'Take order', primary: true, onClick: () => g.takeOrder() }]);
     } else if (g.plateComplete()) {
       g.ui.hint('Plate is ready. Serve it from the build station.');
@@ -251,7 +251,7 @@ export class RiceStation extends Station {
     else if (this.state === 'idle' && this.needed > 0) {
       const n = nigiriOf(g.order).length;
       const oniTime = this.nigiriNeeded <= 0 && this.onigiriNeeded > 0;
-      g.ui.hint(makingMaki ? 'Roll time. Hold to scoop rice onto the nori.' : oniTime ? 'Onigiri time. Hold to scoop rice. Let go in the green.' : `Hold to scoop rice. Let go in the green. (${g.pieces.length + 1} of ${n})`);
+      g.ui.hint(makingMaki ? 'Roll time. Hold to scoop rice onto the nori.' : oniTime ? 'Onigiri time. Hold to scoop rice. Let go in the green.' : `Hold to scoop rice. Let go in the green.${n > 1 ? ` (${g.pieces.length + 1} of ${n})` : ''}`);
     } else if (this.state === 'scooping') g.ui.hint('Let go in the green band.');
     else if (this.state === 'ready') g.ui.hint(this.sheet ? 'Hold to spread the rice. Let go in the green.' : 'Hold to press. Let go in the green.');
     else if (this.state === 'pressing') g.ui.hint(this.value > RICE.pressOver ? 'Too hard!' : this.sheet ? 'Spread...' : 'Press...');
