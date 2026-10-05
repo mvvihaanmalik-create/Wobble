@@ -23,7 +23,9 @@ export const LAYOUT = {
   sousTitle: { x: 7.6, z: -5.6, y: -0.3, scale: 1.7, turn: -0.4 }, // on the title, next to the guest
   // The stove at the far left of the counter: a pot for udon, a pan for gyoza,
   // the udon bowl in front of the pot and the gyoza board in front of the pan.
-  stove: { x: -19.5, z: 0.6, top: 0.5, pot: [-21.4, 0.6], pan: [-17.6, 0.6], bowl: [-21.4, 3.2], prep: [-17.6, 3.2] },
+  // The stove sits back far enough that the bowl and the folding board in
+  // front of it clear its body, the pot and the pan with a little air.
+  stove: { x: -19.5, z: -0.1, top: 0.5, pot: [-21.4, -0.1], pan: [-17.6, -0.1], bowl: [-21.4, 3.3], prep: [-17.6, 3.3] },
 };
 
 // Camera angle for each station. fitW is the world width that must stay in
@@ -36,8 +38,8 @@ export const VIEWS = {
   knife: { pos: [-0.2, 2.9, 10.5], target: [-0.2, 0.85, 1.3], focus: [1.8, 1.1, 1.9], bokeh: 4.2, fov: 30, fitW: 10.5, portrait: { pos: [2.2, 3.4, 9.5], target: [2.2, 0.4, 1.3], focus: [2.4, 1.1, 1.9], bokeh: 4.2, fov: 30, fitW: 6 } },
   stove: { pos: [-20.1, 10.4, 9.6], target: [-20.1, 0.6, 1.9], focus: [-19.5, 0.9, 2.1], bokeh: 2.4, fov: 36, fitW: 10.8, portrait: { pos: [-19.5, 13.5, 10.6], target: [-19.5, 0.4, 2.6], focus: [-19.5, 0.9, 2.2], bokeh: 2.4, fov: 36, fitW: 8.4 } },
   // Close-ups for each stove dish, the way Cooking Mama frames a step.
-  stoveUdon: { pos: [-21.1, 10.6, 10.4], target: [-21.1, 0.4, 2.9], focus: [-21.2, 1, 2.2], bokeh: 2.2, fov: 36, fitW: 7.8, portrait: { pos: [-21.1, 13, 11.2], target: [-21.1, 0.3, 3.2], focus: [-21.2, 1, 2.2], bokeh: 2.2, fov: 36, fitW: 6.4 } },
-  stoveGyoza: { pos: [-17.8, 10.6, 10.4], target: [-17.8, 0.3, 3.0], focus: [-17.7, 0.5, 2.6], bokeh: 2.2, fov: 36, fitW: 7.8, portrait: { pos: [-17.8, 13, 11.2], target: [-17.8, 0.3, 3.3], focus: [-17.7, 0.5, 2.6], bokeh: 2.2, fov: 36, fitW: 6.4 } },
+  stoveUdon: { pos: [-21.1, 10.6, 10.1], target: [-21.1, 0.4, 2.55], focus: [-21.2, 1, 2.2], bokeh: 2.2, fov: 36, fitW: 7.8, portrait: { pos: [-21.1, 13, 11.2], target: [-21.1, 0.3, 3.2], focus: [-21.2, 1, 2.2], bokeh: 2.2, fov: 36, fitW: 6.4 } },
+  stoveGyoza: { pos: [-17.8, 10.6, 10.1], target: [-17.8, 0.3, 2.65], focus: [-17.7, 0.5, 2.6], bokeh: 2.2, fov: 36, fitW: 7.8, portrait: { pos: [-17.8, 13, 11.2], target: [-17.8, 0.3, 3.3], focus: [-17.7, 0.5, 2.6], bokeh: 2.2, fov: 36, fitW: 6.4 } },
   build: { pos: [8.7, 7.6, 10.2], target: [8.7, 0.3, 2.9], focus: [10.2, 0.8, 1.6], bokeh: 3, fov: 36, fitW: 11, portrait: { pos: [9.4, 11, 10.2], target: [9.4, 0.3, 3.6], focus: [10.4, 0.8, 1.6], bokeh: 3, fov: 36, fitW: 8.6 } },
 };
 export const CAMERA = {

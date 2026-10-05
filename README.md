@@ -14,7 +14,7 @@ The game runs in the browser. The only server part is the wall: one small functi
 | 04 Build 盛付 | Three quarters, over the serving board | Tap the rice for wasabi (one tap per dab), drag a slice onto the rice, then add the toppings on the ticket. Serve. |
 | 05 Stove コンロ | Close over the pot or the pan (stages 6 to 10) | Udon, gyoza, ramen and takoyaki, step by step. See The stove below. |
 
-The guest eats it in three bites and reacts. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
+The guest eats it and reacts. Every bite goes somewhere: nigiri, roll pieces, gyoza and takoyaki are lifted off the board one at a time and carried in an arc into the guest's mouth; an onigiri is held up to the mouth and bitten down in three; noodles are slurped, a few strands at a time rising out of the bowl into the mouth while the nest thins strand by strand, the toppings go between slurps and the broth goes down. Nothing shrinks in place or sinks through its dish. Each plate is scored on rice, cut, build and wait time, and tips follow the score.
 
 ### Grades, the Cooking Mama way
 
@@ -106,7 +106,7 @@ The left end of the counter has a little two-burner stove: a pot of water for no
 3. **Turn:** each ball browns underneath in turn. Tap it to flip it with the pick when the underside is golden. Too pale or too dark costs points, and one left too long burns.
 4. **Toppings:** into the boat for takoyaki sauce, mayo, bonito flakes and aonori.
 
-Finished dishes slide down the counter onto the serving board, and the guest slurps or bites them away. Their score card reads Boil, Dashi (or Broth) and Toppings; Filling, Pleats and Frying; or Batter, Turning and Toppings. Onigiri read Rice, Filling and Wrap.
+Finished dishes slide down the counter onto the serving board for the guest. The stove sits far enough back that the bowl and the folding board clear the pot, the pan and the stove body. Takoyaki toppings belong to each ball, so a ball leaves the boat fully dressed. Their score card reads Boil, Dashi (or Broth) and Toppings; Filling, Pleats and Frying; or Batter, Turning and Toppings. Onigiri read Rice, Filling and Wrap.
 
 ### Rolls
 

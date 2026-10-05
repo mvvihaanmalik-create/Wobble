@@ -148,6 +148,9 @@ function noodleNest(seed, { count, rOf, y0, y1, radius = 0.055, turns = 1.2, wav
     geos.push(new TubeGeometry(new CatmullRomCurve3(pts), wave ? 90 : 36, radius, 6));
   }
   const g = mergeGeometries(geos);
+  // Strands are laid out one after another: eating hides whole strands.
+  g.userData.strands = count;
+  g.userData.strandIndex = geos[0].index.count;
   for (const x of geos) x.dispose();
   return g;
 }
@@ -438,12 +441,21 @@ export class UdonBowl {
     return true;
   }
 
-  // Slurp: the noodles and toppings go, a little broth stays.
+  // Eaten down to a fraction: whole strands leave the nest (nothing ever
+  // squashes or pokes through the bowl), and the broth goes down as it is
+  // sipped. Toppings are carried off by the game, one by one.
   eat(frac) {
-    const s = Math.max(0.001, 1 - frac);
-    this.noodles.scale.set(1, s, 1);
-    for (const g of Object.values(this.tops)) g.scale.setScalar(s);
-    this.setLevel(Math.min(this.level, 0.25 + 0.6 * s));
+    const g = this.noodles.geometry;
+    const n = g.userData.strands || 1;
+    const left = Math.round(n * Math.max(0, 1 - frac));
+    g.setDrawRange(0, left * (g.userData.strandIndex || g.index.count));
+    this.noodles.visible = left > 0;
+    this.setLevel(Math.min(this.level, 0.3 + 0.5 * (1 - frac)));
+  }
+
+  // World-space point on the noodles, for a strand to rise from.
+  noodleTop(out = new Vector3()) {
+    return this.group.localToWorld(out.set((Math.random() - 0.5) * 0.5, this.surface() + 0.05, (Math.random() - 0.5) * 0.4));
   }
 
   update(dt) {
@@ -756,7 +768,11 @@ function takoGeo() {
   const pts = [];
   for (let i = 0; i <= 10; i++) pts.push(new Vector3(-1.05 + i * 0.21, 0, (i % 2 ? 1 : -1) * 0.55));
   const mayo = new TubeGeometry(new CatmullRomCurve3(pts, false, 'catmullrom', 0.35), 120, 0.035, 8);
-  TAKO_GEO = { ball, bit, cap, flake, speck, mayo };
+  // A little zigzag of mayo across the top of one ball.
+  const zig = [];
+  for (let i = 0; i <= 4; i++) zig.push(new Vector3(-0.2 + i * 0.1, (i % 2 ? 0.02 : -0.01) - 0.012 * (i - 2) ** 2, (i % 2 ? 1 : -1) * 0.09));
+  const mayoBit = new TubeGeometry(new CatmullRomCurve3(zig, false, 'catmullrom', 0.4), 40, 0.028, 8);
+  TAKO_GEO = { ball, bit, cap, flake, speck, mayo, mayoBit };
   return TAKO_GEO;
 }
 
@@ -840,69 +856,54 @@ export class TakoBoat {
     this.group.add(b.group);
   }
 
+  // Each ball wears its own toppings, so a ball lifted out of the boat
+  // leaves fully dressed and nothing is left floating over an empty spot.
   addTopping(k, instant = false) {
     if (this.tops[k]) return false;
     const m = hm();
     const g = takoGeo();
-    const grp = new Group();
     const rand = mulberry(31 + Object.keys(this.tops).length * 7);
-    if (k === 'sauce') {
-      for (let i = 0; i < this.balls.length; i++) {
-        const c = shade(new Mesh(g.cap, m.takoSauce), false, false);
-        c.position.copy(this.spot(i));
-        c.rotation.set((rand() - 0.5) * 0.3, rand() * 6, (rand() - 0.5) * 0.3);
-        grp.add(c);
+    const parts = [];
+    this.balls.forEach((ball) => {
+      let part;
+      if (k === 'sauce') {
+        part = shade(new Mesh(g.cap, m.takoSauce), false, false);
+        part.rotation.set((rand() - 0.5) * 0.3, rand() * 6, (rand() - 0.5) * 0.3);
+      } else if (k === 'mayo') {
+        part = shade(new Mesh(g.mayoBit, m.mayo), true, false);
+        part.position.y = TAKO_R * 0.97;
+        part.rotation.y = rand() * Math.PI;
+      } else if (k === 'katsuobushi' || k === 'aonori') {
+        const bonito = k === 'katsuobushi';
+        const n = bonito ? 8 : 24;
+        part = new InstancedMesh(bonito ? g.flake : g.speck, bonito ? m.bonito : m.aonori, n);
+        for (let i = 0; i < n; i++) {
+          const a = rand() * Math.PI * 2;
+          const r = Math.sqrt(rand()) * TAKO_R * (bonito ? 0.8 : 0.75);
+          _o.position.set(Math.cos(a) * r, Math.sqrt(Math.max(0, TAKO_R * TAKO_R - r * r)) * 1.04 + (bonito ? 0.02 + rand() * 0.03 : 0.012), Math.sin(a) * r);
+          if (bonito) {
+            _o.rotation.set(-Math.PI / 2 + (rand() - 0.5) * 1.6, (rand() - 0.5) * 1.2, rand() * 6);
+            _o.scale.set(1 + rand(), 0.5 + rand() * 0.5, 1);
+          } else {
+            _o.rotation.set(-Math.PI / 2, 0, rand() * 6);
+            _o.scale.setScalar(1);
+          }
+          _o.updateMatrix();
+          part.setMatrixAt(i, _o.matrix);
+        }
+        part.castShadow = bonito;
+      } else return;
+      ball.group.add(part);
+      parts.push(part);
+      if (!instant) {
+        const base = part.scale.clone();
+        part.scale.multiplyScalar(0.01);
+        this.pops.push({ obj: part, t: 0, base });
       }
-    } else if (k === 'mayo') {
-      const t = shade(new Mesh(g.mayo, m.mayo), true, false);
-      t.position.y = 0.1 + TAKO_R * 1.9;
-      t.scale.set(1, 1, 0.75);
-      grp.add(t);
-    } else if (k === 'katsuobushi') {
-      const n = 40;
-      const f = new InstancedMesh(g.flake, m.bonito, n);
-      for (let i = 0; i < n; i++) {
-        const s = this.spot(i % this.balls.length);
-        const a = rand() * Math.PI * 2;
-        const r = Math.sqrt(rand()) * TAKO_R * 0.8;
-        _o.position.set(s.x + Math.cos(a) * r, s.y + TAKO_R * 0.95 + rand() * 0.03, s.z + Math.sin(a) * r);
-        _o.rotation.set(-Math.PI / 2 + (rand() - 0.5) * 1.6, (rand() - 0.5) * 1.2, rand() * 6);
-        _o.scale.set(1 + rand(), 0.5 + rand() * 0.5, 1);
-        _o.updateMatrix();
-        f.setMatrixAt(i, _o.matrix);
-      }
-      f.castShadow = true;
-      grp.add(f);
-    } else if (k === 'aonori') {
-      const n = 120;
-      const f = new InstancedMesh(g.speck, m.aonori, n);
-      for (let i = 0; i < n; i++) {
-        const s = this.spot(i % this.balls.length);
-        const a = rand() * Math.PI * 2;
-        const r = Math.sqrt(rand()) * TAKO_R * 0.75;
-        _o.position.set(s.x + Math.cos(a) * r, s.y + Math.sqrt(Math.max(0, TAKO_R * TAKO_R - r * r)) + 0.05, s.z + Math.sin(a) * r);
-        _o.rotation.set(-Math.PI / 2, 0, rand() * 6);
-        _o.scale.setScalar(1);
-        _o.updateMatrix();
-        f.setMatrixAt(i, _o.matrix);
-      }
-      grp.add(f);
-    } else return false;
-    this.tops[k] = grp;
-    this.group.add(grp);
-    if (!instant) {
-      grp.scale.setScalar(0.01);
-      this.pops.push({ obj: grp, t: 0 });
-    }
+    });
+    if (!parts.length) return false;
+    this.tops[k] = parts;
     return true;
-  }
-
-  // Popped in one at a time.
-  eat(frac) {
-    const n = Math.floor(frac * this.balls.length + 0.001);
-    this.balls.forEach((b, i) => (b.group.visible = i >= n));
-    const k = Math.max(0.001, 1 - frac);
-    for (const t of Object.values(this.tops)) t.scale.setScalar(k);
   }
 
   update(dt) {
@@ -910,7 +911,7 @@ export class TakoBoat {
     for (const p of this.pops) {
       p.t = Math.min(1, p.t + dt / 0.35);
       const k = p.t;
-      p.obj.scale.setScalar(Math.max(0.01, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2));
+      p.obj.scale.copy(p.base).multiplyScalar(Math.max(0.01, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2));
     }
     this.pops = this.pops.filter((p) => p.t < 1);
   }

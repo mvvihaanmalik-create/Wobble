@@ -1,4 +1,4 @@
-import { Frustum, Group, Matrix4, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
+import { CatmullRomCurve3, Frustum, Group, Matrix4, Mesh, Quaternion, Raycaster, TubeGeometry, Vector2, Vector3 } from 'three';
 import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, VIEWS, dishKey, usesStove } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
@@ -738,6 +738,119 @@ export class Game {
     }
   }
 
+  // --- Eating -------------------------------------------------------------------
+
+  // Carry one bite to the guest's mouth. bites > 1: lift it to the mouth and
+  // take that many bites there instead (an onigiri). quick: a smaller hop.
+  async feed(obj, { chews = 2, bites = 1, quick = false } = {}) {
+    const c = this.customer;
+    if (!c || !obj.parent) return;
+    const mouth = c.mouthWorld(new Vector3());
+    this.stage.scene.attach(obj);
+    const s0 = obj.scale.clone();
+    c.setExpression('open');
+    if (bites > 1) {
+      // Held up just in front of the mouth, then bitten down.
+      const near = mouth.clone().add(new Vector3(0, -0.15, 0.55));
+      await this.tweenP({ obj, to: near, scaleVec: s0.clone().multiplyScalar(0.85), duration: 0.45, arc: 1.4 });
+      for (let k = 1; k <= bites; k++) {
+        c.setExpression('open');
+        await this.wait(110);
+        this.sound.chomp();
+        c.body.kickAll(0, 1.6, -0.8);
+        c.setExpression('chew');
+        const left = 1 - k / bites;
+        const to = near.clone().lerp(mouth, 0.25 + 0.6 * (k / bites));
+        await this.tweenP({ obj, to, scaleVec: s0.clone().multiplyScalar(Math.max(0.001, 0.85 * left)), duration: 0.14 });
+        if (k < bites) await this.wait(280);
+      }
+      obj.removeFromParent();
+      await this.wait(220);
+      return;
+    }
+    await this.tweenP({ obj, to: mouth, scaleVec: s0.clone().multiplyScalar(0.35), duration: quick ? 0.32 : 0.42, arc: quick ? 0.9 : 1.3 });
+    obj.removeFromParent();
+    this.sound.chomp();
+    c.body.kickAll(0, 1.6, -0.8);
+    for (let k = 0; k < chews; k++) {
+      c.setExpression('chew');
+      await this.wait(130);
+      if (k < chews - 1) {
+        c.setExpression('smile');
+        await this.wait(90);
+      }
+    }
+    await this.wait(quick ? 60 : 140);
+  }
+
+  // Noodles: a few strands at a time rise out of the bowl and slide into the
+  // mouth, the nest thins strand by strand, the toppings go between slurps,
+  // and the broth goes down as it is sipped.
+  async slurpBowl(bowl) {
+    const c = this.customer;
+    const tops = Object.values(bowl.tops);
+    const rounds = 3;
+    for (let k = 1; k <= rounds; k++) {
+      c.setExpression('open');
+      this.sound.slurp();
+      await this.slurpStrands(bowl, 4, 0.6);
+      bowl.eat(k / rounds);
+      c.body.kickAll(0, 1.4, -0.9);
+      c.setExpression('chew');
+      await this.wait(200);
+      // A topping or two between slurps.
+      const take = tops.splice(0, Math.ceil(tops.length / (rounds - k + 1)));
+      for (const t of take) await this.feed(t, { chews: 1, quick: true });
+    }
+    for (const t of tops) await this.feed(t, { chews: 1, quick: true });
+  }
+
+  async slurpStrands(bowl, n, seconds) {
+    const mouth = this.customer.mouthWorld(new Vector3());
+    const ws = new Vector3();
+    bowl.group.getWorldScale(ws);
+    // Thicker than the noodles in the bowl: seen across the counter, a true
+    // to size strand would vanish.
+    const radius = (bowl.ramen ? 0.055 : 0.08) * ws.x;
+    const SEG = 40;
+    const RAD = 6;
+    const strands = [];
+    for (let i = 0; i < n; i++) {
+      const p0 = bowl.noodleTop(new Vector3());
+      const up = p0.clone().add(new Vector3((Math.random() - 0.5) * 0.2, 0.4, 0));
+      const mid = up.clone().lerp(mouth, 0.55).add(new Vector3(0, 0.22, 0));
+      const end = mouth.clone().add(new Vector3((i - (n - 1) / 2) * 0.05, 0, 0));
+      const geo = new TubeGeometry(new CatmullRomCurve3([p0, up, mid, end]), SEG, radius, RAD, false);
+      const m = new Mesh(geo, bowl.noodleMat);
+      m.frustumCulled = false;
+      geo.setDrawRange(0, 0);
+      this.stage.scene.add(m);
+      strands.push({ m, geo, delay: i * 0.06 });
+    }
+    // The visible piece of each strand runs up the curve and into the mouth.
+    const t0 = performance.now();
+    const len = 0.55;
+    for (;;) {
+      const t = (performance.now() - t0) / 1000;
+      let done = true;
+      for (const st of strands) {
+        const k = Math.max(0, (t - st.delay) / seconds) * (1 + len);
+        const head = Math.min(1, k);
+        const tail = Math.min(1, Math.max(0, k - len));
+        const a = Math.floor(tail * SEG);
+        const b = Math.ceil(head * SEG);
+        st.geo.setDrawRange(a * RAD * 6, Math.max(0, b - a) * RAD * 6);
+        if (tail < 1) done = false;
+      }
+      if (done) break;
+      await this.wait(16);
+    }
+    for (const st of strands) {
+      st.m.removeFromParent();
+      st.geo.dispose();
+    }
+  }
+
   // --- Serving -----------------------------------------------------------------
 
   async serve() {
@@ -799,76 +912,23 @@ export class Game {
     c.setPose('eat', 6);
     c.body.userMode[2] = 0.18;
     await this.wait(400);
-    // Eat each piece in three bites.
-    for (const p of this.pieces) {
-      for (let bite = 0; bite < 3; bite++) {
-        c.setExpression(bite % 2 ? 'chew' : 'open');
-        this.sound.chomp();
-        c.body.kickAll(0, 1.6, -0.8);
-        const s = 1 - (bite + 1) / 3;
-        await this.tweenP({ obj: p.group, scale: Math.max(0.001, s), duration: 0.16 });
-        await this.wait(200);
-      }
-      p.group.visible = false;
-    }
-    // Onigiri in three bites each.
-    for (const o of this.onigiri) {
-      for (let bite = 0; bite < 3; bite++) {
-        c.setExpression(bite % 2 ? 'chew' : 'open');
-        this.sound.chomp();
-        c.body.kickAll(0, 1.6, -0.8);
-        await this.tweenP({ obj: o.group, scale: Math.max(0.001, 1 - (bite + 1) / 3), duration: 0.16 });
-        await this.wait(200);
-      }
-      o.group.visible = false;
-    }
-    // Udon in three big slurps; gyoza one at a time.
+    // Every bite goes somewhere: lifted off the board, carried over in an
+    // arc and into the guest's mouth, where it is chewed. Nothing shrinks in
+    // place or sinks through its plate.
+    for (const p of this.pieces) await this.feed(p.group, { chews: 2 });
+    for (const o of this.onigiri) await this.feed(o.group, { bites: 3 });
     const hd = this.hotDish;
-    if (hd && hd.bowl) {
-      for (let k = 1; k <= 3; k++) {
-        c.setExpression(k % 2 ? 'open' : 'chew');
-        this.sound.slurp();
-        c.body.kickAll(0, 1.4, -0.9);
-        const from = (k - 1) / 3;
-        for (let f = 0; f <= 6; f++) {
-          hd.bowl.eat(from + (f / 6) * (1 / 3));
-          await this.wait(40);
-        }
-        await this.wait(260);
+    if (hd && hd.bowl) await this.slurpBowl(hd.bowl);
+    else if (hd && hd.boat) {
+      // Takoyaki, one at a time: hot, hot, hot.
+      const balls = [...hd.boat.balls];
+      for (let k = 0; k < balls.length; k++) {
+        await this.feed(balls[k].group, { chews: 1, quick: true });
+        if (k === 0) c.emote('sweat', 900);
       }
-    } else if (hd && hd.boat) {
-      // Takoyaki: one at a time, hot, hot, hot.
-      const n = hd.boat.balls.length;
-      for (let k = 1; k <= n; k++) {
-        c.setExpression(k % 2 ? 'open' : 'chew');
-        this.sound.chomp();
-        c.body.kickAll(0, 1.5, -0.8);
-        hd.boat.eat(k / n);
-        await this.wait(k === 1 ? 420 : 230);
-        if (k === 1) c.emote && c.emote('sweat');
-      }
-    } else if (hd && hd.plate) {
-      for (const gz of hd.plate.gyozas) {
-        c.setExpression('open');
-        this.sound.chomp();
-        c.body.kickAll(0, 1.6, -0.8);
-        await this.tweenP({ obj: gz.group, scale: 0.001, duration: 0.18 });
-        gz.group.visible = false;
-        c.setExpression('chew');
-        await this.wait(260);
-      }
-    }
-    // Rolls go two pieces a bite.
-    const rollPieces = this.rolls.flatMap((r) => (r.plated ? r.pieces : []));
-    for (let k = 0; k < rollPieces.length; k += 2) {
-      c.setExpression(k % 4 ? 'chew' : 'open');
-      this.sound.chomp();
-      c.body.kickAll(0, 1.4, -0.7);
-      const pair = rollPieces.slice(k, k + 2);
-      await Promise.all(pair.map((p) => this.tweenP({ obj: p, scale: 0.001, duration: 0.16 })));
-      pair.forEach((p) => (p.visible = false));
-      await this.wait(180);
-    }
+    } else if (hd && hd.plate) for (const gz of hd.plate.gyozas) await this.feed(gz.group, { chews: 2 });
+    // Rolls, a piece at a time.
+    for (const r of this.rolls) if (r.plated) for (const piece of r.pieces) await this.feed(piece, { chews: 1, quick: true });
     c.body.userMode[2] = 0;
     c.setPose('rest', 0);
     const mood = score.total / 100;

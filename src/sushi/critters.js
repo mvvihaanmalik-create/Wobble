@@ -844,6 +844,16 @@ export class Critter {
     this.eyeKind = kind;
   }
 
+  // The middle of the mouth, a touch in front of the face, in world space.
+  mouthWorld(out = new Vector3()) {
+    this.mouth.updateWorldMatrix(true, false);
+    this.mouth.getWorldPosition(out);
+    const s = this.group.scale.x;
+    out.z += 0.12 * s;
+    out.y -= 0.02 * s;
+    return out;
+  }
+
   // Strike a pose with the arms for a while.
   setPose(name, seconds = 1) {
     this.pose = name;
