@@ -3473,3 +3473,8 @@ body {
     margin-right: 5px;
   }
 }
+
+/* Pochi's words always read clearly: the guiding paw passes under them. */
+.hint {
+  z-index: 20;
+}

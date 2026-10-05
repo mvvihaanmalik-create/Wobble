@@ -53,29 +53,34 @@ export function makeOrders(dayIndex, seed = Date.now()) {
     for (let k = 1; k < n; k++) out.push(nigiri(pick(day.fish.filter((f) => f !== what)) || what));
     return out;
   };
-  // Deal the bag.
+  // Deal the bag. The stage's new dish comes first, so its intro is the
+  // first ticket; after that the same dish never comes twice in a row.
   const bag = [];
   const refill = () => {
     const b = day.menu.flatMap(([k, w]) => Array(w).fill(k)).sort(() => rand() - 0.5);
     bag.push(...b);
   };
-  const keys = [];
-  for (let c = 0; c < day.customers; c++) {
+  refill();
+  const lead = day.menu[0][0];
+  const keys = [bag.splice(bag.indexOf(lead), 1)[0]];
+  for (let c = 1; c < day.customers; c++) {
+    // Skip a repeat of the last dish; if only repeats are left, open a fresh
+    // bag (a one-dish menu is the only way to see the same dish twice).
+    if (!bag.some((k) => k !== keys[c - 1]) && day.menu.length > 1) refill();
     if (!bag.length) refill();
-    let i = 0;
-    // Skip a repeat of the last dish if anything else is left.
-    while (i < bag.length - 1 && bag[i] === keys[c - 1]) i++;
+    let i = bag.findIndex((k) => k !== keys[c - 1]);
+    if (i < 0) i = 0;
     keys.push(bag.splice(i, 1)[0]);
   }
-  // The stage's new dish comes first, so its intro is the first ticket.
-  const lead = day.menu[0][0];
-  const li = keys.indexOf(lead);
-  if (li > 0) [keys[0], keys[li]] = [keys[li], keys[0]];
+  // Regulars often swap to their favourite when the menu has it, as long as
+  // that does not put the same dish twice in a row.
+  keys.forEach((key, c) => {
+    const fav = looks[c % looks.length].fav;
+    const ok = c > 0 && day.menu.some(([k]) => k === fav) && key !== fav && keys[c - 1] !== fav && keys[c + 1] !== fav;
+    if (ok && rand() < 0.4) keys[c] = fav;
+  });
   const orders = keys.map((key, c) => {
     const look = looks[c % looks.length];
-    // Regulars often swap to their favourite when the menu has it.
-    const menuHas = day.menu.some(([k]) => k === look.fav);
-    if (c > 0 && menuHas && key !== look.fav && rand() < 0.4) key = look.fav;
     const pieces = dish(key);
     const rush = c >= r0 && c <= r1;
     const slow = pieces.some((p) => isHot(p)) ? 1.15 : 1;

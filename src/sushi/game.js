@@ -800,9 +800,10 @@ export class Game {
       await this.wait(200);
       // A topping or two between slurps.
       const take = tops.splice(0, Math.ceil(tops.length / (rounds - k + 1)));
-      for (const t of take) await this.feed(t, { chews: 1, quick: true });
+      // Toppings taken between slurps go up together, in one bite.
+      if (take.length) await Promise.all(take.map((t, i) => this.wait(i * 70).then(() => this.feed(t, { chews: 1, quick: true }))));
     }
-    for (const t of tops) await this.feed(t, { chews: 1, quick: true });
+    if (tops.length) await Promise.all(tops.map((t) => this.feed(t, { chews: 1, quick: true })));
   }
 
   async slurpStrands(bowl, n, seconds) {
@@ -1792,12 +1793,16 @@ function saveTier(t) {
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(`${GAME.storageKey}.progress`));
-    if (p && typeof p.unlocked === 'number') return { unlocked: UNLOCK_ALL ? DAYS.length - 1 : Math.min(p.unlocked, DAYS.length - 1), best: p.best || [], stars: p.stars || [], book: { dishes: {}, guests: {}, ...(p.book || {}) } };
+    // v2 is the ten-stage layout: best tips and stars saved before it were
+    // for different levels, so they start over (the Sushi book is kept).
+    const fresh = p && p.v === PROGRESS_V;
+    if (p && typeof p.unlocked === 'number') return { v: PROGRESS_V, unlocked: UNLOCK_ALL ? DAYS.length - 1 : fresh ? Math.min(p.unlocked, DAYS.length - 1) : 0, best: fresh ? p.best || [] : [], stars: fresh ? p.stars || [] : [], book: { dishes: {}, guests: {}, ...(p.book || {}) } };
   } catch {
     // No saved progress.
   }
-  return { unlocked: UNLOCK_ALL ? DAYS.length - 1 : 0, best: [], stars: [], book: { dishes: {}, guests: {} } };
+  return { v: PROGRESS_V, unlocked: UNLOCK_ALL ? DAYS.length - 1 : 0, best: [], stars: [], book: { dishes: {}, guests: {} } };
 }
+const PROGRESS_V = 2;
 
 function saveProgress(p) {
   try {
