@@ -156,6 +156,7 @@ export function scorePlate(order, built, waited) {
         continue;
       }
       let build = b.parts[2];
+      const why = { ...(b.why || {}) };
       // Toppings: every one asked for, nothing extra.
       if (match.toppings && b.toppings) {
         const asked = Object.keys(match.toppings);
@@ -164,8 +165,10 @@ export function scorePlate(order, built, waited) {
         for (const t of asked) if (!given.includes(t)) top -= 1 / asked.length;
         for (const t of given) if (!asked.includes(t)) top -= 0.3;
         build = clamp01(top) * (b.parts[2] ?? 1);
+        const lacking = asked.find((t) => !given.includes(t));
+        why[2] = lacking ? `missing:${(HOT_TOPPINGS[lacking] || TOPPINGS[lacking] || { label: lacking }).label.toLowerCase()}` : given.some((t) => !asked.includes(t)) ? 'extra' : why[2] || null;
       }
-      results.push({ fish: b.key, rice: clamp01(b.parts[0]), cut: clamp01(b.parts[1]), build: clamp01(build) });
+      results.push({ fish: b.key, rice: clamp01(b.parts[0]), cut: clamp01(b.parts[1]), build: clamp01(build), why });
       continue;
     }
     const rice = scoopScore(b.scoop) * 0.4 + b.shape * 0.6;
@@ -181,7 +184,16 @@ export function scorePlate(order, built, waited) {
     }
     for (const t of given) if (!asked.includes(t)) top -= 0.3;
     const build = clamp01(wasabi * 0.3 + place * 0.3 + clamp01(top) * 0.4);
-    results.push({ fish: b.fish || b.maki, wrongFish, rice, cut, build });
+    // Which way each part went, so the guest can say exactly what was off.
+    const sc = scoopScore(b.scoop);
+    const lacking = asked.find((t) => !b.toppings[t]);
+    const dabs = match.wasabi || 0;
+    const why = {
+      0: b.maki ? (b.shape < 0.75 ? 'spread' : null) : sc < 0.95 ? (b.scoop < RICE.scoopTarget[0] ? 'small' : 'big') : b.shape < 0.75 ? (b.squashed ? 'squashed' : 'loose') : null,
+      1: b.cutWhy || null,
+      2: lacking ? `missing:${(TOPPINGS[lacking] || { label: lacking }).label.toLowerCase()}` : b.wasabi !== dabs ? (b.wasabi > dabs ? (dabs ? 'wasabi-more' : 'wasabi-none') : 'wasabi-less') : given.some((t) => !asked.includes(t)) ? 'extra' : place < 0.7 ? 'place' : null,
+    };
+    results.push({ fish: b.fish || b.maki, wrongFish, rice, cut, build, why });
   }
   // Missing pieces count as zero.
   const missing = want.filter((w) => !w.used).length;
@@ -190,10 +202,18 @@ export function scorePlate(order, built, waited) {
   const wait = clamp01(1 - Math.max(0, waited - order.patience * 0.35) / (order.patience * 0.65));
   const w = SCORE.weights;
   const parts = { rice: avg('rice'), cut: avg('cut'), build: avg('build'), wait };
-  const total = Math.round(100 * (parts.rice * w.rice + parts.cut * w.cut + parts.build * w.build + parts.wait * w.wait));
+  // A plate is only as good as its weakest step: the weighted average is
+  // scaled down when the worst of the three craft steps went badly. Good
+  // plates keep their score, and one ruined step (burnt takoyaki, no
+  // batter, a mangled cut) pulls the whole plate down.
+  const weighted = parts.rice * w.rice + parts.cut * w.cut + parts.build * w.build + parts.wait * w.wait;
+  const weakest = Math.min(parts.rice, parts.cut, parts.build);
+  // Steps at 0.8 or better cost nothing extra; below that, the drag grows.
+  const total = Math.round(100 * weighted * (SCORE.floor + (1 - SCORE.floor) * Math.min(1, weakest / 0.8)));
   const sp = order.pieces.find(special);
+  const kind = !sp ? (order.pieces.some((p) => p.maki) && !order.pieces.some((p) => !p.maki) ? 'maki' : 'sushi') : sp.udon ? 'udon' : sp.ramen ? 'ramen' : sp.gyoza ? 'gyoza' : sp.takoyaki ? 'takoyaki' : 'onigiri';
   const labels = !sp ? ['Rice', 'Cut', 'Build'] : sp.udon ? ['Boil', 'Dashi', 'Toppings'] : sp.ramen ? ['Boil', 'Broth', 'Toppings'] : sp.gyoza ? ['Filling', 'Pleats', 'Frying'] : sp.takoyaki ? ['Batter', 'Turning', 'Toppings'] : ['Rice', 'Filling', 'Wrap'];
-  return { total, parts, results, missing, labels, extra: built.length - (order.pieces.length - missing) };
+  return { total, parts, results, missing, labels, kind, extra: built.length - (order.pieces.length - missing) };
 }
 
 // Bigger orders tip more; a roll counts as one and a half pieces of work.
@@ -226,6 +246,6 @@ export function rankFor(avg) {
   if (avg >= 92) return 'Counter legend';
   if (avg >= 80) return 'Trusted itamae';
   if (avg >= 65) return 'Steady hands';
-  if (avg >= 45) return 'Rice rookie';
+  if (avg >= 45) return 'Kitchen rookie';
   return 'Apprentice';
 }

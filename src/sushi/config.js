@@ -175,6 +175,8 @@ export const RUSH = {
 // How the final score is weighted.
 export const SCORE = {
   weights: { rice: 0.25, cut: 0.25, build: 0.35, wait: 0.15 },
+  // What a plate keeps when its weakest step scores zero (see scorePlate).
+  floor: 0.5,
   tipBase: 300, // yen for a perfect plate on day 1
   tipPerDay: 0.25, // extra multiplier per day
 };

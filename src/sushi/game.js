@@ -1,5 +1,5 @@
 import { CatmullRomCurve3, Frustum, Group, Matrix4, Mesh, Quaternion, Raycaster, TubeGeometry, Vector2, Vector3 } from 'three';
-import { DAYS, DISHES, GAME, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, VIEWS, dishKey, usesStove } from './config.js';
+import { DAYS, DISHES, GAME, KNIFE, LAYOUT, PERF, RUSH, CUSTOMER_LOOKS, UNLOCK_ALL, VIEWS, dishKey, usesStove } from './config.js';
 import { guessTier, Stage, TIERS, TIER_ORDER } from './stage.js';
 import { SushiSet } from './set.js';
 import { contactShadow, Customer, Paw, SousChef } from './critters.js';
@@ -15,7 +15,7 @@ import { Recorder, canShareFile, download, shareOrDownload } from '../record.js'
 import { composeBar } from './capture.js';
 import { Effects, haptic } from './fx.js';
 import { PhotoBooth } from './booth.js';
-import { warmFoods } from './food.js';
+import { BLOCKS, warmFoods } from './food.js';
 import { loadWall, postRun, savedName } from './wall.js';
 
 const STATIONS = ['counter', 'rice', 'knife', 'build', 'stove'];
@@ -864,14 +864,20 @@ export class Game {
       fish: p.slice.kind,
       scoop: p.rice.scoop,
       shape: p.rice.shapeScore(),
+      squashed: p.rice.presses.some((x) => x.over > 0.5) || (p.rice.rescued || 0) > 0,
+      cutWhy: cutWhy(p.slice),
       cut: p.slice.cutScore ?? 0.5,
       wasabi: p.wasabi.length,
       dx: p.placement ? p.placement.dx : 0,
       toppings: p.tops,
     }));
-    for (const r of this.rolls.filter((x) => x.plated)) built.push({ maki: r.filling, scoop: r.scoop, shape: r.spreadQuality, cut: r.cutScore, wasabi: 0, dx: 0, toppings: {} });
+    for (const r of this.rolls.filter((x) => x.plated)) built.push({ maki: r.filling, scoop: r.scoop, shape: r.spreadQuality, cut: r.cutScore, wasabi: 0, dx: 0, toppings: {}, cutWhy: (r.cutScore ?? 1) < 0.9 ? 'roll' : null });
     if (this.hotDish) built.push(this.hotDish.built);
-    for (const o of this.onigiri) built.push({ key: `o:${o.filling}`, parts: [scoopScore(o.rice.scoop) * 0.4 + o.rice.shapeScore() * 0.6, o.fillScore ?? 0.5, 1] });
+    for (const o of this.onigiri) {
+      const sc = o.rice.scoop;
+      const riceWhy = scoopScore(sc) < 0.95 ? (sc < 0.55 ? 'small' : 'big') : o.rice.shapeScore() < 0.75 ? (o.rice.presses.some((x) => x.over > 0.5) ? 'squashed' : 'loose') : null;
+      built.push({ key: `o:${o.filling}`, parts: [scoopScore(sc) * 0.4 + o.rice.shapeScore() * 0.6, o.fillScore ?? 0.5, 1], why: { 0: riceWhy, 1: (o.fillScore ?? 1) < 0.9 ? 'filling' : null } });
+    }
     const score = scorePlate(this.order, built, this.order.waited || 0);
     // Tip: the plate, then rush, combo and speed on top.
     const bonuses = [];
@@ -1078,13 +1084,13 @@ export class Game {
     for (const d of DISHES) {
       if (this.bookPhotos[d.key]) continue;
       this.bookPhotos[d.key] = await this.booth.orderPhoto({ pieces: [d.piece] }, 360, 240);
-      this.ui.showBook(this.bookData(), true);
+      this.ui.bookPhoto(d.key, this.bookPhotos[d.key], this.bookData());
     }
     for (const g of CUSTOMER_LOOKS) {
       const k = `g:${g.name}`;
       if (this.bookPhotos[k]) continue;
       this.bookPhotos[k] = await this.booth.critterPhoto(g, 280, 280);
-      this.ui.showBook(this.bookData(), true);
+      this.ui.bookPhoto(k, this.bookPhotos[k], this.bookData());
     }
   }
 
@@ -1726,21 +1732,91 @@ export class Game {
   }
 }
 
-// What the guest says, led by the weakest part of the plate.
-function quoteFor(score) {
-  const p = score.parts;
+// Which way a slice's cut went wrong, for the guest's comment.
+function cutWhy(slice) {
+  const info = slice.cutInfo;
+  const ideal = BLOCKS[slice.kind];
+  if (!info || !ideal || (slice.cutScore ?? 1) >= 0.9) return null;
+  const da = Math.abs(info.angle - ideal.angle) / KNIFE.angleTolerance;
+  const dt = (info.thickness - ideal.thickness) / KNIFE.thicknessTolerance;
+  return da >= Math.abs(dt) ? 'angle' : dt > 0 ? 'thick' : 'thin';
+}
+
+// What the guest says. It talks about the dish in front of it (noodles
+// for a bowl, batter for takoyaki, never rice and fish for gyoza), about
+// the step that went worst and which way it went (firm or soggy, pale or
+// burnt), and how strongly depends on how bad it was.
+const PRAISE = {
+  sushi: ['Perfect. I am wobbling with joy.', 'The rice melts and the fish is silk.', 'Best nigiri on the street.', 'I will tell all my friends.'],
+  maki: ['Tight, neat, perfect rolls.', 'Every slice the same. Beautiful.', 'Rolled like a master.'],
+  onigiri: ['Just like my grandma made.', 'A perfect little triangle.', 'Fluffy rice and a lovely filling.'],
+  udon: ['Springy noodles, golden dashi. Perfect.', 'This is the udon I dream about.', 'Slurp-worthy. Every last drop.'],
+  ramen: ['That broth. I could cry.', 'Perfect noodles, perfect bowl.', 'I am coming back tomorrow for this.'],
+  gyoza: ['Crisp bottoms, juicy middles. Perfect.', 'Pleated like little works of art.', 'I could eat a hundred of these.'],
+  takoyaki: ['Round, golden and gooey inside.', 'Hot, hot, and absolutely perfect.', 'Best takoyaki this side of Osaka.'],
+};
+// [mild, bad] for each step (0, 1, 2) of each kind of dish, by what went wrong.
+const ISSUES = {
+  sushi: {
+    0: { small: ['The rice was a little small.', 'There was hardly any rice.'], big: ['A bit much rice for me.', 'That was a mountain of rice.'], loose: ['The rice was a little loose.', 'The rice fell apart in my paws.'], squashed: ['The rice was pressed a bit hard.', 'The rice was squashed flat.'], _: ['The rice was not quite right.', 'The rice was a mess.'] },
+    1: { angle: ['The fish was cut at an odd angle.', 'That slice went every which way.'], thick: ['The slice was a little thick.', 'That slice was a whole block of fish.'], thin: ['The slice was a little thin.', 'I could see through that slice.'], _: ['The cut was a bit uneven.', 'The fish was hacked, not sliced.'] },
+    2: { 'wasabi-more': ['A little too much wasabi.', 'So much wasabi. My nose!'], 'wasabi-none': ['I did not ask for wasabi.', 'Wasabi? I asked for none!'], 'wasabi-less': ['I wanted a bit more wasabi.', 'Where is my wasabi?'], extra: ['Something extra on top I did not ask for.', 'That is not what goes on top.'], place: ['The fish was sitting a bit crooked.', 'The fish slid right off the rice.'], _: ['Not quite what the ticket said.', 'This is not what I asked for.'] },
+  },
+  maki: {
+    0: { spread: ['The rice inside was a bit uneven.', 'The rice was lumpy inside the roll.'], _: ['The rice was not quite right.', 'The rice was a mess.'] },
+    1: { roll: ['The slices were a little uneven.', 'The roll got squashed in the cutting.'], _: ['The cut was a bit uneven.', 'The roll fell apart.'] },
+    2: { _: ['Not quite the roll I asked for.', 'That is not the roll I ordered.'] },
+  },
+  onigiri: {
+    0: { small: ['A bit small for a rice ball.', 'That was barely a mouthful.'], big: ['A very generous rice ball.', 'That rice ball was enormous.'], loose: ['It was a little loose.', 'It fell apart in my paws.'], squashed: ['The rice was pressed a bit hard.', 'The rice was pressed to a brick.'], _: ['The shape was a little off.', 'That was not much of a triangle.'] },
+    1: { filling: ['Not the filling I asked for.', 'That is the wrong filling.'], _: ['The filling was a bit off.', 'Where is the filling?'] },
+    2: { _: ['The nori was a little loose.', 'The nori fell off.'] },
+  },
+  udon: {
+    0: { firm: ['The noodles were a touch firm.', 'The noodles were still hard.'], soggy: ['The noodles were a little soft.', 'The noodles were soggy.'], stuck: ['Some noodles were stuck together.', 'The noodles were one big clump.'], _: ['The noodles were not quite springy.', 'The noodles were a mess.'] },
+    1: { low: ['A little more dashi, please.', 'There was hardly any dashi.'], high: ['The bowl was a bit full.', 'The dashi was up to the brim.'], over: ['The dashi spilled a bit.', 'Dashi everywhere!'], _: ['The dashi was not quite right.', 'The dashi was all wrong.'] },
+    2: { extra: ['Something extra on top I did not ask for.', 'That is not what goes on my udon.'], _: ['Not quite the toppings I asked for.', 'The toppings are all wrong.'] },
+  },
+  ramen: {
+    0: { firm: ['The noodles were a touch firm.', 'The noodles were still hard.'], soggy: ['The noodles were a little soft.', 'The noodles were soggy.'], stuck: ['Some noodles were stuck together.', 'The noodles were one big clump.'], _: ['The noodles were not quite right.', 'The noodles were a mess.'] },
+    1: { low: ['A little more broth, please.', 'There was hardly any broth.'], high: ['The bowl was a bit full.', 'The broth was up to the brim.'], over: ['The broth spilled a bit.', 'Broth everywhere!'], _: ['The broth was not quite right.', 'The broth was all wrong.'] },
+    2: { extra: ['Something extra on top I did not ask for.', 'That is not what goes on my ramen.'], _: ['Not quite the toppings I asked for.', 'The toppings are all wrong.'] },
+  },
+  gyoza: {
+    0: { thin: ['A little light on filling.', 'They were nearly empty.'], full: ['A bit overstuffed.', 'They were bursting open.'], over: ['A bit overstuffed.', 'They were bursting open.'], _: ['The filling was a bit off.', 'The filling was all wrong.'] },
+    1: { lumpy: ['The pleats were a little lumpy.', 'The pleats came apart.'], _: ['The pleats were a little lumpy.', 'The pleats came apart.'] },
+    2: { pale: ['The bottoms could be crispier.', 'The bottoms were pale and soft.'], dark: ['The bottoms were a little dark.', 'The bottoms were nearly burnt.'], burnt: ['The bottoms were a little burnt.', 'The bottoms were burnt black.'], raw: ['They needed a bit more steam.', 'They were raw in the middle.'], soft: ['They were a little soft.', 'They were steamed to mush.'], long: ['They were steamed a bit long.', 'They were steamed to mush.'], _: ['The frying was a bit off.', 'The frying went all wrong.'] },
+  },
+  takoyaki: {
+    0: { shallow: ['They were a little small.', 'Barely any batter in them.'], full: ['They were a bit lopsided.', 'They were all lopsided blobs.'], over: ['A bit of batter spilled.', 'Batter everywhere!'], _: ['The batter was a bit off.', 'The batter was all wrong.'] },
+    1: { pale: ['Some were a little pale.', 'They were pale and doughy.'], dark: ['Some were a little dark.', 'They were nearly burnt.'], burnt: ['A couple were burnt.', 'They were burnt black.'], _: ['They could be rounder.', 'They were not cooked right.'] },
+    2: { extra: ['Something extra on top I did not ask for.', 'That is not what goes on takoyaki.'], _: ['Not quite the toppings I asked for.', 'The toppings are all wrong.'] },
+  },
+};
+const WAITED = ['Took a while, but worth it.', 'Lovely, once it came.', 'I almost dozed off.', 'I was starving by the end.'];
+
+export function quoteFor(score) {
+  const kind = score.kind || 'sushi';
   if (score.missing) return 'Where is the rest of my order?';
-  if (score.results.some((r) => r.wrongFish)) return 'That is not the fish I asked for. Tasty, though.';
-  if (score.total >= 90) return pick(['Perfect. I am wobbling with joy.', 'Best nigiri on the street.', 'I will tell all my friends.']);
-  const worst = Object.entries(p).sort((a, b) => a[1] - b[1])[0][0];
-  const lines = {
-    rice: ['The rice was a little loose.', 'Rice felt a bit squashed.'],
-    cut: ['The slice was a bit uneven.', 'Nice fish, odd cut.'],
-    build: ['Not quite what I asked for.', 'Check the ticket next time.'],
-    wait: ['Took a while, but worth it.', 'I almost dozed off.'],
-  }[worst];
-  const lead = score.total >= 70 ? 'Lovely. ' : score.total >= 45 ? 'Not bad. ' : 'Hmm. ';
-  return lead + pick(lines);
+  if (score.results.some((r) => r.wrongFish)) return kind === 'sushi' ? 'That is not the fish I asked for. Tasty, though.' : 'That is not what I ordered.';
+  const p = score.parts;
+  const steps = [p.rice, p.cut, p.build];
+  // Praise only a plate with nothing wrong on it, however high the total.
+  if (score.total >= 92 && Math.min(...steps) >= 0.92) return pick(PRAISE[kind]);
+  const worst = steps.indexOf(Math.min(...steps));
+  // Only the wait to complain about, or nothing much at all.
+  if (steps[worst] >= 0.92) return p.wait < 0.7 ? pick(WAITED.slice(p.wait < 0.4 ? 2 : 0, p.wait < 0.4 ? 4 : 2)) : pick(['Lovely, thank you.', 'Very nice. Thank you.', 'Delicious.']);
+  // The piece that did worst on that step, and which way it went.
+  const key = ['rice', 'cut', 'build'][worst];
+  const piece = score.results.filter((r) => !r.missing).sort((a, b) => a[key] - b[key])[0];
+  let why = piece && piece.why ? piece.why[worst] : null;
+  const table = (ISSUES[kind] || ISSUES.sushi)[worst];
+  const bad = steps[worst] < 0.45;
+  let line;
+  if (why && why.startsWith('missing:')) line = bad ? `Where is the ${why.slice(8)}?` : `I wanted ${why.slice(8)} on it.`;
+  else line = (table[why] || table._)[bad ? 1 : 0];
+  const lead = score.total >= 80 ? pick(['Lovely. ', 'Tasty. ', 'So close. ']) : score.total >= 55 ? pick(['Not bad. ', 'Hmm. ', 'Okay. ']) : pick(['Oh dear. ', 'Hmm. ', 'Oh no. ']);
+  return lead + line;
 }
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];

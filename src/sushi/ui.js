@@ -611,6 +611,27 @@ export class GameUI {
     if (!refresh) $('bookClose').focus({ preventScroll: true });
   }
 
+  // A photo arrived: drop it into its own card once it has decoded. The
+  // grid is never rebuilt for this, so no other card reloads or blinks.
+  bookPhoto(key, url, data) {
+    this.book = data;
+    if ($('book').hidden || !url) return;
+    const card = document.querySelector(`#bookGrid figure[data-key="${CSS.escape(key)}"]`);
+    const slot = card && card.querySelector('.book-photo');
+    if (!slot || slot.querySelector('img')?.getAttribute('src') === url) return;
+    const img = new Image();
+    img.alt = '';
+    if (!card.classList.contains('found')) img.className = 'shadowed';
+    img.src = url;
+    const place = () => {
+      if (!slot.isConnected) return;
+      const old = slot.querySelector('img, .book-wait');
+      if (old) old.replaceWith(img);
+      else slot.prepend(img);
+    };
+    (img.decode ? img.decode() : Promise.resolve()).then(place, place);
+  }
+
   renderBook() {
     const data = this.book;
     if (!data) return;
@@ -624,7 +645,7 @@ export class GameUI {
     $('bookGrid').innerHTML = dishes
       ? data.dishes
           .map(
-            (d, i) => `<figure class="book-card ${d.state}">
+            (d, i) => `<figure class="book-card ${d.state}" data-key="${d.key}">
               <span class="book-no">No. ${String(i + 1).padStart(2, '0')}</span>
               <div class="book-photo">${photo(d.photo, d.state === 'found' ? '' : 'shadowed')}${d.state === 'locked' ? '<span class="book-q">?</span>' : ''}</div>
               <figcaption>
@@ -636,7 +657,7 @@ export class GameUI {
           .join('')
       : data.guests
           .map(
-            (g) => `<figure class="book-card guest ${g.met ? 'found' : 'locked'}">
+            (g) => `<figure class="book-card guest ${g.met ? 'found' : 'locked'}" data-key="g:${esc(g.name)}">
               <div class="book-photo round">${photo(g.photo, g.met ? '' : 'shadowed')}${g.met ? '' : '<span class="book-q">?</span>'}</div>
               <figcaption>
                 <b>${g.met ? esc(g.name) : '???'}</b><span>${g.met ? esc(g.kind) : ''}</span>

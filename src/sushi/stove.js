@@ -69,6 +69,9 @@ export class StoveStation extends Station {
     this.order = g.order;
     this.dish = want.udon ? 'udon' : want.ramen ? 'ramen' : want.takoyaki ? 'takoyaki' : 'gyoza';
     this.res = {};
+    this.turnWhy = [];
+    this.fillWhy = null;
+    this.fryWhy = null;
     g.stove.useTako(this.dish === 'takoyaki');
     if (this.dish === 'udon' || this.dish === 'ramen') {
       this.U = HOT[this.dish];
@@ -383,6 +386,8 @@ export class StoveStation extends Station {
     this.res.boil = t;
     this.res.stir = Math.min(1, this.stirs / U.stirs);
     const [a] = U.cookBand;
+    // Which way it went, for the guest's comment.
+    this.res.why = { ...(this.res.why || {}), 0: t >= 0.95 ? (this.stirs < U.stirs ? 'stuck' : null) : cook < a ? 'firm' : 'soggy' };
     g.grade(t, t >= 0.95 ? 'Springy, just right' : cook < a ? 'A bit firm' : auto ? 'Left too long: soggy' : 'Soft and soggy', _v.set(L.pot[0], L.top + 2.4, L.pot[1]));
     if (this.stirs < U.stirs) setTimeout(() => g.popupAt('Some stuck together', new Vector3(L.pot[0], L.top + 1.6, L.pot[1]), 'bad'), 500);
     this.state = 'lifting';
@@ -429,6 +434,7 @@ export class StoveStation extends Station {
     const at = _v.set(L.bowl[0], 1.8, L.bowl[1]);
     const over = overflow || v > U.pourOver;
     this.res.pour = over ? 0.3 : s;
+    this.res.why = { ...(this.res.why || {}), 1: over ? 'over' : s >= 0.95 ? null : v < U.pourBand[0] ? 'low' : 'high' };
     g.grade(over ? 0.2 : s, over ? 'Over the rim!' : s >= 0.95 ? 'Right to the line' : v < U.pourBand[0] ? (this.dish === 'ramen' ? 'Not much broth' : 'Not much dashi') : 'A touch too much', at);
     if (over) {
       // Pochi ladles a little back out.
@@ -485,6 +491,7 @@ export class StoveStation extends Station {
     const over = v > T.fillOver;
     const at = _v.set(L.pan[0], 1.6, L.pan[1]);
     this.res.batter = over ? 0.35 : s;
+    this.res.why = { ...(this.res.why || {}), 0: over ? 'over' : s >= 0.95 ? null : v < T.fillBand[0] ? 'shallow' : 'full' };
     g.grade(over ? 0.2 : s, over ? 'Batter everywhere!' : s >= 0.95 ? 'Nicely full' : v < T.fillBand[0] ? 'A bit shallow' : 'Brimming', at);
     if (over) {
       const balls = this.balls;
@@ -568,6 +575,7 @@ export class StoveStation extends Station {
     const v = b.bottom;
     const s = auto ? 0.1 : bandScore(v, T.turnBand, 0.3);
     this.turnScores.push(s);
+    (this.turnWhy ||= []).push(auto ? 'burnt' : s >= 0.95 ? null : v < T.turnBand[0] ? 'pale' : 'dark');
     const at = b.group.position.clone().setY(b.group.position.y + 0.9);
     g.popupAt(auto ? 'Burnt!' : s >= 0.95 ? 'Golden!' : v < T.turnBand[0] ? 'Pale' : 'Dark', at, s >= 0.95 ? 'great' : s >= 0.5 ? 'good' : 'bad');
     g.sound.pinch();
@@ -579,6 +587,8 @@ export class StoveStation extends Station {
     if (this.balls.every((x) => x.turned)) {
       const avg = this.turnScores.reduce((a, c) => a + c, 0) / this.turnScores.length;
       this.res.turn = avg;
+      const tw = this.turnWhy || [];
+      this.res.why = { ...(this.res.why || {}), 1: tw.includes('burnt') ? 'burnt' : tw.filter((x) => x === 'pale').length >= tw.filter((x) => x === 'dark').length ? (tw.includes('pale') ? 'pale' : null) : 'dark' };
       this.state = 'toBoat';
       setTimeout(() => {
         if (this.state !== 'toBoat') return;
@@ -639,6 +649,7 @@ export class StoveStation extends Station {
     const at = _v.set(L.prep[0], 1.4, L.prep[1]);
     g.grade(over ? 0.2 : s, over ? 'Too full, it will burst' : s >= 0.95 ? 'Just enough' : v < G.fillBand[0] ? 'A bit thin' : 'Generous', at);
     this.fills.push(over ? 0.35 : s);
+    if (s < 0.95 || over) this.fillWhy = over ? 'over' : v < G.fillBand[0] ? 'thin' : 'full';
     g.sound.squelch(0.5);
     this.gz.poke(1);
     if (over) {
@@ -716,6 +727,7 @@ export class StoveStation extends Station {
     const b = this.brown;
     const s = bandScore(b, G.brownBand, 0.3);
     this.fry1 = auto ? 0.1 : s;
+    this.fryWhy = auto ? 'burnt' : s >= 0.95 ? null : b < G.brownBand[0] ? 'pale' : 'dark';
     const at = _v.set(L.pan[0], 1.8, L.pan[1]);
     g.grade(auto ? 0.1 : s, auto ? 'Burnt!' : s >= 0.95 ? 'Golden bottoms' : b < G.brownBand[0] ? 'Still pale' : 'Quite dark', at);
     // A splash of water: a burst of steam, then the lid.
@@ -737,6 +749,8 @@ export class StoveStation extends Station {
     const s = bandScore(v, G.steamBand, 0.3);
     const fry2 = auto ? 0.2 : s;
     this.res.fry = ((this.fry1 ?? 0.5) + fry2) / 2;
+    const steamWhy = auto ? 'long' : s >= 0.95 ? null : v < G.steamBand[0] ? 'raw' : 'soft';
+    this.res.why = { 0: this.fillWhy || null, 1: 'lumpy', 2: (this.fry1 ?? 1) <= fry2 ? this.fryWhy || steamWhy : steamWhy || this.fryWhy };
     g.grade(fry2, auto ? 'Steamed too long' : s >= 0.95 ? 'Juicy inside' : v < G.steamBand[0] ? 'Not quite cooked' : 'A little soft', _v.set(L.pan[0], 1.8, L.pan[1]));
     g.sound.lid();
     g.sound.sizzle(0);
@@ -798,10 +812,10 @@ export class StoveStation extends Station {
         // Every dish scores as three steps; toppings fold into the third.
         const noodle = kind === 'udon' || kind === 'ramen';
         const built = noodle
-          ? { key: `${kind[0]}:${bowl.kind}`, parts: [(res.boil ?? 0.5) * 0.8 + (res.stir ?? 0) * 0.2, res.pour ?? 0.5, 1], toppings: res.toppings || {} }
+          ? { key: `${kind[0]}:${bowl.kind}`, parts: [(res.boil ?? 0.5) * 0.8 + (res.stir ?? 0) * 0.2, res.pour ?? 0.5, 1], toppings: res.toppings || {}, why: res.why || {} }
           : kind === 'takoyaki'
-            ? { key: 't:takoyaki', parts: [(res.batter ?? 0.5) * 0.8 + (res.tako ?? 1) * 0.2, res.turn ?? 0.5, 1], toppings: res.toppings || {} }
-            : { key: 'g:gyoza', parts: [res.fill ?? 0.5, res.pleat ?? 0.5, res.fry ?? 0.5], count };
+            ? { key: 't:takoyaki', parts: [res.batter ?? 0.5, res.turn ?? 0.5, 1], toppings: res.toppings || {}, why: res.why || {} }
+            : { key: 'g:gyoza', parts: [res.fill ?? 0.5, res.pleat ?? 0.5, res.fry ?? 0.5], count, why: res.why || {} };
         g.hotDish = { kind, group, built, bowl: noodle ? bowl : null, plate: kind === 'gyoza' ? plate : null, boat: kind === 'takoyaki' ? boat : null };
         // The station lets go of it; the game owns it until it is eaten.
         this.bowl = null;
