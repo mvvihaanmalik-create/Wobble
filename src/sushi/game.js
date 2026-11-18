@@ -192,6 +192,28 @@ export class Game {
     const cam = this.stage.camera;
     const frame = () => new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
     const done = new Set();
+    if (r.compileAsync && r.extensions.has('KHR_parallel_shader_compile')) {
+      // The driver compiles in the background: hand it every chunk at once,
+      // then wait for them in order so the bar still moves chunk by chunk.
+      const jobs = [];
+      for (let i = 0; i < list.length; i += size) {
+        const chunk = list.slice(i, i + size).filter((o) => !done.has(o.material));
+        chunk.forEach((o) => done.add(o.material));
+        const holder = { traverse: (fn) => chunk.forEach((o) => fn(o)), traverseVisible: () => {} };
+        let job;
+        try {
+          job = chunk.length ? r.compileAsync(holder, cam, scene) : Promise.resolve();
+        } catch (err) {
+          job = Promise.reject(err);
+        }
+        jobs.push(job.catch((err) => console.warn('Shader warm-up step skipped', err)));
+      }
+      for (let j = 0; j < jobs.length; j++) {
+        await jobs[j];
+        await onProgress(Math.min(1, ((j + 1) * size) / Math.max(1, list.length)));
+      }
+      return;
+    }
     for (let i = 0; i < list.length; i += size) {
       // Skip meshes whose material already has a program: they cost nothing.
       const chunk = list.slice(i, i + size).filter((o) => !done.has(o.material));
